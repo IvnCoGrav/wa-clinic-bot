@@ -4,6 +4,40 @@
   "description": "Registry modul kanonis sistem untuk reuse dan pencegahan duplikasi pengetahuan.",
   "capabilities": [
     {
+      "id": "capi.pure_helpers",
+      "title": "Helper murni Meta Conversions API",
+      "description": "Transformasi deterministik nilai CAPI, format _fbc, hash SHA-256, decrypt token, kanonikalisasi landing URL, ekstraksi nominal template, dan event_id Purchase — tanpa I/O.",
+      "canonical": "src/services/capi.helpers.ts",
+      "exports": [
+        "maskName",
+        "parseCapiValue",
+        "formatMetaFbc",
+        "sha256Hash",
+        "decryptCapiToken",
+        "resolveCanonicalLandingUrl",
+        "extractValueByFormat",
+        "normalizeCapiMatchingGeo",
+        "buildDeterministicPurchaseEventId",
+        "buildLegacyPurchaseEventId"
+      ],
+      "forbiddenDeclarations": [
+        "maskName",
+        "parseCapiValue",
+        "formatMetaFbc",
+        "sha256Hash",
+        "decryptCapiToken",
+        "resolveCanonicalLandingUrl",
+        "extractValueByFormat",
+        "normalizeCapiMatchingGeo",
+        "buildDeterministicPurchaseEventId",
+        "buildLegacyPurchaseEventId"
+      ],
+      "allowedFiles": [
+        "src/services/capi.helpers.ts"
+      ],
+      "test": "tests/unit/capi-value-guard.test.ts"
+    },
+    {
       "id": "date.parse_indonesian",
       "title": "Parser tanggal bahasa Indonesia",
       "description": "Parsing ekspresi tanggal bahasa alami Indonesia (hari, nama bulan teks/angka, relatif) menjadi objek Date standar.",
@@ -38,6 +72,22 @@
         "src/utils/json-extract.ts"
       ],
       "test": "tests/unit/json-extract.test.ts"
+    },
+    {
+      "id": "livechat.serialize",
+      "title": "Proyeksi DTO LiveChat",
+      "description": "Memetakan baris percakapan/kustomer/reservasi menjadi DTO LiveChat (badge reservasi, sumber lokasi, awaiting-reply) tanpa akses DB.",
+      "canonical": "src/services/live-chat.serializer.ts",
+      "exports": [
+        "serializeLiveChatConversation"
+      ],
+      "forbiddenDeclarations": [
+        "serializeLiveChatConversation"
+      ],
+      "allowedFiles": [
+        "src/services/live-chat.serializer.ts"
+      ],
+      "test": "tests/unit/livechat-payload-completeness.test.ts"
     },
     {
       "id": "log.date_key",

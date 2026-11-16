@@ -3,13 +3,47 @@ import crypto from 'crypto';
 import { ParamBuilder, PII_DATA_TYPE } from 'capi-param-builder-nodejs';
 import { CircuitBreaker } from '../utils/circuit-breaker';
 import { GRAPH_API_VERSION, GRAPH_API_BASE_URL } from '../integrations/whatsapp/graph.constants';
-import { decryptSecret } from '../utils/encryption';
 import { DEFAULT_TENANT_ID } from '../config/tenant';
 import { isDummyOrTestContact } from '../utils/dummy-filter';
 import { hasBypassLabel, checkCustomerBypass } from '../utils/customer-bypass';
 import { prisma } from '../db/client';
 import { maskPhoneWithTenantSuffix } from '../utils/pii-masker';
-import { escapeRegex } from '../utils/regex-escape';
+import { normalizePhoneToE164 } from '../utils/phone-normalizer';
+import {
+  DEFAULT_CAPI_MATCHING_GEO,
+  buildDeterministicPurchaseEventId,
+  decryptCapiToken,
+  formatMetaFbc,
+  normalizeCapiMatchingGeo,
+  parseCapiValue,
+  resolveCanonicalLandingUrl,
+} from './capi.helpers';
+import type { CapiMatchingGeo } from './capi.helpers';
+
+/**
+ * Helper murni CAPI kini hidup di `capi.helpers.ts`; re-export menjaga kontrak
+ * impor lama (`services/capi.service`) tanpa menggandakan implementasi.
+ */
+export {
+  buildDeterministicPurchaseEventId,
+  buildLegacyPurchaseEventId,
+  decryptCapiToken,
+  extractValueByFormat,
+  formatMetaFbc,
+  maskName,
+  normalizeCapiMatchingGeo,
+  parseCapiValue,
+  resolveCanonicalLandingUrl,
+  sha256Hash,
+} from './capi.helpers';
+export type { CapiMatchingGeo } from './capi.helpers';
+
+/**
+ * Normalisasi HP E.164 didelegasikan ke normalizer kanonis
+ * (`src/utils/phone-normalizer.ts`) — satu sumber kebenaran, termasuk strip
+ * suffix WhatsApp/device.
+ */
+export { normalizePhoneToE164 };
 
 // Inisialisasi Circuit Breaker untuk CAPI calls
 export const capiBreaker = new CircuitBreaker(
@@ -38,103 +72,10 @@ export const capiBreaker = new CircuitBreaker(
 );
 
 /**
- * Melakukan normalisasi nomor HP ke format E.164 (hanya angka, diawali dengan kode negara, misal 62)
- */
-export function normalizePhoneToE164(phone: string): string {
-  if (!phone) return '';
-  let cleaned = phone.replace(/\D/g, '');
-  if (cleaned.startsWith('0')) {
-    cleaned = '62' + cleaned.substring(1);
-  } else if (cleaned.startsWith('8')) {
-    cleaned = '62' + cleaned;
-  }
-  return cleaned;
-}
-
-/**
  * Mask nomor telepon privasi log (4+4, suffix tenantId). Didelegasikan ke src/utils/pii-masker.ts.
  * @deprecated Gunakan `maskPhoneWithTenantSuffix` langsung dari `src/utils/pii-masker`.
  */
 export { maskPhoneWithTenantSuffix as maskPhone };
-
-/**
- * Mask nama untuk privasi log.
- * Menyamarkan huruf tengah setiap kata. Misal: "Siti Aminah" -> "S**i A****h"
- */
-export function maskName(name?: string | null): string {
-  if (!name || !name.trim()) return '(no-name)';
-  return name
-    .trim()
-    .split(/\s+/)
-    .map((word) => {
-      if (word.length <= 2) return word.slice(0, 1) + '*';
-      return word.slice(0, 1) + '*'.repeat(Math.max(1, word.length - 2)) + word.slice(-1);
-    })
-    .join(' ');
-}
-
-/**
- * Memvalidasi dan menormalisasi nominal CAPI (Fase 2.1):
- * - Tolak null/undefined/''/NaN/Infinity/negatif
- * - Format ribuan Indonesia "90.000" diubah menjadi 90000
- * - Nilai 0 hanya diizinkan bila allowZero = true
- */
-export function parseCapiValue(v: unknown, allowZero: boolean = false): number | undefined {
-  if (v === null || v === undefined || v === '') return undefined;
-  let parsed: number;
-  if (typeof v === 'string') {
-    const trimmed = v.trim();
-    if (!trimmed) return undefined;
-    if (/^\d{1,3}(\.\d{3})+$/.test(trimmed)) {
-      parsed = Number(trimmed.replace(/\./g, ''));
-    } else {
-      parsed = Number(trimmed);
-    }
-  } else if (typeof v === 'number') {
-    parsed = v;
-  } else {
-    return undefined;
-  }
-
-  if (!Number.isFinite(parsed) || parsed < 0) {
-    console.warn(`[CAPI VALUE SKIP] Nilai invalid atau negatif diabaikan: ${v}`);
-    return undefined;
-  }
-
-  if (parsed === 0 && !allowZero) {
-    console.warn(`[CAPI VALUE SKIP] Nilai 0 tanpa flag allowZero diabaikan: ${v}`);
-    return undefined;
-  }
-
-  return parsed;
-}
-
-/**
- * Format string _fbc sesuai standar resmi Meta Conversions API:
- * fb.1.<creationTimeInMs>.<fbclid>
- */
-export function formatMetaFbc(fbclidOrFbc: string | null | undefined, creationTimeMs: number = Date.now()): string | undefined {
-  if (!fbclidOrFbc || !fbclidOrFbc.trim()) return undefined;
-  const trimmed = fbclidOrFbc.trim();
-  if (trimmed.startsWith('fb.1.')) {
-    const parts = trimmed.split('.');
-    if (parts.length >= 4 && Number.isFinite(Number(parts[2]))) {
-      return trimmed;
-    }
-  }
-  const ts = Math.floor(creationTimeMs);
-  const cleanId = trimmed.replace(/^fb\.\d+\.[^.]+\./, '');
-  return `fb.1.${ts}.${cleanId}`;
-}
-
-/**
- * Menghasilkan hash SHA-256 lowercase dari string input
- */
-export function sha256Hash(text: string): string {
-  if (!text) return '';
-  return crypto.createHash('sha256').update(text.trim().toLowerCase()).digest('hex');
-}
-
 
 /**
  * Mencari harga (promoPrice ?? originalPrice) treatment di katalog berdasarkan
@@ -334,21 +275,6 @@ export async function resolveTreatmentValue(treatmentDetail: string | null | und
   }
 }
 
-/**
- * Decrypt token CAPI yang disimpan encrypted (AES-256-GCM via encryptSecret).
- * Backward-compat: data lama mungkin plaintext — kalau decrypt gagal & terlihat
- * seperti token Meta (EAA...), anggap legacy dan pakai apa adanya.
- */
-export function decryptCapiToken(raw: string): string | null {
-  if (!raw) return null;
-  try {
-    return decryptSecret(raw);
-  } catch {
-    // Legacy plaintext atau format tak dikenal — pakai asli kalau terlihat token.
-    return raw.startsWith('EAA') ? raw : null;
-  }
-}
-
 export interface TenantCapiCredentials {
   pixelId?: string;
   accessToken?: string;
@@ -427,99 +353,6 @@ export async function resolveTenantCapiCredentials(tenantId?: string): Promise<T
   }
   if (source === 'none' && pixelId && accessToken) source = 'env';
   return { pixelId, accessToken, source };
-}
-
-/**
- * Menormalkan landingUrl agar merefleksikan URL landing page asli (First-Touch URL)
- * dengan mengekstrak nested query `landing_url` bila ada atau memetakan domain backend /cta
- * ke domain landing page tenant yang aktif di database secara dinamis.
- */
-export function resolveCanonicalLandingUrl(
-  rawLandingUrl?: string | null,
-  tenantLandingDomain?: string | null
-): string | undefined {
-  if (!rawLandingUrl || typeof rawLandingUrl !== 'string') {
-    return undefined;
-  }
-
-  let url = rawLandingUrl.trim();
-  if (!url) return undefined;
-
-  // 1. Jika di dalam URL terdapat parameter `landing_url` (contoh: https://app.../cta?landing_url=https%3A%2F%2F...), ekstrak landing_url aslinya
-  try {
-    if (url.includes('landing_url=')) {
-      const parsed = new URL(url.startsWith('http') ? url : `https://localhost${url.startsWith('/') ? '' : '/'}${url}`);
-      const nested = parsed.searchParams.get('landing_url');
-      if (nested && (nested.startsWith('http://') || nested.startsWith('https://'))) {
-        return nested;
-      }
-    }
-  } catch {}
-
-  const domain = (tenantLandingDomain || '').trim().replace(/\/+$/, '');
-
-  // 2. Jika URL adalah URL absolut (atau diawali http)
-  if (url.startsWith('http://') || url.startsWith('https://')) {
-    try {
-      const parsed = new URL(url);
-
-      // Jika URL mengarah ke endpoint backend /cta
-      if (parsed.pathname === '/cta' || parsed.pathname.endsWith('/cta')) {
-        let targetProtocol = parsed.protocol;
-        let targetHost = parsed.host.replace(/^app\./i, ''); // Strip subdomain 'app.' backend bot
-        let targetPath = '/reservasionline';
-
-        if (domain) {
-          try {
-            const parsedDomain = new URL(domain.startsWith('http') ? domain : `https://${domain}`);
-            targetProtocol = parsedDomain.protocol;
-            targetHost = parsedDomain.host;
-            if (parsedDomain.pathname && parsedDomain.pathname !== '/') {
-              targetPath = parsedDomain.pathname;
-            }
-          } catch {}
-        }
-
-        // Ambil slug dari query parameter bila ada
-        const explicitSlug = parsed.searchParams.get('slug') || parsed.searchParams.get('p');
-        if (explicitSlug && explicitSlug !== 'cta') {
-          targetPath = `/${explicitSlug.replace(/^\/+/, '')}`;
-        }
-
-        // Hapus query internal bot yang tidak relevan dengan Meta (slug, p, msg, greetings, divisi internal bot)
-        parsed.searchParams.delete('landing_url');
-        parsed.searchParams.delete('slug');
-        parsed.searchParams.delete('p');
-        parsed.searchParams.delete('msg');
-        parsed.searchParams.delete('greetings');
-        parsed.searchParams.delete('divisi');
-
-        const queryStr = parsed.searchParams.toString();
-        return `${targetProtocol}//${targetHost}${targetPath}${queryStr ? `?${queryStr}` : ''}`;
-      }
-    } catch {}
-
-    return url;
-  }
-
-  // 3. Jika URL adalah path relatif (misal: /reservasionline atau /cta?fbclid=...)
-  if (domain) {
-    const cleanPath = url.startsWith('/') ? url : `/${url}`;
-    if (cleanPath.startsWith('/cta')) {
-      try {
-        const parsedDomain = new URL(domain.startsWith('http') ? domain : `https://${domain}`);
-        const targetPath = (parsedDomain.pathname && parsedDomain.pathname !== '/') ? parsedDomain.pathname : '/reservasionline';
-        const qIdx = cleanPath.indexOf('?');
-        const query = qIdx !== -1 ? cleanPath.slice(qIdx) : '';
-        return `${parsedDomain.origin}${targetPath}${query}`;
-      } catch {}
-    }
-    return `${domain}${cleanPath}`;
-  }
-  // Anti-hardcode domain bisnis: tanpa domain tenant ATAU fallback di
-  // `Tenant.settings.capiFallbackLandingDomain`, JANGAN mengarang-nomor domain.
-  // Caller memutuskan sendiri (event_source_url dihilangkan bila tidak ada sumber).
-  return undefined;
 }
 
 /**
@@ -612,66 +445,6 @@ export async function getTenantEchoPatterns(tenantId?: string): Promise<string[]
 }
 
 /**
- * Ekstrak nominal rupiah murni dari teks berdasarkan template formatValue tenant (misal: "Treatment = %VALUE%").
- * Mengubah formatValue menjadi regex dinamis yang menangkap angka di sekitar %VALUE%.
- */
-export function extractValueByFormat(text: string, formatValueTemplate?: string): number | undefined {
-  if (!text) return undefined;
-  const template = (formatValueTemplate && formatValueTemplate.includes('%VALUE%'))
-    ? formatValueTemplate.trim()
-    : 'Treatment = %VALUE%';
-
-  // Pisahkan prefix dan suffix di sekitar %VALUE%
-  const parts = template.split('%VALUE%');
-  const rawPrefix = parts[0] || '';
-  const rawSuffix = parts[1] || '';
-
-  // Buat pola prefix fleksibel
-  const flexiblePrefix = escapeRegex(rawPrefix.trim())
-    .replace(/\s+/g, '\\s*')
-    .replace(/\\:|\\=/g, '[:=]?');
-
-  const flexibleSuffix = escapeRegex(rawSuffix.trim()).replace(/\s+/g, '\\s*');
-
-  // Pola penangkapan angka rupiah di posisi %VALUE%
-  const regexStr = `${flexiblePrefix ? flexiblePrefix + '\\s*' : ''}(?:Rp[\\s.]?)?([\\d.,]+(?:\\s*(?:rb|ribu))?)${flexibleSuffix ? '\\s*' + flexibleSuffix : ''}`;
-  const regex = new RegExp(regexStr, 'i');
-
-  const match = text.match(regex);
-  if (match && match[1]) {
-    const rawVal = match[1];
-    let numStr = rawVal.replace(/[^\d]/g, '');
-    if (!numStr) return undefined;
-    let val = parseInt(numStr, 10);
-    const lower = rawVal.toLowerCase();
-    if (lower.includes('rb') || lower.includes('ribu')) {
-      val = val * 1000;
-    }
-    if (val >= 5000 && val <= 100_000_000) {
-      return val;
-    }
-  }
-
-  // Fallback: cari pola umum "Treatment = 70.000" atau "Layanan = 70.000"
-  const genericMatch = text.match(/(?:Treatment|Layanan|Paket)\s*[:=]?\s*(?:Rp[\s.]?)?([\d.,]+(?:\s*(?:rb|ribu))?)/i);
-  if (genericMatch && genericMatch[1]) {
-    const rawVal = genericMatch[1];
-    let numStr = rawVal.replace(/[^\d]/g, '');
-    if (!numStr) return undefined;
-    let val = parseInt(numStr, 10);
-    const lower = rawVal.toLowerCase();
-    if (lower.includes('rb') || lower.includes('ribu')) {
-      val = val * 1000;
-    }
-    if (val >= 5000 && val <= 100_000_000) {
-      return val;
-    }
-  }
-
-  return undefined;
-}
-
-/**
  * Resolusi konteks New vs Repeat untuk event `Purchase` (standar Meta: event_name
  * tetap `Purchase`; pembeda disematkan ke `custom_data` agar Value-Based Bidding
  * & ROAS tidak terganggu). Basis: jumlah reservasi confirmed/completed MILIK
@@ -751,22 +524,6 @@ export async function getTenantMetaPurchasePolicy(tenantId?: string): Promise<Me
   }
 }
 
-export interface CapiMatchingGeo {
-  state: string;
-  country: string;
-}
-
-const DEFAULT_CAPI_MATCHING_GEO: CapiMatchingGeo = { state: 'jawa timur', country: 'id' };
-
-export function normalizeCapiMatchingGeo(raw: any): CapiMatchingGeo {
-  const state = typeof raw?.state === 'string' ? raw.state.trim().toLowerCase() : '';
-  const country = typeof raw?.country === 'string' ? raw.country.trim().toLowerCase() : '';
-  return {
-    state: state || DEFAULT_CAPI_MATCHING_GEO.state,
-    country: country || DEFAULT_CAPI_MATCHING_GEO.country,
-  };
-}
-
 /**
  * Params ADVANCED MATCHING geografis per tenant (state/provinsi & negara).
  * Sumber kebenaran: `Tenant.settings.capiMatchingGeo` (data-driven, admin-editable,
@@ -781,30 +538,6 @@ export async function getTenantCapiMatchingGeo(tenantId?: string): Promise<CapiM
   } catch {
     return DEFAULT_CAPI_MATCHING_GEO;
   }
-}
-
-/**
- * event_id Purchase deterministik dari kunci bisnis imutabel.
- * Retry / force-resend / perubahan purchase_occurred_at TIDAK mengubah id,
- * sehingga dedupe Meta benar-benar idempoten.
- */
-export function buildDeterministicPurchaseEventId(tenantId: string | undefined, reservationId: string): string {
-  return `pur_${tenantId || 'org'}_${reservationId}`;
-}
-
-/**
- * Format event_id LAMA (belum dimigrasi): {trackingCode}_pur_{res|cus}_{eventTime}.
- * Dipakai dispatch untuk reservasi yang sudah pernah terkirim SEBELUM pembaruan ini,
- * agar force-resend memakai ulang event_id pengiriman pertama (bukan membuat id baru).
- */
-export function buildLegacyPurchaseEventId(params: {
-  trackingCode?: string | null;
-  reservationId?: string | null;
-  customerId: string;
-  eventTimeSec: number;
-}): string {
-  const subject = params.reservationId || params.customerId;
-  return `${params.trackingCode || 'org'}_pur_${subject}_${params.eventTimeSec}`;
 }
 
 export async function getTenantAutoSendPurchaseCapi(tenantId?: string): Promise<boolean> {

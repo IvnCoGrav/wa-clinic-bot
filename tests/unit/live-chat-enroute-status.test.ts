@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { liveChatService } from '../../src/services/live-chat.service';
+import { serializeLiveChatConversation } from '../../src/services/live-chat.serializer';
 import {
   isEnRouteStatus,
   isConfirmedFamilyStatus,
@@ -17,7 +17,7 @@ import {
  * dan helper dashboard agar tidak regresi ke literal tunggal.
  */
 
-const serialize = (c: any) => (liveChatService as any).serialize(c);
+const serialize = (c: any) => serializeLiveChatConversation(c);
 
 function conv(reservations: any[], overrides: any = {}) {
   return {
