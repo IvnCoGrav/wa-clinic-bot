@@ -369,7 +369,7 @@
     {
       "id": "reservation.payment_verification",
       "title": "Verifikasi bukti pembayaran reservasi",
-      "description": "Seam kanonis verifikasi pembayaran transfer/non-tunai: simpan bukti, hitung nominal, transisi status, audit — tanpa akses Prisma di route.",
+      "description": "Seam kanonis verifikasi pembayaran transfer/non-tunai: simpan bukti permanen, hitung tagihan kanonis (GROSS), catat pembayaran tanpa mengubah status kunjungan, audit tenant-aware — tanpa akses Prisma di route.",
       "canonical": "src/services/reservation-payment-verification.service.ts",
       "exports": [
         "verifyReservationPayment"

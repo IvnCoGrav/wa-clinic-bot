@@ -146,6 +146,20 @@ export async function reservationDispatchPaymentProofRoutes(fastify: FastifyInst
             error: 'Bukti transfer wajib ada untuk verifikasi pembayaran transfer.',
           });
         }
+        if (result.kind === 'price_missing') {
+          return reply.status(400).send({
+            success: false,
+            error: 'Harga layanan belum ada di sistem. Lengkapi harga reservasi sebelum menandai lunas.',
+          });
+        }
+        if (result.kind === 'amount_mismatch') {
+          return reply.status(400).send({
+            success: false,
+            error: `Nominal tidak sesuai tagihan resmi (diterima: ${result.receivedAmount}, seharusnya: ${result.expectedTotal}).`,
+            expectedTotal: result.expectedTotal,
+            receivedAmount: result.receivedAmount,
+          });
+        }
         return reply.status(200).send({ success: true, data: result.data });
       } catch (error: any) {
         const fallback = memoryFallback();
@@ -1010,7 +1024,7 @@ function handleMemoryVerifyPayment(
 ) {
   const { inputMethod, inputAmount, proofImageB64, reply } = params;
   const paymentMethod = inputMethod || mock.payment_method || 'TRANSFER';
-  const proofUrl = proofImageB64 ? `/media/outbound/mock-proof-${mock.id}.jpg` : (mock.proof_url ?? null);
+  const proofUrl = proofImageB64 ? `/media/payment-proofs/mock-proof-${mock.id}.jpg` : (mock.proof_url ?? null);
 
   if (paymentMethod !== 'CASH' && !proofUrl) {
     return reply.status(400).send({
@@ -1036,14 +1050,15 @@ function handleMemoryVerifyPayment(
     });
   }
 
+  // Paritas dengan jalur DB: status kunjungan TIDAK diubah di sini dan
+  // purchase_value (GROSS) tidak ditimpa dengan nominal NET/tebakan.
   mock.purchase_occurred_at = new Date();
-  mock.purchase_value = inputAmount ?? mock.purchase_value ?? 100000;
+  if (typeof inputAmount === 'number' && Number.isFinite(inputAmount)) {
+    mock.receipt_amount = Math.round(inputAmount);
+  }
   mock.payment_method = paymentMethod;
   mock.proof_url = proofUrl;
   mock.needs_staff_verification = false;
-  if (mock.status === 'confirmed') {
-    mock.status = 'completed';
-  }
   mock.updated_at = new Date();
   memoryReservations.set(mock.id, mock);
 

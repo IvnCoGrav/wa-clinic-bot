@@ -26,6 +26,17 @@ type ReservationLike = {
 
 const rp = (n: number) => `Rp ${n.toLocaleString('id-ID')}`;
 
+/**
+ * True bila URL bukti bisa dirender langsung sebagai <img>. Bukti transfer dari
+ * WhatsApp kadang berupa PDF (e-receipt bank), sehingga pratinjau gambar harus
+ * diganti tautan dokumen — bukan <img> rusak.
+ */
+export function isRenderableImageProof(url?: string | null): boolean {
+  if (!url) return false;
+  const clean = url.split('?')[0].split('#')[0].toLowerCase();
+  return !/\.(pdf|doc|docx|xls|xlsx|csv|heic)$/.test(clean);
+}
+
 export function evaluatePaymentProof(reservation?: ReservationLike | null): PaymentProofEvaluation {
   if (!reservation?.proof_url) {
     return {

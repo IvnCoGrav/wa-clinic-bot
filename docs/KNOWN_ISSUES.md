@@ -39,14 +39,27 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
   - `npm run --prefix packages/admin-dashboard build`: Exit 0 (Vite build sukses).
   - `npm run --prefix packages/admin-dashboard check:design`: Exit 0 (tokens, dark-parity, a11y, contrast, dates 100% hijau).
   - `npm run check:reuse`: Exit 0 (0 pelanggaran baru).
-  - 26 tests (7 test suite) hijau:
+  - 46 tests (9 test suite) hijau:
     - `tests/unit/staff-payment-contract.test.ts` (3 tests)
     - `tests/unit/staff-complete-idempotent.test.ts` (3 tests)
     - `tests/unit/staff-rejection-log.test.ts` (3 tests)
-    - `tests/integration/admin-verify-payment.test.ts` (3 tests)
-    - `tests/unit/staff-payment-validation.test.ts` (3 tests)
+    - `tests/integration/admin-verify-payment.test.ts` (6 tests — D1/D2/D4/D5 dikunci)
+    - `tests/unit/staff-payment-validation.test.ts` (4 tests)
     - `tests/unit/reservation-status-transition.test.ts` (4 tests)
     - `tests/unit/reservation-status-service.test.ts` (7 tests)
+    - `tests/unit/payment-proof-storage.test.ts` (4 tests)
+    - `tests/unit/reservation-billing.test.ts` (15 tests)
+- **Follow-up audit pasca-merge (2026-11-16, SELESAI):** audit menemukan 7 cacat pada seam `verify-payment` yang belum tertangani. Semua sudah diperbaiki:
+  1. **D1 — Verifikasi ikut menutup kunjungan.** `verify-payment` dulu memanggil `applyTransition(to:'completed', allowUnassignedStaff:true)` sehingga jadwal hari ini yang belum lewat bisa `completed` dari dashboard tanpa bidan (Gate 6.1 bocor; follow-up H+1 terjadwal dini). Kini seam HANYA mencatat pembayaran; status kunjungan tidak diubah.
+  2. **D2 — Diskon terpotong dua kali.** `purchase_value` dulu ditulis NET (setelah diskon) padahal kontrak kanonis `resolveReservationBilling` membaca GROSS. Kini ditulis `billing.treatmentFee` (GROSS). **Data lama perlu rekonsiliasi** (lihat butir 8).
+  3. **D3 — Ongkir non-kanonis.** Dulu membaca `delivery_fee` mentah tanpa fallback `Customer.ongkir`; kini memakai `resolveReservationBilling` (memakai `resolveDeliveryFeeSnapshot`).
+  4. **D4 — Nominal klien dipercaya.** Dulu `amount` dari body menjadi angka final; kini `amount` hanya pembanding — selisih → HTTP 400 dengan `expectedTotal`/`receivedAmount`.
+  5. **D5 — Audit tanpa tenant.** `ADMIN_VERIFY_PAYMENT` dulu tanpa `tenantId` (jatuh ke `default-tenant`); kini tenant-aware + payload `statusChanged: false`.
+  6. **D6 — Bukti di folder prunable.** Unggahan bukti dulu ke `saveOutboundMedia` (ikut retensi); kini `savePaymentProof` (`payment-proofs/`, permanen).
+  7. **D7 — Bukti PDF rusak tampil.** Pratinjau `<img>` diganti kartu dokumen + tautan (`isRenderableImageProof` di `utils/paymentProof.ts`, dipakai modal staf, detail reservasi, dan modal bukti).
+  8. **Sisa data (OPEN, butuh keputusan):** baris yang telanjur ditulis NET sebelum perbaikan ini harus di-backfill ke GROSS: `UPDATE reservations SET purchase_value = purchase_value + discount_amount WHERE discount_amount > 0 AND purchase_occurred_at IS NOT NULL AND id = '<id>'` — verifikasi satu per satu terhadap bukti transfer (jangan massal tanpa sampel).
+  9. **Verifikasi:** `npm run typecheck` bersih; `tests/integration/admin-verify-payment.test.ts` 6/6 hijau; typecheck dashboard bersih; `check:reuse` 0 pelanggaran baru.
+  10. **Batas yang disengaja (belum ada fitur):** pembayaran **kurang/lebih bayar** tidak bisa "diverifikasi apa adanya". Seam menolak nominal yang tidak sama dengan tagihan resmi; koreksi harus lewat data harga (`discount_amount`/`purchase_value`) sehingga tercatat. Alur "pembayaran sebagian / cicilan" adalah fitur terpisah — belum ada, jangan dipaksakan lewat endpoint ini.
 
 ## 353. [Code Health] Sisa Utang Arsitektur & Burn-Down Baseline (2026-11-16, OPEN)
 

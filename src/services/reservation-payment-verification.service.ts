@@ -1,13 +1,16 @@
 import { prisma } from '../db/client';
 import { auditService } from './audit.service';
+import { resolveReservationBilling } from './reservation-billing.service';
 
 /**
  * reservation-payment-verification.service.ts — Seam kanonis verifikasi bukti
  * pembayaran transfer/non-tunai oleh CS/Admin (dipindah dari route agar route
  * tetap tipis dan bebas akses Prisma langsung).
  *
- * Tanggung jawab: baca reservasi tenant-scoped, simpan bukti, hitung nominal
- * tagihan, transisikan status ke completed bila layak, lalu catat audit.
+ * Tanggung jawab: baca reservasi tenant-scoped, simpan bukti ke storage permanen,
+ * hitung nominal tagihan kanonis, catat pembayaran, lalu audit. Status kunjungan
+ * TIDAK diubah di sini: penyelesaian kunjungan tetap wewenang bidan lewat
+ * `completeTask` (Gate 6.1 wajib bidan tetap terjaga).
  * Pemanggil (route) hanya memetakan hasil ke HTTP + fallback in-memory.
  */
 
@@ -40,6 +43,8 @@ export interface VerifiedPaymentData {
 export type VerifyReservationPaymentResult =
   | { kind: 'not_found' }
   | { kind: 'proof_required' }
+  | { kind: 'price_missing' }
+  | { kind: 'amount_mismatch'; expectedTotal: number; receivedAmount: number }
   | { kind: 'already_paid'; data: VerifiedPaymentData }
   | { kind: 'verified'; data: VerifiedPaymentData };
 
@@ -63,9 +68,9 @@ export async function verifyReservationPayment(
     const { mediaService } = await import('./media.service');
     const rawB64 = proofImageB64.replace(/^data:image\/[^;]+;base64,/, '');
     const resized = await mediaService.resizeImageToMax(Buffer.from(rawB64, 'base64'), 800);
-    const saved = await mediaService.saveOutboundMedia({
+    const saved = await mediaService.savePaymentProof({
       tenantId,
-      imageB64: resized.toString('base64'),
+      buffer: resized,
       mimeType: mimeType && mimeType !== 'application/octet-stream' ? mimeType : 'image/jpeg',
       fileName: `proof-${reservationId}.jpg`,
     });
@@ -97,45 +102,35 @@ export async function verifyReservationPayment(
     };
   }
 
-  const deliveryFee = typeof (reservation as any).delivery_fee === 'number' ? (reservation as any).delivery_fee : 0;
-  const items = Array.isArray((reservation as any).items) ? (reservation as any).items : [];
-  const itemsTotal = items.reduce((sum: number, it: any) => sum + (Number(it?.price) || 0), 0);
-  const discount = Number((reservation as any).discount_amount) || 0;
-  let expectedTreatment: number | null = null;
-  if (itemsTotal > 0) expectedTreatment = Math.max(0, itemsTotal - discount);
-  else if (typeof (reservation as any).purchase_value === 'number') {
-    expectedTreatment = Math.max(0, (reservation as any).purchase_value - discount);
+  // Tagihan resmi dari seam kanonis: `expected = purchase_value (GROSS) - diskon
+  // + ongkir`. Server adalah otoritas nominal — `amount` dari klien hanya
+  // dipakai sebagai pembanding, bukan sumber angka.
+  const billing = await resolveReservationBilling(reservation as any, tenantId);
+  if (!(billing.totalFee > 0)) {
+    return { kind: 'price_missing' };
   }
-  const expectedTotal = expectedTreatment != null ? expectedTreatment + deliveryFee : null;
-  const finalAmount = amount ?? expectedTotal ?? (reservation as any).purchase_value ?? 0;
-  const pureTreatmentValue = Math.max(0, finalAmount - deliveryFee);
+  if (typeof amount === 'number' && Number.isFinite(amount)) {
+    const received = Math.round(amount);
+    if (received !== Math.round(billing.totalFee)) {
+      return { kind: 'amount_mismatch', expectedTotal: billing.totalFee, receivedAmount: received };
+    }
+  }
+
+  // Verifikasi PEMBAYARAN tidak menyelesaikan kunjungan. Status reservasi
+  // dibiarkan apa adanya agar bidan tetap menutup kunjungan via `completeTask`
+  // (Gate 6.1 wajib bidan tidak bisa dilewati dari dashboard).
   const now = new Date();
-
-  const { canTransition, isPrematureCompletion } = await import('../domain/reservation-status');
-  const { reservationStatusService } = await import('./reservation-status.service');
-
-  const updateData = {
-    purchase_occurred_at: now,
-    purchase_value: pureTreatmentValue,
-    payment_method: paymentMethod,
-    proof_url: proofUrl,
-    needs_staff_verification: false,
-  };
-
-  let updated: any;
-  const canComplete =
-    canTransition(reservation.status, 'completed') && !isPrematureCompletion(reservation.booking_date);
-
-  if (canComplete) {
-    const applied = await reservationStatusService.applyTransition(reservation, {
-      to: 'completed',
-      allowUnassignedStaff: true,
-      extraData: updateData,
-    });
-    updated = applied.ok ? applied.reservation : await prisma.reservation.update({ where: { id: reservationId }, data: updateData });
-  } else {
-    updated = await prisma.reservation.update({ where: { id: reservationId }, data: updateData });
-  }
+  const updated = await prisma.reservation.update({
+    where: { id: reservationId },
+    data: {
+      purchase_occurred_at: now,
+      // Kontrak kanonis: purchase_value = GROSS (sebelum diskon).
+      purchase_value: billing.treatmentFee,
+      payment_method: paymentMethod,
+      proof_url: proofUrl,
+      needs_staff_verification: false,
+    },
+  });
 
   try {
     if (reservation.customer_id) {
@@ -146,29 +141,22 @@ export async function verifyReservationPayment(
     console.warn('[ADMIN VERIFY PAYMENT] Recalculate customer LTV failed:', ltvErr.message);
   }
 
-  if (updated.status === 'completed' && reservation.booking_date) {
-    try {
-      const { sheetsSyncService } = await import('./sheets/sheets-sync.service');
-      await sheetsSyncService.enqueue(reservation.id, tenantId).catch((err: any) =>
-        console.warn('[ADMIN VERIFY PAYMENT] sheetsSync enqueue failed:', err?.message)
-      );
-    } catch (sheetsErr: any) {
-      console.warn('[ADMIN VERIFY PAYMENT] sheetsSync enqueue failed:', sheetsErr.message);
-    }
-  }
-
   await auditService.logAdminAction({
     apiKey: auditContext.apiKey as string,
     adminIdentity: auditContext.adminIdentity,
     action: 'ADMIN_VERIFY_PAYMENT',
     targetId: reservationId,
+    tenantId,
     payload: {
       paymentMethod,
-      amount: finalAmount,
-      pureTreatmentValue,
+      expectedTotal: billing.totalFee,
+      grossTreatmentValue: billing.treatmentFee,
+      discount: billing.discount,
+      deliveryFee: billing.deliveryFee,
       proofUrl,
       status: updated.status,
       completed: updated.status === 'completed',
+      statusChanged: false,
     },
     ipAddress: auditContext.ipAddress,
   });

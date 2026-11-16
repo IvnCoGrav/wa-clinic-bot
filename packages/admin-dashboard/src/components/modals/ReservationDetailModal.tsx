@@ -32,7 +32,7 @@ import {
   MessageSquare,
   Plus,
 } from 'lucide-react';
-import { evaluatePaymentProof } from '../../utils/paymentProof';
+import { evaluatePaymentProof, isRenderableImageProof } from '../../utils/paymentProof';
 import { extractBabiesFromRawText } from '../../utils/reservationBabies';
 import { resolveReservationAddress } from '../../utils/reservationAddress';
 import { resolveChildAgeRows, momGestationalBadge } from '../../utils/clinicalAge';
@@ -780,11 +780,20 @@ export const ReservationDetailModal: React.FC<ReservationDetailModalProps> = ({
                   {displayReservation.proof_url ? (
                     <div className="space-y-2">
                       <div className="flex items-center space-x-2.5">
-                        <img
-                          src={displayReservation.proof_url}
-                          alt="Bukti bayar"
-                          className="h-14 w-14 object-cover rounded-lg border border-divider shadow-xs bg-surface"
-                        />
+                        {isRenderableImageProof(displayReservation.proof_url) ? (
+                          <img
+                            src={displayReservation.proof_url}
+                            alt="Bukti bayar"
+                            className="h-14 w-14 object-cover rounded-lg border border-divider shadow-xs bg-surface"
+                          />
+                        ) : (
+                          <div
+                            className="h-14 w-14 rounded-lg border border-divider shadow-xs bg-surface flex items-center justify-center"
+                            title="Bukti berupa dokumen (PDF)"
+                          >
+                            <FileText size={20} className="text-ink-3" />
+                          </div>
+                        )}
                         <div className="flex-1 min-w-0">
                           <p className="text-xs text-ink-2 truncate">
                             Metode: <span className="font-bold text-ink">{getPaymentMethodLabel(displayReservation.payment_method)}</span>
