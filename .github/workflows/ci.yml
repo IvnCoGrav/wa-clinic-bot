@@ -17,6 +17,12 @@ jobs:
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Fetch Base Branch (PR)
+        if: github.base_ref != ''
+        run: git fetch origin ${{ github.base_ref }}:${{ github.base_ref }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -63,6 +69,13 @@ jobs:
         with:
           name: architecture-report
           path: architecture-report.json
+
+      # Mencegah baseline diedit manual naik (gate biasa hanya membandingkan kode
+      # terhadap baseline, bukan baseline terhadap commit sebelumnya).
+      - name: Baseline Ratchet Integrity
+        env:
+          BASELINE_BASE_REF: ${{ github.base_ref || 'HEAD~1' }}
+        run: npm run check:baseline-ratchet
 
       - name: Build Backend & Admin Dashboard
         run: npm run build:all

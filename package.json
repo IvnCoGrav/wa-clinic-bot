@@ -57,6 +57,7 @@
     "check:reuse:update": "node scripts/reuse/check-reuse.mjs --update-baseline --allow-update",
     "check:architecture": "node scripts/reuse/check-architecture.mjs",
     "check:architecture:warn": "node scripts/reuse/check-architecture.mjs --warn",
+    "check:baseline-ratchet": "node scripts/reuse/check-baseline-ratchet.mjs",
     "check:ui-reuse": "node packages/admin-dashboard/scripts/check-ui-reuse.mjs",
     "check:ui-reuse:warn": "node packages/admin-dashboard/scripts/check-ui-reuse.mjs --warn",
     "report:reuse": "node scripts/reuse/report-reuse.mjs"

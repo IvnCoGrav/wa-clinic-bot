@@ -6,6 +6,7 @@ import { loadRegistry, validateRegistry } from './lib/registry.mjs';
 import { listTsFiles, parseTsFile, collectFunctionLike, collectTopLevelDeclarations, collectExports } from './lib/ast.mjs';
 import { computeFingerprint } from './lib/fingerprint.mjs';
 import { BASELINE_DIR, getCurrentCommit, loadBaseline, saveBaseline } from './lib/baseline.mjs';
+import { findReuseBaselineIncreases, formatIncreases } from './lib/baseline-ratchet.mjs';
 import { loadExceptions, matchException, DEFAULT_EXCEPTIONS_FILE } from './lib/exceptions.mjs';
 
 function parseCliArgs() {
@@ -19,7 +20,9 @@ function parseCliArgs() {
     exceptionsFile: null,
     maxLines: 1500,
     updateBaseline: false,
-    allowUpdate: false
+    allowUpdate: false,
+    allowIncrease: false,
+    reason: null
   };
 
   for (const arg of args) {
@@ -32,6 +35,8 @@ function parseCliArgs() {
     else if (arg.startsWith('--max-lines=')) options.maxLines = parseInt(arg.split('=')[1], 10);
     else if (arg === '--update-baseline') options.updateBaseline = true;
     else if (arg === '--allow-update') options.allowUpdate = true;
+    else if (arg === '--allow-increase') options.allowIncrease = true;
+    else if (arg.startsWith('--reason=')) options.reason = arg.slice('--reason='.length);
   }
 
   return options;
@@ -285,30 +290,76 @@ async function runCheck() {
   // -------------------------------------------------------------
   if (options.updateBaseline && options.allowUpdate) {
     const commit = getCurrentCommit();
-    saveBaseline('forbidden-declarations', {
-      version: 1,
-      generatedFromCommit: commit,
-      violations: currentForbiddenViolations
-    }, options.baselineDir);
+    const writeForbidden = !options.only || options.only === 'forbidden';
+    const writeDuplication = !options.only || options.only === 'duplication';
+    const writeDeadExports = !options.only || options.only === 'dead-exports';
+    const writeFileSize = !options.only || options.only === 'file-size';
+    const previous = {
+      duplication: loadBaseline('duplication', options.baselineDir),
+      forbidden: loadBaseline('forbidden-declarations', options.baselineDir),
+      deadExports: loadBaseline('dead-exports', options.baselineDir),
+      fileSize: loadBaseline('file-size', options.baselineDir)
+    };
+    const increases = findReuseBaselineIncreases(previous, {
+      duplicationGroups: writeDuplication ? currentDuplicateGroups : [],
+      structuralGroups: writeDuplication ? structuralWarnings : [],
+      forbiddenViolations: writeForbidden ? currentForbiddenViolations : [],
+      deadExports: writeDeadExports ? currentDeadExports : [],
+      largeFiles: writeFileSize ? currentLargeFiles : []
+    });
 
-    saveBaseline('duplication', {
-      version: 1,
-      generatedFromCommit: commit,
-      groups: currentDuplicateGroups
-    }, options.baselineDir);
+    if (increases.length > 0) {
+      if (!options.allowIncrease || !options.reason || options.reason.trim().length < 15) {
+        console.error('[REUSE GATE ERROR] Baseline DILARANG naik. Ratchet hanya boleh menurun.');
+        console.error(formatIncreases(increases));
+        console.error(
+          'Bila kenaikan memang disengaja (mis. inisialisasi kategori baru), jalankan ulang dengan ' +
+            '--allow-increase --reason="<alasan minimal 15 karakter>" dan catat di known issues.'
+        );
+        process.exit(1);
+      }
+      console.warn('[REUSE GATE WARNING] Baseline dinaikkan secara eksplisit.');
+      console.warn(`  Alasan: ${options.reason.trim()}`);
+      console.warn(formatIncreases(increases));
+    }
 
-    saveBaseline('dead-exports', {
-      version: 1,
-      generatedFromCommit: commit,
-      deadExports: currentDeadExports
-    }, options.baselineDir);
+    if (writeForbidden) {
+      saveBaseline('forbidden-declarations', {
+        version: 1,
+        generatedFromCommit: commit,
+        violations: currentForbiddenViolations
+      }, options.baselineDir);
+    }
 
-    saveBaseline('file-size', {
-      version: 1,
-      generatedFromCommit: commit,
-      maxLines: options.maxLines,
-      files: currentLargeFiles
-    }, options.baselineDir);
+    if (writeDuplication) {
+      saveBaseline('duplication', {
+        version: 2,
+        generatedFromCommit: commit,
+        groups: currentDuplicateGroups,
+        structuralGroups: structuralWarnings.map((w) => ({
+          hash: w.structHash,
+          tokenCount: w.tokenCount,
+          files: w.files
+        }))
+      }, options.baselineDir);
+    }
+
+    if (writeDeadExports) {
+      saveBaseline('dead-exports', {
+        version: 1,
+        generatedFromCommit: commit,
+        deadExports: currentDeadExports
+      }, options.baselineDir);
+    }
+
+    if (writeFileSize) {
+      saveBaseline('file-size', {
+        version: 1,
+        generatedFromCommit: commit,
+        maxLines: options.maxLines,
+        files: currentLargeFiles
+      }, options.baselineDir);
+    }
 
     if (options.json) {
       console.log(JSON.stringify({ updated: true, commit }, null, 2));
@@ -388,6 +439,36 @@ async function runCheck() {
             message: `Duplikasi bertambah ke file baru: ${newFilesInGroup.map(f => `${f.file}:${f.line}`).join(', ')}`,
             hash: g.hash,
             files: g.files
+          });
+        } else {
+          baselineViolationsCount++;
+        }
+      }
+    }
+
+    // Duplikasi struktural: pola sama dengan nama variabel berbeda.
+    // Dulu hanya peringatan; sekarang grup BARU menggagalkan gate (baseline di-ratchet).
+    const baselineStructuralMap = new Map();
+    for (const g of (baselineDuplication?.structuralGroups || [])) {
+      baselineStructuralMap.set(g.hash, new Set(g.files.map(f => f.file)));
+    }
+    for (const w of structuralWarnings) {
+      const baselineFiles = baselineStructuralMap.get(w.structHash);
+      if (!baselineFiles) {
+        newViolations.push({
+          type: 'STRUCTURAL_DUPLICATION',
+          message: `Pola duplikasi struktural baru (${w.tokenCount} token): ${w.files.map(f => `${f.file}:${f.line} (${f.name})`).join(' vs ')}`,
+          structHash: w.structHash,
+          files: w.files
+        });
+      } else {
+        const newFilesInGroup = w.files.filter(f => !baselineFiles.has(f.file));
+        if (newFilesInGroup.length > 0) {
+          newViolations.push({
+            type: 'STRUCTURAL_DUPLICATION_EXPANDED',
+            message: `Pola duplikasi struktural menyebar ke file baru: ${newFilesInGroup.map(f => `${f.file}:${f.line}`).join(', ')}`,
+            structHash: w.structHash,
+            files: w.files
           });
         } else {
           baselineViolationsCount++;

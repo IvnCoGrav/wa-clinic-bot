@@ -9,8 +9,9 @@
  * 2. Baseline TIDAK BOLEH tumbuh (maksimum 158 id historis).
  * 3. KNOWN  -> wajib `justification` + `acceptance`.
  * 4. DUPLICATE -> wajib `canonical` + `reason`.
- * 5. Evidence `path` wajib ada dan `contains` wajib cocok (untuk `file`,
- *    bila `line` diisi maka baris itu juga harus memuat `contains`).
+ * 5. Evidence `path` wajib ada dan `contains` wajib cocok di file (untuk `file`).
+ *    `line` hanya PETUNJUK lokasi: bila bergeser karena refactor, gate memberi
+ *    peringatan (bukan gagal) agar bukti tidak rapuh terhadap perubahan nomor baris.
  * 6. OPEN/UNVERIFIED tidak boleh punya entri manifest (entri basi).
  *
  * Jalankan: npm run verify:backlog
@@ -118,9 +119,13 @@ function checkEvidence(id, entry) {
         fail(`${id}: line tidak valid di ${ev.path}: ${ev.line}`);
         continue;
       }
-      const lineText = content.split(/\r?\n/)[lineNo - 1] || '';
+      const lines = content.split(/\r?\n/);
+      const lineText = lines[lineNo - 1] || '';
       if (!lineText.includes(ev.contains)) {
-        fail(`${id}: baris ${lineNo} ${ev.path} tidak memuat "${ev.contains}"`);
+        const actualLine = lines.findIndex((l) => l.includes(ev.contains)) + 1;
+        warnings.push(
+          `${id}: baris ${lineNo} ${ev.path} bergeser — "${ev.contains}" ditemukan di baris ${actualLine}`
+        );
       }
     }
     if (ev.type !== 'file' && ev.type !== 'test') {

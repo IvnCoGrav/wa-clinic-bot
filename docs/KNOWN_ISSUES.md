@@ -61,6 +61,17 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
   9. **Verifikasi:** `npm run typecheck` bersih; `tests/integration/admin-verify-payment.test.ts` 6/6 hijau; typecheck dashboard bersih; `check:reuse` 0 pelanggaran baru.
   10. **Batas yang disengaja (belum ada fitur):** pembayaran **kurang/lebih bayar** tidak bisa "diverifikasi apa adanya". Seam menolak nominal yang tidak sama dengan tagihan resmi; koreksi harus lewat data harga (`discount_amount`/`purchase_value`) sehingga tercatat. Alur "pembayaran sebagian / cicilan" adalah fitur terpisah — belum ada, jangan dipaksakan lewat endpoint ini.
 
+## 355. [Code Health] Pengerasan Gerbang Anti-Duplikasi & Integritas Baseline (2026-11-16, RESOLVED)
+
+- **Konteks:** Setelah Sprint 2, duplikasi identik = 0, tetapi duplikasi "ganti nama variabel" hanya berupa peringatan, dan baseline masih dapat dinaikkan manual lewat `--update-baseline`.
+- **Perubahan:**
+  1. `STRUCTURAL_DUPLICATION` / `STRUCTURAL_DUPLICATION_EXPANDED` kini **pelanggaran** (bukan sekadar warning). 5 grup lama dibekukan di `scripts/reuse/baselines/duplication.json` (`structuralGroups`, baseline v2), sehingga hanya pola baru yang menggagalkan gate.
+  2. `--update-baseline` menolak kenaikan berbasis **key-set**: menukar satu pelanggaran lama dengan pelanggaran baru berjumlah sama tetap ditolak. Escape hatch wajib `--allow-increase --reason="<minimal 15 karakter>"` + peringatan keras.
+  3. Update per-kategori (`--only=…`) tidak lagi menghapus baseline kategori lain.
+  4. `npm run check:baseline-ratchet` + step CI membandingkan baseline dengan base ref (branch tujuan PR / commit sebelumnya) untuk menangkap baseline yang diedit manual naik.
+  5. `verify:backlog` tidak lagi rapuh terhadap pergeseran nomor baris (#334).
+- **Verifikasi:** `tests/unit/baseline-ratchet.test.ts` (9), `tests/unit/baseline-ratchet-ci.test.ts` (1), `tests/unit/reuse-gate.test.ts` (14), `tests/unit/backlog-evidence-gate.test.ts` (6) hijau; `check:reuse` 0 pelanggaran baru; `check:architecture` 0 pelanggaran baru.
+
 ## 353. [Code Health] Sisa Utang Arsitektur & Burn-Down Baseline (2026-11-16, OPEN)
 
 - **Status:** OPEN — Sprint 1 & Sprint 2 SELESAI 2026-11-16. Sisa utang di bawah masih terkunci ratchet di `scripts/reuse/baselines/`; angka hanya boleh turun.
@@ -460,11 +471,12 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
 - **Batasan advisory lock series:** lock diambil per (tenant, terapis, tanggal sesi) di dalam transaksi; sesi tanpa terapis memakai kunci staff `null` + cek `hasCapacityForUnassignedBooking`. Bila `pg_advisory_xact_lock` gagal di produksi, series ditolak (fail-closed `ConflictCheckUnavailableError`), bukan diloloskan.
 - **Belum tercakup:** preset interval di dashboard hanya membantu UI (tanggal/jam sesi tetap dikirim eksplisit); belum ada endpoint untuk mengubah `delivery_fee`/`discount_amount` level series setelah dibuat (per sesi hanya lewat `PATCH /api/admin/reservation-series/:id/session/:reservationId`).
 
-## 334. [Audit] Gerbang Bukti Backlog Bergantung Nomor Baris Absolut (2026-11-14, OPEN — LIMITATION)
+## 334. [Audit] Gerbang Bukti Backlog Bergantung Nomor Baris Absolut (2026-11-14, RESOLVED 2026-11-16)
 
 - **Gejala:** `npm run verify:backlog` gagal setelah refactor murni tanpa perubahan perilaku. `backlog-evidence.json` menyimpan `line` absolut, sehingga `S-06` (baris 599) dan `S-09` (baris 1618) dianggap hilang saat kode bergeser.
-- **Resolusi sementara:** nomor baris diperbarui ke posisi baru (S-06 → 613, S-09 → 1494) pada commit `a7ed6e70`; gerbang kembali PASS (261 FIXED / 2 KNOWN).
-- **Utang fondasional:** validasi sebaiknya mencari `contains` di seluruh file (atau memakai hash snippet), bukan mewajibkan nomor baris; `line` dipertahankan hanya sebagai petunjuk. Setiap refactor besar saat ini memaksa update manual yang rawan lupa.
+- **Resolusi sementara (historis):** nomor baris diperbarui ke posisi baru (S-06 → 613, S-09 → 1494) pada commit `a7ed6e70`; gerbang kembali PASS (261 FIXED / 2 KNOWN).
+- **Resolusi fondasional (2026-11-16):** `scripts/verify-backlog-evidence.mjs` tidak lagi mewajibkan `contains` berada di nomor baris tertentu. Keberadaan teks bukti di file tetap WAJIB (`content.includes`), sedangkan `line` hanya petunjuk: bila bergeser, gate memberi PERINGATAN berisi nomor baris aktual, bukan gagal. Test adversarial `tests/unit/backlog-evidence-gate.test.ts` tetap memastikan bukti yang benar-benar hilang menggagalkan gate.
+- **Dampak:** `npm run verify:backlog` kembali PASS tanpa update manifest manual; 15 entri lama otomatis dilaporkan sebagai peringatan pergeseran.
 
 ## 333. [Deploy] `hermes-net` Wajib untuk Caddy — Jangan Dicabut (2026-11-14, TRAP)
 
