@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generatedFromCommit": "4c34cb87",
+  "generatedFromCommit": "fc65859f",
   "deadExports": [
     {
       "type": "DEAD_EXPORT",
@@ -350,21 +350,21 @@
       "name": "resolveTenantCapiCredentials",
       "kind": "function",
       "file": "src/services/capi.service.ts",
-      "line": 371
+      "line": 372
     },
     {
       "type": "DEAD_EXPORT",
       "name": "normalizeCapiMatchingGeo",
       "kind": "function",
       "file": "src/services/capi.service.ts",
-      "line": 763
+      "line": 761
     },
     {
       "type": "DEAD_EXPORT",
       "name": "getTenantAutoSendPurchaseCapi",
       "kind": "function",
       "file": "src/services/capi.service.ts",
-      "line": 812
+      "line": 810
     },
     {
       "type": "DEAD_EXPORT",
@@ -392,7 +392,7 @@
       "name": "loadCopilotStyle",
       "kind": "function",
       "file": "src/services/copilot/copilot.service.ts",
-      "line": 622
+      "line": 619
     },
     {
       "type": "DEAD_EXPORT",
@@ -616,7 +616,7 @@
       "name": "buildKeywords",
       "kind": "function",
       "file": "src/services/pricelist.service.ts",
-      "line": 167
+      "line": 164
     },
     {
       "type": "DEAD_EXPORT",
@@ -861,35 +861,35 @@
       "name": "getKecamatanRepresentativeMap",
       "kind": "function",
       "file": "src/utils/gazetteer-zipcode-resolver.ts",
-      "line": 222
+      "line": 219
     },
     {
       "type": "DEAD_EXPORT",
       "name": "getGazetteerPrefixIndex",
       "kind": "function",
       "file": "src/utils/gazetteer.ts",
-      "line": 266
+      "line": 265
     },
     {
       "type": "DEAD_EXPORT",
       "name": "getGazetteerZipcode",
       "kind": "function",
       "file": "src/utils/gazetteer.ts",
-      "line": 390
+      "line": 389
     },
     {
       "type": "DEAD_EXPORT",
       "name": "GAZETTEER_BORDER_MARGIN_KM",
       "kind": "variable",
       "file": "src/utils/gazetteer.ts",
-      "line": 597
+      "line": 596
     },
     {
       "type": "DEAD_EXPORT",
       "name": "GAZETTEER_MAX_BORDER_DIST_KM",
       "kind": "variable",
       "file": "src/utils/gazetteer.ts",
-      "line": 598
+      "line": 597
     },
     {
       "type": "DEAD_EXPORT",

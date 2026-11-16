@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generatedFromCommit": "4c34cb87",
+  "generatedFromCommit": "fc65859f",
   "maxLines": 1500,
   "files": [
     {
@@ -25,7 +25,7 @@
     },
     {
       "file": "src/services/capi.service.ts",
-      "lines": 1634
+      "lines": 1632
     },
     {
       "file": "src/routes/webhook.route.ts",

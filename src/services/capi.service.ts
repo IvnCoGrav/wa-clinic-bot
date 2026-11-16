@@ -9,6 +9,7 @@ import { isDummyOrTestContact } from '../utils/dummy-filter';
 import { hasBypassLabel, checkCustomerBypass } from '../utils/customer-bypass';
 import { prisma } from '../db/client';
 import { maskPhoneWithTenantSuffix } from '../utils/pii-masker';
+import { escapeRegex } from '../utils/regex-escape';
 
 // Inisialisasi Circuit Breaker untuk CAPI calls
 export const capiBreaker = new CircuitBreaker(
@@ -624,9 +625,6 @@ export function extractValueByFormat(text: string, formatValueTemplate?: string)
   const parts = template.split('%VALUE%');
   const rawPrefix = parts[0] || '';
   const rawSuffix = parts[1] || '';
-
-  // Escape karakter khusus regex
-  const escapeRegex = (s: string) => s.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&');
 
   // Buat pola prefix fleksibel
   const flexiblePrefix = escapeRegex(rawPrefix.trim())

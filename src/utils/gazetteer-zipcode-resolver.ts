@@ -1,4 +1,5 @@
 import { getGazetteerData } from './gazetteer';
+import { escapeRegex } from './regex-escape';
 
 /**
  * Gazetteer Zipcode Resolver
@@ -51,10 +52,6 @@ function normalize(s: string | null | undefined): string {
   if (!s) return '';
   return s.trim().toLowerCase().replace(/\s+/g, ' ').replace(/\(kota\)/g, '').trim();
   // "Sidoarjo (Kota)" -> "sidoarjo"
-}
-
-function escapeRegex(s: string): string {
-  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 function loadGazetteer(): GazetteerRow[] {

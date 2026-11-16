@@ -8,10 +8,7 @@
  * Tahan terhadap nama yang mengandung karakter regex (mis. `Bidan (Ayu)`).
  */
 
-/** Escape karakter khusus regex agar nama terapis aman dipakai dalam RegExp. */
-function escapeRegex(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
+import { escapeRegex } from './regex-escape';
 
 /** True bila teks sudah diakhiri tanda tangan `~ [Nama Terapis]`. */
 export function hasStaffSignature(text: string, staffName?: string | null): boolean {

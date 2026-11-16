@@ -96,6 +96,23 @@
       "test": "tests/unit/staff-chat-pii-masker.test.ts"
     },
     {
+      "id": "regex.escape",
+      "title": "Escape string untuk ekspresi reguler",
+      "description": "Meng-escape karakter khusus regex (.*+?^${}()|[\\]) agar aman digunakan di RegExp dinamis.",
+      "canonical": "src/utils/regex-escape.ts",
+      "exports": [
+        "escapeRegex"
+      ],
+      "forbiddenDeclarations": [
+        "escapeRegex",
+        "escapeRegExp"
+      ],
+      "allowedFiles": [
+        "src/utils/regex-escape.ts"
+      ],
+      "test": "tests/unit/regex-escape.test.ts"
+    },
+    {
       "id": "reservation.payment_evaluation",
       "title": "Evaluasi status pembayaran reservasi",
       "description": "Menentukan status evaluasi pembayaran reservasi secara kanonis.",

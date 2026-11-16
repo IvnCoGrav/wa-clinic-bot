@@ -1,5 +1,6 @@
 import { COPILOT_TOOLS, getCopilotTool, CopilotToolResult } from './copilot-tools';
 import { getWibDayName, formatWibDateYYYYMMDD, wibDayBoundsUtc } from '../../utils/wib-time';
+import { escapeRegex } from '../../utils/regex-escape';
 import { parsePositiveInt } from '../../utils/env-numeric';
 import { requestHermesRouter, requestHermesSummarize, resolveHermesConfig } from './hermes-adapter';
 import { isCopilotTenantAllowed, COPILOT_DEPRECATED_ERROR } from '../../config/copilot-tenant';
@@ -164,10 +165,6 @@ const INTERNAL_UUID_RE = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-
  * dikirim ke LLM. Prompt "jangan tampilkan UUID" saja tidak cukup — sumber kebocoran
  * ditutup di hulu (baris), bukan diserahkan pada kepatuhan teks LLM.
  */
-function escapeRegExp(s: string): string {
-  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-
 export function stripInternalIds(rows: any[]): any[] {
   return rows.map((r) => {
     const clone = { ...r };
@@ -355,7 +352,7 @@ export function repairCopilotChatLinks(answer: string, rows: any[]): string {
     let bestToken: string | null = null;
     let bestPos = -1;
     for (const token of sortedTokens) {
-      const re = new RegExp(`\\b${escapeRegExp(token)}\\b`, 'gi');
+      const re = new RegExp(`\\b${escapeRegex(token)}\\b`, 'gi');
       let match: RegExpExecArray | null;
       while ((match = re.exec(before)) !== null) {
         if (match.index > bestPos || (match.index === bestPos && bestToken && token.length > bestToken.length)) {
@@ -398,7 +395,7 @@ export function repairCopilotChatLinks(answer: string, rows: any[]): string {
     // Cari token pasien yang cocok pada baris ini (word boundary + longest match)
     let matchedConvId: string | null = null;
     for (const token of sortedTokens) {
-      const re = new RegExp(`\\b${escapeRegExp(token)}\\b`, 'i');
+      const re = new RegExp(`\\b${escapeRegex(token)}\\b`, 'i');
       if (re.test(line)) {
         matchedConvId = uniqueTokenMap.get(token) || null;
         break;

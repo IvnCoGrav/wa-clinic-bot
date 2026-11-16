@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generatedFromCommit": "4c34cb87",
+  "generatedFromCommit": "fc65859f",
   "violations": [
     {
       "type": "FORBIDDEN_DECLARATION",
@@ -16,7 +16,7 @@
       "name": "normalizePhoneToE164",
       "canonical": "src/utils/phone-normalizer.ts",
       "file": "src/services/capi.service.ts",
-      "line": 42
+      "line": 43
     },
     {
       "type": "FORBIDDEN_DECLARATION",

@@ -19,6 +19,7 @@ import { BrandIdentity, getBrandIdentityAsync } from '../config/brand';
 import { getPricelistPromoConfigAsync, PricelistPromoConfig } from '../config/pricelist-promo';
 import { treatmentCatalogService, ClinicServiceItem, TreatmentCategoryType } from './treatment-catalog.service';
 import { getDeliveryTiersFromDb, DeliveryTier } from './delivery.service';
+import { escapeRegex } from '../utils/regex-escape';
 
 export type PricelistVariantTuple = [age: number | string, promo: number, orig: number];
 
@@ -120,10 +121,6 @@ export function brandPrefixOf(businessName: string | undefined | null): string {
   return first.length >= 2 ? first : '';
 }
 
-function escapeRegExp(s: string): string {
-  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-
 /**
  * Bersihkan prefix nama layanan secara generik & deterministik:
  * 1. Buang token brand (turunan businessName) berulang di awal.
@@ -141,7 +138,7 @@ export function toDisplayName(rawName: string, brandPrefix: string, stripWords: 
     changed = false;
     guard++;
     for (const p of prefixes) {
-      const re = new RegExp('^' + escapeRegExp(p) + '\\b[\\s\\-–—:]*', 'i');
+      const re = new RegExp('^' + escapeRegex(p) + '\\b[\\s\\-–—:]*', 'i');
       if (re.test(n)) {
         n = n.replace(re, '');
         changed = true;

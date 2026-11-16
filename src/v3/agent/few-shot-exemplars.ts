@@ -1,4 +1,5 @@
 import { CustomerSlate, ExtractedEntities } from '../../types/nlu';
+import { escapeRegex } from '../../utils/regex-escape';
 import { DEFAULT_TENANT_ID } from '../../config/tenant';
 import { GOLD_FEW_SHOT_EXEMPLARS } from './gold-few-shot-exemplars';
 
@@ -139,9 +140,6 @@ const mapRowToExemplar = (r: any): FewShotExemplar => ({
   createdAt: r.created_at,
   updatedAt: r.updated_at,
 });
-
-/** Escape karakter regex khusus agar aman dipakai di RegExp. */
-const escapeRegex = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 /** True bila tag muncul sebagai kata utuh (bukan sub-kata) di dalam teks. */
 const isWordTagMatch = (textLower: string, tag: string): boolean => {

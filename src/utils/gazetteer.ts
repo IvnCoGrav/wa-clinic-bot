@@ -10,10 +10,9 @@ import {
 } from './toponym-normalizer';
 import { isTypoAtMostOne, GEO_TOKEN_SKIPLIST } from './typo-match';
 import { setNameSanitizerDistrictLexicon } from './name-sanitizer';
+import { escapeRegex } from './regex-escape';
 
-export function escapeRegex(str: string): string {
-  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
+export { escapeRegex };
 
 export interface GazetteerRow {
   Kabupaten_Kota: string;
