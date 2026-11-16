@@ -1,6 +1,6 @@
 import { DEFAULT_TENANT_ID } from '../config/tenant';
-import { resolveDeliveryFeeSnapshot } from './reservation-core.service';
-import { resolveTreatmentValue } from './capi.service';
+import { resolveDeliveryFeeSnapshot } from '../domain/payment-expected';
+import { resolveTreatmentValue } from './treatment-value.service';
 
 /**
  * Seam kanonis nilai tagihan reservasi.

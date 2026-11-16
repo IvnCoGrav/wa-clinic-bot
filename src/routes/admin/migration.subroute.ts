@@ -1,9 +1,19 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
-import { prisma } from '../../db/client';
-import { DEFAULT_TENANT_ID } from '../../config/tenant';
 import { auditService } from '../../services/audit.service';
 import { knowledgeBaseService } from '../../services/knowledge.service';
 import { migrationService } from '../../services/migration.service';
+import {
+  bulkApproveStagingPurchases,
+  clearPendingFaqStaging,
+  countTenantConversations,
+  deleteAllFaqStaging,
+  listFaqStaging,
+  listLegacyStaging,
+  listLegacyStagingByStatus,
+  reviewGeneralFaqStaging,
+  reviewMedicalFaqStaging,
+  updateLegacyStagingStatus,
+} from '../../services/migration-staging.service';
 import { resolveSessionTenantId } from './route-helpers';
 
 export async function migrationAdminRoutes(fastify: FastifyInstance) {
@@ -91,100 +101,25 @@ export async function migrationAdminRoutes(fastify: FastifyInstance) {
         const { wahaHistorySyncService } = await import('../../services/waha-history-sync.service');
         const syncStatus = wahaHistorySyncService.getBackgroundSyncStatus(resolveSessionTenantId(request));
 
-        let where: any = { tenantId: resolveSessionTenantId(request), status: status as any };
-        if (hasReservation === 'true') {
-          where.firstPurchaseAt = { not: null };
-        } else if (hasReservation === 'false') {
-          where.firstPurchaseAt = null;
-        }
-
-        if (search && search.trim()) {
-          const q = search.trim();
-          where.OR = [
-            { name: { contains: q, mode: 'insensitive' } },
-            { phoneNumber: { contains: q } },
-            { extractedLocation: { contains: q, mode: 'insensitive' } },
-          ];
-        }
-
-        const allowedSort = [
-          'leadCreatedAt',
-          'firstPurchaseAt',
-          'name',
-          'phoneNumber',
-          'rawMessagesCount',
-          'createdAt',
-          'updatedAt',
-        ];
-        let orderBy: any = { leadCreatedAt: 'desc' };
-        if (sortBy && allowedSort.includes(sortBy)) {
-          orderBy = { [sortBy]: orderDir };
-        }
-
-        const isLtvSort = sortBy === 'ltv';
-
-        const [
-          rawItems,
-          total,
-          pendingCount,
-          approvedCount,
-          committedCount,
-          rejectedCount,
-          pendingWithResCount,
-          localConversationCount,
-          localMessageCount,
-        ] = await Promise.all([
-          prisma.legacyStaging.findMany({
-            where,
-            orderBy: isLtvSort ? { leadCreatedAt: 'desc' } : orderBy,
-            skip: isLtvSort ? 0 : (pageNum - 1) * limitNum,
-            take: isLtvSort ? Math.min(1000, limitNum * 20) : limitNum,
-          }),
-          prisma.legacyStaging.count({ where }),
-          prisma.legacyStaging.count({ where: { tenantId: resolveSessionTenantId(request), status: 'PENDING' } }),
-          prisma.legacyStaging.count({ where: { tenantId: resolveSessionTenantId(request), status: 'APPROVED' } }),
-          prisma.legacyStaging.count({ where: { tenantId: resolveSessionTenantId(request), status: 'COMMITTED' } }),
-          prisma.legacyStaging.count({ where: { tenantId: resolveSessionTenantId(request), status: 'REJECTED' } }),
-          prisma.legacyStaging.count({
-            where: { tenantId: resolveSessionTenantId(request), status: 'PENDING', firstPurchaseAt: { not: null } },
-          }),
-          prisma.conversation.count({ where: { tenant_id: resolveSessionTenantId(request) } }),
-          prisma.message.count({ where: { tenant_id: resolveSessionTenantId(request) } }),
-        ]);
-
-        // Ambil LTV real dari Customer jika nomor HP sudah tersimpan di database
-        const phones = rawItems.map((i) => i.phoneNumber);
-        const ltvMap = new Map<string, number>();
-        try {
-          const customersWithLtv = await prisma.customer.findMany({
-            where: { phone: { in: phones } },
-            select: {
-              phone: true,
-              reservations: {
-                where: { status: { in: ['confirmed', 'completed'] } },
-                select: { purchase_value: true },
-              },
-            },
-          });
-          for (const c of customersWithLtv) {
-            const sum = c.reservations.reduce((acc, r) => acc + (r.purchase_value || 0), 0);
-            ltvMap.set(c.phone, sum);
-          }
-        } catch (_) {}
-
-        let enrichedItems = rawItems.map((item) => {
-          const json: any = item.extractedReservationJson;
-          const ltv = ltvMap.get(item.phoneNumber) ?? json?.payment?.totalPrice ?? (item.firstPurchaseAt ? 70000 : 0);
-          return {
-            ...item,
-            ltv,
-          };
+        const staging = await listLegacyStaging({
+          tenantId: resolveSessionTenantId(request),
+          status,
+          page: pageNum,
+          limit: limitNum,
+          hasReservation,
+          sortBy,
+          sortOrder: orderDir,
+          search,
         });
-
-        if (isLtvSort) {
-          enrichedItems.sort((a, b) => (orderDir === 'asc' ? a.ltv - b.ltv : b.ltv - a.ltv));
-          enrichedItems = enrichedItems.slice((pageNum - 1) * limitNum, pageNum * limitNum);
-        }
+        const enrichedItems = staging.items;
+        const total = staging.total;
+        const pendingCount = staging.statusCounts.PENDING;
+        const approvedCount = staging.statusCounts.APPROVED;
+        const committedCount = staging.statusCounts.COMMITTED;
+        const rejectedCount = staging.statusCounts.REJECTED;
+        const pendingWithResCount = staging.statusCounts.PENDING_WITH_RESERVATION;
+        const localConversationCount = staging.localStats.conversationCount;
+        const localMessageCount = staging.localStats.messageCount;
 
         return reply.status(200).send({
           success: true,
@@ -227,29 +162,20 @@ export async function migrationAdminRoutes(fastify: FastifyInstance) {
    */
   fastify.post('/api/admin/migration/staging/bulk-approve-purchases', async (request: FastifyRequest, reply: FastifyReply) => {
     try {
-      const updated = await prisma.legacyStaging.updateMany({
-        where: {
-          tenantId: resolveSessionTenantId(request),
-          status: 'PENDING',
-          firstPurchaseAt: { not: null },
-        },
-        data: {
-          status: 'APPROVED',
-        },
-      });
+      const approvedCount = await bulkApproveStagingPurchases(resolveSessionTenantId(request));
 
       await auditService.logAdminAction({
         apiKey: (request as any).adminKeyUsed,
         adminIdentity: (request as any).adminIdentity,
         action: 'MIGRATION_BULK_APPROVE_PURCHASES',
-        payload: { count: updated.count },
+        payload: { count: approvedCount },
         ipAddress: request.ip,
       });
 
       return reply.status(200).send({
         success: true,
-        count: updated.count,
-        message: `Berhasil menyetujui ${updated.count} kontak yang memiliki form reservasi pembelian.`,
+        count: approvedCount,
+        message: `Berhasil menyetujui ${approvedCount} kontak yang memiliki form reservasi pembelian.`,
       });
     } catch (err: any) {
       return reply.status(500).send({ success: false, error: err.message });
@@ -314,10 +240,7 @@ export async function migrationAdminRoutes(fastify: FastifyInstance) {
   fastify.get('/api/admin/legacy-staging', async (request: FastifyRequest, reply: FastifyReply) => {
     try {
       const queryStatus = (request.query as any).status || 'PENDING';
-      const items = await prisma.legacyStaging.findMany({
-        where: { tenantId: resolveSessionTenantId(request), status: queryStatus as any },
-        orderBy: { leadCreatedAt: 'desc' },
-      });
+      const items = await listLegacyStagingByStatus(resolveSessionTenantId(request), queryStatus);
       return reply.status(200).send({ success: true, count: items.length, data: items });
     } catch (err) {
       return reply.status(200).send({ success: true, count: 0, data: [] });
@@ -340,10 +263,7 @@ export async function migrationAdminRoutes(fastify: FastifyInstance) {
       const { status } = request.body || {};
 
       try {
-        const item = await prisma.legacyStaging.update({
-          where: { id },
-          data: { status: status as any },
-        });
+        const item = await updateLegacyStagingStatus(id, status);
 
         return reply
           .status(200)
@@ -370,10 +290,7 @@ export async function migrationAdminRoutes(fastify: FastifyInstance) {
       const status = request.body?.status || 'COMMITTED';
 
       try {
-        const item = await prisma.legacyStaging.update({
-          where: { id },
-          data: { status: status as any },
-        });
+        const item = await updateLegacyStagingStatus(id, status);
 
         return reply
           .status(200)
@@ -394,27 +311,12 @@ export async function migrationAdminRoutes(fastify: FastifyInstance) {
       const pageNum = Math.max(1, parseInt(page, 10) || 1);
       const limitNum = Math.min(200, Math.max(1, parseInt(limit, 10) || 50));
 
-      const where: any = { tenant_id: resolveSessionTenantId(request), status };
-      const [items, total] = await Promise.all([
-        prisma.medicalFaqStaging.findMany({
-          where,
-          orderBy: { created_at: 'desc' },
-          skip: (pageNum - 1) * limitNum,
-          take: limitNum,
-        }),
-        prisma.medicalFaqStaging.count({ where }),
-      ]);
-
-      // Batch lookup chunk terlampir: 1 query untuk semua matched_chunk_id
-      const chunkIds = items.filter((i) => i.matched_chunk_id).map((i) => i.matched_chunk_id as string);
-      const chunks = chunkIds.length
-        ? await prisma.knowledgeChunk.findMany({ where: { id: { in: chunkIds } } })
-        : [];
-      const chunkMap = new Map(chunks.map((c) => [c.id, c]));
-
-      const itemsWithChunks = items.map((item) =>
-        item.matched_chunk_id ? { ...item, matchedChunk: chunkMap.get(item.matched_chunk_id) ?? null } : item
-      );
+      const { items: itemsWithChunks, total } = await listFaqStaging('medical', {
+        tenantId: resolveSessionTenantId(request),
+        status,
+        page: pageNum,
+        limit: limitNum,
+      });
 
       return reply.status(200).send({
         success: true,
@@ -460,15 +362,12 @@ export async function migrationAdminRoutes(fastify: FastifyInstance) {
       const reviewer = (request as any).adminIdentity || 'Bidan Admin';
 
       try {
-        const updated = await prisma.medicalFaqStaging.update({
-          where: { id },
-          data: {
-            status: status as any,
-            general_question: generalQuestion || undefined,
-            general_answer: generalAnswer || undefined,
-            reviewed_by: reviewer,
-            reviewed_at: new Date(),
-          },
+        const updated = await reviewMedicalFaqStaging(id, {
+          status: status as any,
+          general_question: generalQuestion || undefined,
+          general_answer: generalAnswer || undefined,
+          reviewed_by: reviewer,
+          reviewed_at: new Date(),
         });
 
         if (status === 'APPROVED' && generalQuestion && generalAnswer) {
@@ -500,27 +399,12 @@ export async function migrationAdminRoutes(fastify: FastifyInstance) {
       const pageNum = Math.max(1, parseInt(page, 10) || 1);
       const limitNum = Math.min(200, Math.max(1, parseInt(limit, 10) || 50));
 
-      const where: any = { tenant_id: resolveSessionTenantId(request), status };
-      const [items, total] = await Promise.all([
-        prisma.generalFaqStaging.findMany({
-          where,
-          orderBy: { created_at: 'desc' },
-          skip: (pageNum - 1) * limitNum,
-          take: limitNum,
-        }),
-        prisma.generalFaqStaging.count({ where }),
-      ]);
-
-      // Batch lookup chunk terlampir: 1 query untuk semua matched_chunk_id
-      const chunkIds = items.filter((i) => i.matched_chunk_id).map((i) => i.matched_chunk_id as string);
-      const chunks = chunkIds.length
-        ? await prisma.knowledgeChunk.findMany({ where: { id: { in: chunkIds } } })
-        : [];
-      const chunkMap = new Map(chunks.map((c) => [c.id, c]));
-
-      const itemsWithChunks = items.map((item) =>
-        item.matched_chunk_id ? { ...item, matchedChunk: chunkMap.get(item.matched_chunk_id) ?? null } : item
-      );
+      const { items: itemsWithChunks, total } = await listFaqStaging('general', {
+        tenantId: resolveSessionTenantId(request),
+        status,
+        page: pageNum,
+        limit: limitNum,
+      });
 
       return reply.status(200).send({
         success: true,
@@ -567,16 +451,13 @@ export async function migrationAdminRoutes(fastify: FastifyInstance) {
       const reviewer = (request as any).adminIdentity || 'Admin Umum';
 
       try {
-        const updated = await prisma.generalFaqStaging.update({
-          where: { id },
-          data: {
-            status: status as any,
-            general_question: generalQuestion || undefined,
-            general_answer: generalAnswer || undefined,
-            category: category || undefined,
-            reviewed_by: reviewer,
-            reviewed_at: new Date(),
-          },
+        const updated = await reviewGeneralFaqStaging(id, {
+          status: status as any,
+          general_question: generalQuestion || undefined,
+          general_answer: generalAnswer || undefined,
+          category: category || undefined,
+          reviewed_by: reviewer,
+          reviewed_at: new Date(),
         });
 
         if (status === 'APPROVED' && generalQuestion && generalAnswer) {
@@ -625,7 +506,7 @@ export async function migrationAdminRoutes(fastify: FastifyInstance) {
 
       let localConversationCount = 1;
       try {
-        localConversationCount = await prisma.conversation.count({ where: { tenant_id: resolveSessionTenantId(request) } });
+        localConversationCount = await countTenantConversations(resolveSessionTenantId(request));
         if (localConversationCount === 0) {
           return reply.status(200).send({
             success: false,
@@ -640,8 +521,7 @@ export async function migrationAdminRoutes(fastify: FastifyInstance) {
 
       if (clearPreviousPending) {
         try {
-          await prisma.medicalFaqStaging.deleteMany({ where: { tenant_id: resolveSessionTenantId(request), status: 'PENDING' } });
-          await prisma.generalFaqStaging.deleteMany({ where: { tenant_id: resolveSessionTenantId(request), status: 'PENDING' } });
+          await clearPendingFaqStaging(resolveSessionTenantId(request));
         } catch (e: any) {}
       }
 
@@ -663,17 +543,12 @@ export async function migrationAdminRoutes(fastify: FastifyInstance) {
    */
   fastify.post('/api/admin/harvest/reset-staging', async (request: FastifyRequest, reply: FastifyReply) => {
     try {
-      const medRes = await prisma.medicalFaqStaging.deleteMany({
-        where: { tenant_id: resolveSessionTenantId(request), status: 'PENDING' },
-      });
-      const genRes = await prisma.generalFaqStaging.deleteMany({
-        where: { tenant_id: resolveSessionTenantId(request), status: 'PENDING' },
-      });
+      const { medicalCleared, generalCleared } = await clearPendingFaqStaging(resolveSessionTenantId(request));
 
       return reply.status(200).send({
         success: true,
-        message: `Berhasil membersihkan ${medRes.count} kandidat medis dan ${genRes.count} kandidat umum staging PENDING yang lama.`,
-        data: { medicalCleared: medRes.count, generalCleared: genRes.count },
+        message: `Berhasil membersihkan ${medicalCleared} kandidat medis dan ${generalCleared} kandidat umum staging PENDING yang lama.`,
+        data: { medicalCleared, generalCleared },
       });
     } catch (err: any) {
       return reply.status(500).send({ error: err.message });
@@ -685,13 +560,12 @@ export async function migrationAdminRoutes(fastify: FastifyInstance) {
    */
   fastify.delete('/api/admin/harvest/staging/all', async (request: FastifyRequest, reply: FastifyReply) => {
     try {
-      const medRes = await prisma.medicalFaqStaging.deleteMany({ where: { tenant_id: resolveSessionTenantId(request) } });
-      const genRes = await prisma.generalFaqStaging.deleteMany({ where: { tenant_id: resolveSessionTenantId(request) } });
+      const { medicalDeleted, generalDeleted } = await deleteAllFaqStaging(resolveSessionTenantId(request));
 
       return reply.status(200).send({
         success: true,
-        message: `Berhasil menghapus seluruh data staging: ${medRes.count} kandidat medis dan ${genRes.count} kandidat umum.`,
-        data: { medicalDeleted: medRes.count, generalDeleted: genRes.count },
+        message: `Berhasil menghapus seluruh data staging: ${medicalDeleted} kandidat medis dan ${generalDeleted} kandidat umum.`,
+        data: { medicalDeleted, generalDeleted },
       });
     } catch (err: any) {
       return reply.status(500).send({ error: err.message });
@@ -710,7 +584,7 @@ export async function migrationAdminRoutes(fastify: FastifyInstance) {
 
     let localConversationCount = 0;
     try {
-      localConversationCount = await prisma.conversation.count({ where: { tenant_id: resolveSessionTenantId(request) } });
+      localConversationCount = await countTenantConversations(resolveSessionTenantId(request));
     } catch (_) {}
 
     return reply.status(200).send({

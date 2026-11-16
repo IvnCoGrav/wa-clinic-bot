@@ -78,3 +78,35 @@ export function resolveExpectedPayment(
     isOverpaid: status === 'OVERPAID',
   };
 }
+
+/**
+ * KB-6: resolver ongkir per-reservasi — utamakan snapshot `delivery_fee`,
+ * fallback ke `Customer.ongkir` untuk baris lama (pra-migrasi).
+ */
+export function resolveDeliveryFeeSnapshot(reservation: any): number {
+  const snap = (reservation as any)?.delivery_fee;
+  if (typeof snap === 'number' && snap >= 0) return snap;
+  const legacy = (reservation as any)?.customer?.ongkir ?? (reservation as any)?.ongkir;
+  if (typeof legacy === 'number' && legacy >= 0) return legacy;
+  return 0;
+}
+
+/**
+ * Evaluasi tagihan kanonis untuk payload API (dipakai list, detail, livechat).
+ * Murni: hanya membaca field reservasi, tanpa I/O atau state global.
+ */
+export function resolveReservationPaymentEvaluation(
+  reservation: any,
+  tolerance = 0
+): ExpectedPayment {
+  return resolveExpectedPayment(
+    {
+      purchaseValue: reservation?.purchase_value,
+      discountAmount: reservation?.discount_amount,
+      deliveryFee: resolveDeliveryFeeSnapshot(reservation),
+      receiptAmount: reservation?.receipt_amount,
+    },
+    { tolerance }
+  );
+}
+
