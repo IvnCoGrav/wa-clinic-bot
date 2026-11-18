@@ -5,8 +5,11 @@
 > Dilarang menyerap seluruh file sejarah 1,1 MB ke context window LLM.
 > Regenerate ulang index setiap entri baru: `node scripts/make-changelog-index.mjs --write`.
 
-Total entri terindeks: 692
+Total entri terindeks: 695
 
+- 2026-11-18 | Hotfix P0-1: Fix HTTP 500 Pasca-Kirim WA pada Live Chat & Fail-Soft Total AuditService
+- 2026-11-15 | Fix: Salinan Alert Watchdog Iklan via WhatsApp (Solusi Sementara)
+- 2026-11-15 | Fix KRITIS: Link CTA Iklan Tanpa Nomor Tujuan + Kode Tracking Kembali 2 Karakter
 - 2026-11-14 | Fix: Kartu Alamat Ganda dari Teks Chat Ber-Link (Regresi 6285852555576)
 - 2026-11-14 | Fix: Form Reservasi — Alamat Display-Only, Bidan/Status Jujur, Validasi & Anti-Friksi
 - 2026-11-14 | Fix: Pembayaran Berdiskon Tidak Lagi Diblokir, Bukti Bayar Permanen, Form Reservasi Tidak

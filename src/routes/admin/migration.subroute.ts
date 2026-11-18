@@ -51,6 +51,7 @@ export async function migrationAdminRoutes(fastify: FastifyInstance) {
       await auditService.logAdminAction({
         apiKey: (request as any).adminKeyUsed,
         adminIdentity: (request as any).adminIdentity,
+        tenantId: resolveSessionTenantId(request),
         action: 'MIGRATION_EXTRACT_CHATS',
         payload: { extractedCount: result.extractedCount, totalScanned: result.totalScanned },
         ipAddress: request.ip,
@@ -167,6 +168,7 @@ export async function migrationAdminRoutes(fastify: FastifyInstance) {
       await auditService.logAdminAction({
         apiKey: (request as any).adminKeyUsed,
         adminIdentity: (request as any).adminIdentity,
+        tenantId: resolveSessionTenantId(request),
         action: 'MIGRATION_BULK_APPROVE_PURCHASES',
         payload: { count: approvedCount },
         ipAddress: request.ip,
@@ -203,6 +205,7 @@ export async function migrationAdminRoutes(fastify: FastifyInstance) {
       await auditService.logAdminAction({
         apiKey: (request as any).adminKeyUsed,
         adminIdentity: (request as any).adminIdentity,
+        tenantId: resolveSessionTenantId(request),
         action: 'MIGRATION_UPDATE_STAGING_STATUS',
         targetId: id,
         payload: { status },
@@ -222,6 +225,7 @@ export async function migrationAdminRoutes(fastify: FastifyInstance) {
     await auditService.logAdminAction({
       apiKey: (request as any).adminKeyUsed,
       adminIdentity: (request as any).adminIdentity,
+      tenantId: resolveSessionTenantId(request),
       action: 'MIGRATION_COMMIT_APPROVED',
       payload: result,
       ipAddress: request.ip,

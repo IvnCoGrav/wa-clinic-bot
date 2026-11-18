@@ -231,6 +231,7 @@ export class ReservationArchiveService {
     await auditService.logAdminAction({
       apiKey: apiKey || 'ADMIN',
       adminIdentity: actor || 'ADMIN_MANUAL',
+      tenantId: existing.tenant_id || tenantId,
       action: 'ARCHIVE_RESERVATION',
       targetId: id,
       payload: {
@@ -418,6 +419,7 @@ export class ReservationArchiveService {
     await auditService.logAdminAction({
       apiKey: apiKey || 'ADMIN',
       adminIdentity: actor || 'ADMIN_MANUAL',
+      tenantId: resData.tenant_id || tenantId,
       action: 'RESTORE_RESERVATION_FROM_ARCHIVE',
       targetId: resData.id,
       payload: {
@@ -517,6 +519,7 @@ export class ReservationArchiveService {
         .logAdminAction({
           apiKey: 'SYSTEM_CRON',
           adminIdentity: 'SYSTEM_CRON',
+          tenantId: tenantId || DEFAULT_TENANT_ID,
           action: 'PURGE_RESERVATION_ARCHIVE',
           targetId: 'reservation_archives',
           payload: { purgedCount: totalPurged, tenantId: tenantId || 'ALL' },

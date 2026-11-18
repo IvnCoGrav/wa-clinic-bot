@@ -70,6 +70,7 @@ export async function followUpAdminRoutes(fastify: FastifyInstance) {
         await auditService.logAdminAction({
           apiKey: (request as any).adminKeyUsed || 'SYSTEM',
           adminIdentity: (request as any).adminIdentity || 'Admin',
+          tenantId: resolveSessionTenantId(request),
           action: 'QUEUE_FOLLOWUP',
           targetId: id,
           payload: { status: 'QUEUED' },
@@ -99,6 +100,7 @@ export async function followUpAdminRoutes(fastify: FastifyInstance) {
         await auditService.logAdminAction({
           apiKey: (request as any).adminKeyUsed || 'SYSTEM',
           adminIdentity: (request as any).adminIdentity || 'Admin',
+          tenantId: resolveSessionTenantId(request),
           action: 'BULK_QUEUE_FOLLOWUP',
           targetId: 'ALL',
           payload: { count: queuedCount, status: 'QUEUED' },
@@ -130,6 +132,7 @@ export async function followUpAdminRoutes(fastify: FastifyInstance) {
         await auditService.logAdminAction({
           apiKey: (request as any).adminKeyUsed || 'SYSTEM',
           adminIdentity: (request as any).adminIdentity || 'Admin',
+          tenantId: resolveSessionTenantId(request),
           action: 'MANUAL_SEND_FOLLOWUP',
           targetId: id,
           payload: { success },
@@ -163,6 +166,7 @@ export async function followUpAdminRoutes(fastify: FastifyInstance) {
         await auditService.logAdminAction({
           apiKey: (request as any).adminKeyUsed || 'SYSTEM',
           adminIdentity: (request as any).adminIdentity || 'Admin',
+          tenantId: resolveSessionTenantId(request),
           action: 'RETRY_FOLLOWUP',
           targetId: id,
           payload: { status: 'QUEUED' },
@@ -198,6 +202,7 @@ export async function followUpAdminRoutes(fastify: FastifyInstance) {
         await auditService.logAdminAction({
           apiKey: (request as any).adminKeyUsed || 'SYSTEM',
           adminIdentity: (request as any).adminIdentity || 'Admin',
+          tenantId: resolveSessionTenantId(request),
           action: 'CANCEL_FOLLOWUP',
           targetId: id,
           payload: { status: 'CANCELLED', reason: reason || undefined },
@@ -232,6 +237,7 @@ export async function followUpAdminRoutes(fastify: FastifyInstance) {
         await auditService.logAdminAction({
           apiKey: (request as any).adminKeyUsed || 'SYSTEM',
           adminIdentity: (request as any).adminIdentity || 'Admin',
+          tenantId: resolveSessionTenantId(request),
           action: 'BULK_CANCEL_FOLLOWUP',
           targetId: 'ALL',
           payload: { count: cancelledCount, targetStatus, reason: reason || undefined },
@@ -283,6 +289,7 @@ export async function followUpAdminRoutes(fastify: FastifyInstance) {
         await auditService.logAdminAction({
           apiKey: (request as any).adminKeyUsed || 'SYSTEM',
           adminIdentity: (request as any).adminIdentity || 'Admin',
+          tenantId: resolveSessionTenantId(request),
           action: 'UPDATE_FOLLOWUP',
           targetId: id,
           payload: { scheduledAt, stage, customText },
@@ -316,6 +323,7 @@ export async function followUpAdminRoutes(fastify: FastifyInstance) {
         await auditService.logAdminAction({
           apiKey: (request as any).adminKeyUsed || 'SYSTEM',
           adminIdentity: (request as any).adminIdentity || 'Admin',
+          tenantId: resolveSessionTenantId(request),
           action: 'RESCHEDULE_FOLLOWUP',
           targetId: id,
           payload: { scheduledAt },
@@ -359,6 +367,7 @@ export async function followUpAdminRoutes(fastify: FastifyInstance) {
         await auditService.logAdminAction({
           apiKey: (request as any).adminKeyUsed || 'SYSTEM',
           adminIdentity: (request as any).adminIdentity || 'Admin',
+          tenantId: resolveSessionTenantId(request),
           action: 'RESCHEDULE_OVERDUE_FOLLOWUPS',
           payload: { maxPerDay, startDate, rescheduledCount: result.rescheduledCount },
           ipAddress: request.ip,
@@ -413,6 +422,7 @@ export async function followUpAdminRoutes(fastify: FastifyInstance) {
       await auditService.logAdminAction({
         apiKey: (request as any).adminKeyUsed || 'SYSTEM',
         adminIdentity: (request as any).adminIdentity || 'Admin',
+        tenantId: resolveSessionTenantId(request),
         action: 'UPDATE_FOLLOWUP_TEMPLATE',
         targetId: `${type}_${variant}`,
         payload: { text },
@@ -444,6 +454,7 @@ export async function followUpAdminRoutes(fastify: FastifyInstance) {
         await auditService.logAdminAction({
           apiKey: (request as any).adminKeyUsed || 'SYSTEM',
           adminIdentity: (request as any).adminIdentity || 'Admin',
+          tenantId: resolveSessionTenantId(request),
           action: 'RESET_FOLLOWUP_TEMPLATE',
           targetId: `${type}_${variant}`,
           ipAddress: request.ip,

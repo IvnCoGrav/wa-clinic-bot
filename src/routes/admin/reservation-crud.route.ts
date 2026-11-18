@@ -686,6 +686,7 @@ export async function reservationCrudRoutes(fastify: FastifyInstance) {
         await auditService.logAdminAction({
           apiKey: (request as any).adminKeyUsed,
           adminIdentity: (request as any).adminIdentity,
+          tenantId,
           action: 'CREATE_RESERVATION',
           targetId: reservation.id,
           payload: { customerId, rawText, force: force === true },
@@ -847,6 +848,7 @@ export async function reservationCrudRoutes(fastify: FastifyInstance) {
         await auditService.logAdminAction({
           apiKey: (request as any).adminKeyUsed,
           adminIdentity: (request as any).adminIdentity,
+          tenantId,
           action: 'CREATE_QUICK_HOLD_RESERVATION',
           targetId: reservation.id,
           payload: { customerId, bookingDate: parsedDate, assignedStaffId, status: 'hold', durationMinutes, force },
@@ -1130,6 +1132,7 @@ export async function reservationCrudRoutes(fastify: FastifyInstance) {
         await auditService.logAdminAction({
           apiKey: (request as any).adminKeyUsed,
           adminIdentity: (request as any).adminIdentity,
+          tenantId,
           action: 'CREATE_RESERVATION_MANUAL',
           targetId: reservation.id,
           payload: { customerId, treatmentCategory, assignedStaffId, status: reservationStatus, source: 'admin_panel', force },
@@ -1140,6 +1143,7 @@ export async function reservationCrudRoutes(fastify: FastifyInstance) {
           await auditService.logAdminAction({
             apiKey: (request as any).adminKeyUsed,
             adminIdentity: (request as any).adminIdentity,
+            tenantId,
             action: 'CREATE_RESERVATION_FORCE_OVERRIDE',
             targetId: reservation.id,
             payload: { customerId, bookingDate: parsedDate, assignedStaffId, reason: 'admin force override konflik jadwal' },

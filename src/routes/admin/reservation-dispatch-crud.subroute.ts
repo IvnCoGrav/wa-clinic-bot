@@ -785,6 +785,7 @@ export async function reservationDispatchCrudRoutes(fastify: FastifyInstance) {
         await auditService.logAdminAction({
           apiKey: (request as any).adminKeyUsed,
           adminIdentity: (request as any).adminIdentity,
+          tenantId: existing.tenant_id || tenantId,
           action: 'UPDATE_RESERVATION_DETAIL',
           targetId: id,
           payload: body,
@@ -963,6 +964,7 @@ export async function reservationDispatchCrudRoutes(fastify: FastifyInstance) {
           await auditService.logAdminAction({
             apiKey: (request as any).adminKeyUsed,
             adminIdentity: (request as any).adminIdentity,
+            tenantId: existing.tenant_id || tenantId,
             action: 'CANCEL_AFTER_APPROVE',
             targetId: id,
             payload: {
@@ -1005,6 +1007,7 @@ export async function reservationDispatchCrudRoutes(fastify: FastifyInstance) {
         await auditService.logAdminAction({
           apiKey: (request as any).adminKeyUsed,
           adminIdentity: (request as any).adminIdentity,
+          tenantId: existing.tenant_id || tenantId,
           action: 'CANCEL_RESERVATION',
           targetId: id,
           payload: { status: 'cancelled' },
