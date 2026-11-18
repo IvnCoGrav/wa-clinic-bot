@@ -141,4 +141,17 @@ describe('LiveChat banner payload completeness (F-A)', () => {
     expect(out.activeHoldReservation).toBeTruthy();
     expect(out.activeHoldReservation.raw_text).toContain('Jl. Mawar 2');
   });
+
+  it('durasi null/undefined diteruskan null (tidak mengarang 60 menit)', () => {
+    const c = conv();
+    c.customer.reservations = [{
+      id: 'res-no-dur',
+      status: 'confirmed',
+      booking_date: new Date(Date.now() + 2 * 60 * 60 * 1000),
+      treatment_detail: 'Kala Mom',
+      duration_minutes: undefined,
+    }];
+    const out: any = serialize(c);
+    expect(out.activeConfirmedReservation?.duration_minutes).toBeNull();
+  });
 });

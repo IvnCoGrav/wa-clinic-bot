@@ -3,6 +3,32 @@
 Catatan temuan yang sengaja dipisah dari fitur aktif, supaya tidak hilang dan
 tidak disalahartikan sebagai bug dari perubahan terbaru.
 
+## 355. [Live Chat] Banner "JADWAL"/Reservasi Customer Lain Menempel pada Chat Nomor Baru (2026-11-18, RESOLVED)
+
+- **Status:** RESOLVED (2026-11-18).
+- **Gejala:** Nomor baru (misalnya chat amels) yang belum pernah order dan baru tanya-tanya tiba-tiba memiliki banner "JADWAL KALA MOM" / reservasi milik customer lain (misalnya Bunda Gita) di Live Chat Monitor dashboard.
+- **Akar Masalah (C-001 s.d. C-005):**
+  - **C-001 (Cross-customer leak di memo turunan & drawer):** `customerDetailData` tidak diverifikasi kepemilikannya terhadap `selectedChat.customerId`, dan memo `activeConfirmedReservation`, `activeHoldReservation`, `activePendingReservation` di `useLiveChatReservations.ts` tidak pernah memfilter apakah reservasi yang dibaca milik `selectedChat.customerId`.
+  - **C-002 (Race condition saat berpindah chat):** Saat staf mengklik chat A lalu segera mengklik chat B, respons fetch profil customer A yang tiba belakangan menimpa state `customerDetailData` milik chat B tanpa mekanisme pembatalan (request tokening / auto-reset).
+  - **C-003 (Kontrak payload SSE reservasi cacat):** Payload SSE `conversation.updated` yang dipublish oleh `reservation-lifecycle.service.ts` mengirim `conversationId: chatId` (WhatsApp JID seperti `@c.us`, bukan UUID percakapan) dan objek `activeConfirmedReservation` tidak memuat `customer_id`. Akibatnya listener SSE tidak bisa memvalidasi kepemilikan.
+  - **C-004 (Dual source of truth di kartu chat):** Kartu chat di sidebar diupdate dari data lokal hook `handleReservationUpdate` yang menyalin reservasi tanpa validasi pemilik, bukannya disinkronkan dari server kanonis via `refreshChatItem(conversationId)`.
+  - **C-005 (Durasi default halu di serializer):** `live-chat.serializer.ts` mengisi `duration_minutes: duration_minutes || 60`, menyebabkan reservasi tanpa durasi eksplisit selalu tampil dengan badge "• 60 mnt".
+- **Solusi Fondasional yang Diterapkan:**
+  - **Fase A (Seam Kepemilikan Reservasi):** Membuat seam tunggal murni `packages/admin-dashboard/src/utils/reservationOwnership.ts` (`resolveReservationOwnerId`, `isReservationOwnedBy`, `filterOwnedReservations`, `pickOwnedActiveReservations`). Seluruh pembacaan reservasi di hook `useLiveChatReservations` diwajibkan melewati filter kepemilikan fail-closed.
+  - **Fase B (Invarian Chat ↔ Customer Detail):** Menambahkan token pembatalan `customerDetailRequestRef` dan efek reset deterministik saat `selectedChat` berubah agar data customer lain dibuang seketika dan respons HTTP basi tidak menimpa state.
+  - **Fase C (Single Source of Truth & Kontrak SSE):**
+    - Kontrak SSE distandarkan via builder murni `src/domain/livechat-reservation-event.ts` (`buildReservationUpdatedPayload`), memastikan `conversationId` selalu UUID dan `customer_id` selalu ada.
+    - Webhook routes mengirimkan `conversationId: conversation.id` di ketiga call site auto-capture.
+    - Frontend SSE listener di `useLiveChatSse.ts` dilengkapi guard kepemilikan `isReservationOwnedBy`.
+    - Kartu chat diperbarui melalui single source of truth `refreshChatItem` dari backend endpoint conversation.
+  - **Fase D (Durasi Murni):** Memperbaiki fallback durasi di `src/services/live-chat.serializer.ts` menjadi `(res as any).duration_minutes ?? null`.
+- **Bukti Uji & Verifikasi:**
+  - Unit test baru `tests/unit/reservation-ownership.test.ts` (7 tests)
+  - Unit test baru `tests/unit/livechat-reservation-event.test.ts` (4 tests)
+  - Penambahan uji durasi null di `tests/unit/livechat-payload-completeness.test.ts` (9 tests)
+  - `npm run typecheck`: Exit 0
+  - `npm --prefix packages/admin-dashboard run build`: Exit 0
+
 ## 354. [Staff Today] Insiden 16 Nov 2026 — Bukti Forensik & Penyelesaian Kunjungan Transfer (2026-11-16, RESOLVED)
 
 - **Status:** RESOLVED (2026-11-16).
