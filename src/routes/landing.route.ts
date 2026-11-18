@@ -270,7 +270,9 @@ async function renderLanding(reply: FastifyReply, request: FastifyRequest, conte
       {
         trackingApiBaseUrl: '',
         trackingApiKey: '',
-        whatsappNumber: content.whatsapp_number || process.env.DEFAULT_WHATSAPP_PHONE || '',
+        whatsappNumber:
+          content.whatsapp_number ||
+          (content.tenant_id === DEFAULT_TENANT_ID ? process.env.DEFAULT_WHATSAPP_PHONE || '' : ''),
         tenantId: content.tenant_id,
         tenantSlug: content.slug || slug,
       },
@@ -326,7 +328,11 @@ async function renderLanding(reply: FastifyReply, request: FastifyRequest, conte
     .replace(/__TRACKING_API_BASE_URL__/g, '')
     .replace(/__TRACKING_API_KEY__/g, '')
     .replace(/__FB_PIXEL_ID__/g, resolvedPixelId)
-    .replace(/__DEFAULT_WHATSAPP_PHONE__/g, content.whatsapp_number || process.env.DEFAULT_WHATSAPP_PHONE || '')
+    .replace(
+      /__DEFAULT_WHATSAPP_PHONE__/g,
+      content.whatsapp_number ||
+        (content.tenant_id === DEFAULT_TENANT_ID ? process.env.DEFAULT_WHATSAPP_PHONE || '' : '')
+    )
     .replace(/__TENANT_ID__/g, content.tenant_id)
     .replace(/__TENANT_SLUG__/g, content.slug || slug)
     .replace(/__EVENTS_ONLOAD__/g, eventsOnload)
@@ -464,8 +470,7 @@ export async function landingRoutes(fastify: FastifyInstance) {
       (content.whatsapp_number || '').trim() ||
       query.phone ||
       (isDefaultTenant ? tenantContact.whatsapp_number : '') ||
-      (isDefaultTenant ? process.env.DEFAULT_WHATSAPP_PHONE || '' : '') ||
-      (process.env.DEFAULT_WHATSAPP_PHONE || '');
+      (isDefaultTenant ? process.env.DEFAULT_WHATSAPP_PHONE || '' : '');
 
     let rawMsg = query.msg || query.greetings || '';
     if (!rawMsg) {
@@ -704,18 +709,38 @@ export async function landingRoutes(fastify: FastifyInstance) {
     }
 
     const cleanPhone = phone.replace(/\D/g, '');
-    if (!cleanPhone) {
-      // RC-CTA-01: jangan pernah diam-diam mengirim link tanpa nomor tujuan.
-      // Ini yang membuat seluruh trafik iklan tidak bisa masuk WhatsApp.
-      request.log.error(
-        `[CTA CRITICAL] Nomor WhatsApp tujuan KOSONG (slug=${tenantSlug}, tenant=${content.tenant_id}). ` +
-          'Cek Tenant.whatsapp_number di DB / env DEFAULT_WHATSAPP_PHONE.'
-      );
-    }
-    const waUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(finalMsg)}`;
-
     const nonce = crypto.randomBytes(16).toString('base64');
     applyLandingSecurityHeaders(reply, nonce);
+
+    if (!cleanPhone) {
+      // RC-CTA-01 / A-004: fail-closed sejati — jangan pernah membalas 200 dengan tautan mati `wa.me/?text=`.
+      request.log.error(
+        `[CTA CRITICAL] Nomor WhatsApp tujuan KOSONG (slug=${tenantSlug}, tenant=${content.tenant_id}). ` +
+          'Mengembalikan 503 fail-closed. Cek Tenant.whatsapp_number di DB / env DEFAULT_WHATSAPP_PHONE.'
+      );
+      const unavailableHtml = `<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex">
+  <title>Layanan Sementara Tidak Tersedia</title>
+</head>
+<body style="font-family: sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; background: #f8fafc; color: #334155;">
+  <main style="text-align: center; max-width: 420px; padding: 24px;">
+    <h1 style="font-size: 18px; margin: 0 0 8px;">Layanan WhatsApp Belum Tersedia</h1>
+    <p style="font-size: 14px; line-height: 1.5; color: #64748b;">Maaf, tautan WhatsApp untuk halaman ini sedang dalam pemeliharaan. Silakan hubungi admin klinik secara langsung.</p>
+  </main>
+</body>
+</html>`;
+      return reply
+        .status(503)
+        .header('Retry-After', '60')
+        .header('Cache-Control', 'no-store')
+        .type('text/html; charset=utf-8')
+        .send(unavailableHtml);
+    }
+    const waUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(finalMsg)}`;
 
     const pixelBlock = pixelId
       ? `
