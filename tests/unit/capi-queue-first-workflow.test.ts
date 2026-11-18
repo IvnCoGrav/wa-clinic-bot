@@ -216,7 +216,12 @@ describe('Meta CAPI Queue-First & Anti-Duplikat Workflow (Fase 5 Suite)', () => 
       return { ...existingPending, ...data } as any;
     });
 
-    vi.spyOn(capiService, 'sendCapiEvent').mockResolvedValue({ success: true, eventId: 'evt-approved-1' } as any);
+    vi.spyOn(capiService, 'sendCapiEvent').mockResolvedValue({
+      success: true,
+      deliveryConfirmed: true,
+      events_received: 1,
+      eventId: 'evt-approved-1',
+    } as any);
     const ltvSpy = vi.spyOn(customerService, 'recalculateCustomerLtv');
 
     const res = await app.inject({

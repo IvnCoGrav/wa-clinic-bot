@@ -129,7 +129,12 @@ describe('Ad Click Attribution & Meta CAPI Unit Tests', () => {
           adClick,
           tenantId: DEFAULT_TENANT_ID,
         })
-      ).resolves.toEqual({ success: false, message: 'Network Timeout / DNS failure' });
+      ).resolves.toMatchObject({
+        success: false,
+        message: 'Network Timeout / DNS failure',
+        deliveryConfirmed: false,
+        events_received: 0,
+      });
     });
   });
 
@@ -188,7 +193,7 @@ describe('Ad Click Attribution & Meta CAPI Unit Tests', () => {
     it('should format fbp, fbc, and phone using Meta ParamBuilder with appendix', async () => {
       const executeSpy = vi.spyOn(capiBreaker, 'execute').mockResolvedValue({
         status: 200,
-        data: { success: true },
+        data: { success: true, events_received: 1 },
       } as any);
 
       const adClick = {
@@ -229,7 +234,7 @@ describe('Ad Click Attribution & Meta CAPI Unit Tests', () => {
     it('should sanitize emojis and parentheticals from customer name before PII hashing', async () => {
       const executeSpy = vi.spyOn(capiBreaker, 'execute').mockResolvedValue({
         status: 200,
-        data: { success: true },
+        data: { success: true, events_received: 1 },
       } as any);
 
       await capiService.sendCapiEvent({
@@ -250,7 +255,7 @@ describe('Ad Click Attribution & Meta CAPI Unit Tests', () => {
     it('should include raw (unhashed) ctwa_clid in user_data when AdClick is a CTWA touchpoint', async () => {
       const executeSpy = vi.spyOn(capiBreaker, 'execute').mockResolvedValue({
         status: 200,
-        data: { success: true },
+        data: { success: true, events_received: 1 },
       } as any);
 
       const rawClid = 'AfjcTHNKDctClrnb-m9NkJrBspOBQ-z1mmhIDkvokHSICaCZmqmDoz93';
@@ -270,7 +275,7 @@ describe('Ad Click Attribution & Meta CAPI Unit Tests', () => {
     it('should NOT set ctwa_clid when AdClick has no CTWA clid (organic / web CTA)', async () => {
       const executeSpy = vi.spyOn(capiBreaker, 'execute').mockResolvedValue({
         status: 200,
-        data: { success: true },
+        data: { success: true, events_received: 1 },
       } as any);
 
       await capiService.sendCapiEvent({

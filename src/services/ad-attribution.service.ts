@@ -1,9 +1,21 @@
 import { randomUUID } from 'crypto';
 import { prisma } from '../db/client';
 import { memoryAdClicks } from '../routes/tracking.route';
-import { capiService, maskPhone } from './capi.service';
+import { capiService, getTenantCapiFormats, maskPhone } from './capi.service';
 import { ctwaTextCatcherService } from './ctwa-text-catcher.service';
+import { escapeRegex } from '../utils/regex-escape';
 import type { AdReferral } from '../integrations/whatsapp/gateway.types';
+
+/**
+ * Ekstrak prefix tag sebelum `[` dari konfigurasi `Tenant.format_visit`
+ * (mis. `Promo[%ID%]` → `'Promo'`, `Ref [%ID%]` → `'Ref'`, `[%ID%]` → `''`).
+ */
+function extractFormatVisitPrefix(formatVisit?: string): string {
+  const raw = String(formatVisit || '').trim();
+  const bracketIdx = raw.indexOf('[');
+  if (bracketIdx <= 0) return '';
+  return raw.slice(0, bracketIdx).trim();
+}
 
 export interface CustomerIdentity {
   id: string;
@@ -53,9 +65,31 @@ export async function matchAdClickAndFireContact(
 ): Promise<MatchAdClickResult> {
   const { bodyText, isNewCustomerRecord, customer, tenantId, referral } = params;
 
-  const promoMatch = bodyText ? bodyText.match(/(?:Promo\s*)?\[\s*([\w\s-]{2,32}?)\s*\]/i) : null;
-  const trackingCode = promoMatch ? promoMatch[1].replace(/\s+/g, '') : undefined;
+  const bracketMatch = bodyText ? bodyText.match(/\[\s*([\w\s-]{2,32}?)\s*\]/) : null;
+  const rawBracketInner = bracketMatch ? bracketMatch[1].trim() : '';
+  const trackingCode = rawBracketInner ? rawBracketInner.replace(/\s+/g, '') : undefined;
   const ctwaClid = referral?.ctwaClid;
+
+  // A-003 (Data-Driven, anti-hardcode): evaluasi kecocokan prefix tag Direct CTWA dari `Tenant.format_visit`.
+  // Di-cache per-call agar DB hanya diquery bila benar-benar dibutuhkan.
+  let cachedVisitPrefix: string | null = null;
+  const resolveConfiguredVisitPrefix = async (): Promise<string> => {
+    if (cachedVisitPrefix !== null) return cachedVisitPrefix;
+    const formats = await getTenantCapiFormats(tenantId);
+    cachedVisitPrefix = extractFormatVisitPrefix(formats.formatVisit);
+    return cachedVisitPrefix;
+  };
+  const isValidDirectCtwaTag = async (): Promise<boolean> => {
+    if (!bracketMatch || bracketMatch.index === undefined || !rawBracketInner) return false;
+    const prefix = await resolveConfiguredVisitPrefix();
+    if (prefix) {
+      const beforeBracket = bodyText.slice(0, bracketMatch.index).trimEnd();
+      return new RegExp(`(?:^|\\s)${escapeRegex(prefix)}$`, 'i').test(beforeBracket);
+    }
+    // Tenant mengonfigurasi format_visit tanpa prefix (mis. "[%ID%]"):
+    // izinkan hanya token kode tanpa spasi (mis. [IG-BABYSPA]), tetap tolak frasa bebas seperti [Pijat Bayi].
+    return !/\s/.test(rawBracketInner);
+  };
 
   let matched = false;
   let isNewlyLinked = false;
@@ -116,8 +150,8 @@ export async function matchAdClickAndFireContact(
     }
   }
 
-  // 2. Priority 2: Text-based Promo Code regex match [IG-BABYSPA] / [64] (Website CTA & WAHA Direct CTWA)
-  if (!matched && promoMatch && trackingCode) {
+  // 2. Priority 2: Text-based Promo Code match [IG-BABYSPA] / [64] (Website CTA & WAHA Direct CTWA)
+  if (!matched && bracketMatch && trackingCode) {
     // Memory cache fallback (for unit tests / in-memory mode)
     if (memoryAdClicks && typeof memoryAdClicks.get === 'function') {
       const memClick = memoryAdClicks.get(trackingCode);
@@ -175,28 +209,30 @@ export async function matchAdClickAndFireContact(
         }
 
         if (incomingClick) {
-          // Pindahkan/perbarui telemetry dari incomingClick ke existingAdClick
-          const updated = await prisma.adClick.update({
-            where: { id: existingAdClick.id },
-            data: {
-              trackingCode: incomingClick.trackingCode || trackingCode,
-              utmCampaign: incomingClick.utmCampaign || existingAdClick.utmCampaign,
-              utmSource: incomingClick.utmSource || existingAdClick.utmSource,
-              utmMedium: incomingClick.utmMedium || existingAdClick.utmMedium,
-              fbclid: incomingClick.fbclid || existingAdClick.fbclid,
-              fbc: incomingClick.fbc || existingAdClick.fbc,
-              fbp: incomingClick.fbp || existingAdClick.fbp,
-              landingUrl: incomingClick.landingUrl || existingAdClick.landingUrl,
-              ipAddress: incomingClick.ipAddress || existingAdClick.ipAddress,
-              userAgent: incomingClick.userAgent || existingAdClick.userAgent,
-              matchedAt: new Date(),
-              phone: customer.phone,
-            },
+          // P0-2 (A-003): Hapus incomingClick LEBIH DULU sebelum update existingAdClick dalam transaksi atomik.
+          // Schema AdClick memiliki @@unique([tenant_id, trackingCode]) dan @unique customerId;
+          // update sebelum delete masih memicu P2002 karena incomingClick memegang trackingCode yang sama.
+          const mergedData = {
+            trackingCode: incomingClick.trackingCode || trackingCode,
+            utmCampaign: incomingClick.utmCampaign || existingAdClick.utmCampaign,
+            utmSource: incomingClick.utmSource || existingAdClick.utmSource,
+            utmMedium: incomingClick.utmMedium || existingAdClick.utmMedium,
+            fbclid: incomingClick.fbclid || existingAdClick.fbclid,
+            fbc: incomingClick.fbc || existingAdClick.fbc,
+            fbp: incomingClick.fbp || existingAdClick.fbp,
+            landingUrl: incomingClick.landingUrl || existingAdClick.landingUrl,
+            ipAddress: incomingClick.ipAddress || existingAdClick.ipAddress,
+            userAgent: incomingClick.userAgent || existingAdClick.userAgent,
+            matchedAt: new Date(),
+            phone: customer.phone,
+          };
+          const updated = await prisma.$transaction(async (tx) => {
+            await tx.adClick.delete({ where: { id: incomingClick.id } });
+            return tx.adClick.update({
+              where: { id: existingAdClick.id },
+              data: mergedData,
+            });
           });
-          // Hapus baris sementara agar tidak orphaned
-          try {
-            await prisma.adClick.delete({ where: { id: incomingClick.id } });
-          } catch {}
           matched = true;
           isNewlyLinked = true;
           matchedAdClick = updated;
@@ -208,8 +244,8 @@ export async function matchAdClickAndFireContact(
             matched = true;
             isNewlyLinked = false; // Sudah pernah ter-link, BUKAN touchpoint baru
             matchedAdClick = existingAdClick;
-          } else {
-            // Repeat lead dengan campaign baru -> update record
+          } else if (await isValidDirectCtwaTag()) {
+            // Repeat lead dengan campaign tag sesuai format_visit tenant -> update record
             const updated = await prisma.adClick.update({
               where: { id: existingAdClick.id },
               data: {
@@ -251,8 +287,9 @@ export async function matchAdClickAndFireContact(
           matchedAdClick = await prisma.adClick.findFirst({
             where: { trackingCode, customerId: customer.id },
           });
-        } else {
-          // Customer baru tanpa AdClick web -> Buat record AdClick baru
+        } else if (await isValidDirectCtwaTag()) {
+          // Customer baru tanpa AdClick web, tetapi cocok format_visit tenant -> Buat record Direct CTWA.
+          // Teks bracket arbitrer seperti [Pijat Bayi] TIDAK boleh membuat AdClick palsu.
           const uniqueTrackingCode = `ctwa_${randomUUID().replace(/-/g, '').slice(0, 16)}`;
           try {
             const directAdClick = await prisma.adClick.create({
@@ -446,10 +483,14 @@ export async function matchAdClickAndFireContact(
     }
   }
 
-  // Calculate stripped text (removes Promo[code] / [IG-BABYSPA] prefix/suffix for AI processing)
+  // Calculate stripped text (removes configured prefix + [code] for AI processing)
   let strippedText = bodyText;
-  if (promoMatch && bodyText) {
-    const stripped = bodyText.replace(/(?:Promo\s*)?\[\s*([\w\s-]{2,32}?)\s*\]\s*/gi, '').trim();
+  if (bracketMatch && bodyText && (matched || (await isValidDirectCtwaTag()))) {
+    const prefix = await resolveConfiguredVisitPrefix();
+    const stripPattern = prefix
+      ? new RegExp(`(?:${escapeRegex(prefix)}\\s*)?\\[\\s*([\\w\\s-]{2,32}?)\\s*\\]\\s*`, 'gi')
+      : /\[\s*([\w\s-]{2,32}?)\s*\]\s*/gi;
+    const stripped = bodyText.replace(stripPattern, '').trim();
     strippedText = stripped || 'Halo';
   }
 

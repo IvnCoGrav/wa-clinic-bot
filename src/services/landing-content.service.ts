@@ -146,7 +146,10 @@ export async function resolveLandingContent(
       subheadline: landingJson.subheadline || FALLBACK_SUBHEADLINE,
       benefits: landingJson.benefits || FALLBACK_BENEFITS,
       faq: landingJson.faq || FALLBACK_FAQ,
-      whatsapp_number: landing.whatsapp_number || tenantForLanding?.whatsapp_number || process.env.DEFAULT_WHATSAPP_PHONE || '',
+      whatsapp_number:
+        landing.whatsapp_number ||
+        tenantForLanding?.whatsapp_number ||
+        (landingTenantId === DEFAULT_TENANT_ID ? process.env.DEFAULT_WHATSAPP_PHONE || '' : ''),
       meta_pixel_id:
         landing.meta_pixel_id ||
         tenantForLanding?.meta_pixel_id ||
@@ -194,7 +197,10 @@ export async function resolveLandingContent(
       subheadline: landingJson.subheadline || FALLBACK_SUBHEADLINE,
       benefits: landingJson.benefits || FALLBACK_BENEFITS,
       faq: landingJson.faq || FALLBACK_FAQ,
-      whatsapp_number: tenant.whatsapp_number || landingJson.whatsapp_number || process.env.DEFAULT_WHATSAPP_PHONE || '',
+      whatsapp_number:
+        tenant.whatsapp_number ||
+        landingJson.whatsapp_number ||
+        (legacyTenantId === DEFAULT_TENANT_ID ? process.env.DEFAULT_WHATSAPP_PHONE || '' : ''),
       meta_pixel_id:
         tenant.meta_pixel_id ||
         landingJson.meta_pixel_id ||
