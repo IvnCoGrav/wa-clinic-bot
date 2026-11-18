@@ -6,6 +6,7 @@ import { useSearchParams } from 'react-router-dom';
 import { apiRequest } from '../../services/api';
 import { useUiFeedback } from '../../components/common/UiFeedback';
 import { useAuth } from '../../contexts/AuthContext';
+import { canDo } from '../../config/actionPermissions';
 import { useCopilot } from '../../contexts/CopilotContext';
 import {
   MessageSquare,
@@ -46,6 +47,7 @@ import {
 export const LiveChatMonitor: React.FC = () => {
   const { toast, confirm } = useUiFeedback();
   const { user } = useAuth();
+  const canToggleGlobalBot = canDo(user?.role, 'toggle_global_bot');
   const { open: copilotOpen, setOpen: setCopilotOpen, openMobileMenu } = useCopilot();
   const [searchParams, setSearchParams] = useSearchParams();
 
@@ -844,22 +846,24 @@ export const LiveChatMonitor: React.FC = () => {
           >
             <FileText size={14} />
           </button>
-          <ToggleSwitch
-            checked={chatBotActive}
-            onChange={(enableBot) => handleToggleGlobalBot(enableBot)}
-            disabled={togglingBotCutoff}
-            loading={togglingBotCutoff}
-            variant={chatBotActive ? 'emerald' : 'rose'}
-            onLabel="BOT ON"
-            offLabel="BOT OFF"
-            size="sm"
-            className="min-h-[44px] py-1"
-            title={
-              chatBotActive
-                ? 'Status: Chatbot AI Aktif (Normal). Klik untuk menonaktifkan AI.'
-                : 'Status: Chatbot AI Nonaktif (AI diam, CS manual). Klik untuk mengaktifkan kembali.'
-            }
-          />
+          {canToggleGlobalBot && (
+            <ToggleSwitch
+              checked={chatBotActive}
+              onChange={(enableBot) => handleToggleGlobalBot(enableBot)}
+              disabled={togglingBotCutoff}
+              loading={togglingBotCutoff}
+              variant={chatBotActive ? 'emerald' : 'rose'}
+              onLabel="BOT ON"
+              offLabel="BOT OFF"
+              size="sm"
+              className="min-h-[44px] py-1"
+              title={
+                chatBotActive
+                  ? 'Status: Chatbot AI Aktif (Normal). Klik untuk menonaktifkan AI.'
+                  : 'Status: Chatbot AI Nonaktif (AI diam, CS manual). Klik untuk mengaktifkan kembali.'
+              }
+            />
+          )}
           <button
             onClick={() => setShowSyncInfoModal(true)}
             disabled={bgSyncProgress.isSyncing}
@@ -881,13 +885,15 @@ export const LiveChatMonitor: React.FC = () => {
               <span className="text-amber-800 dark:text-amber-200">AI diam, dialihkan ke CS manual. Follow-Up & balasan Live Chat manual tetap aktif.</span>
             </div>
           </div>
-          <button
-            onClick={() => handleToggleGlobalBot(true)}
-            disabled={togglingBotCutoff}
-            className="px-2.5 py-1 text-[11px] font-bold text-on-solid bg-success hover:bg-success-hover rounded-lg transition shrink-0 ml-2 cursor-pointer shadow-2xs"
-          >
-            Aktifkan AI
-          </button>
+          {canToggleGlobalBot && (
+            <button
+              onClick={() => handleToggleGlobalBot(true)}
+              disabled={togglingBotCutoff}
+              className="px-2.5 py-1 text-[11px] font-bold text-on-solid bg-success hover:bg-success-hover rounded-lg transition shrink-0 ml-2 cursor-pointer shadow-2xs"
+            >
+              Aktifkan AI
+            </button>
+          )}
         </div>
       )}
 
@@ -967,6 +973,7 @@ export const LiveChatMonitor: React.FC = () => {
             handleClearInChatSearch={handleClearInChatSearch}
             loadChats={loadChats}
             chatBotActive={chatBotActive}
+            canToggleGlobalBot={canToggleGlobalBot}
             togglingBotCutoff={togglingBotCutoff}
             handleToggleGlobalBot={handleToggleGlobalBot}
             handleMarkAllAsRead={handleMarkAllAsRead}
@@ -1047,6 +1054,7 @@ export const LiveChatMonitor: React.FC = () => {
             dispatchTrip={dispatchTrip}
             setDispatchDrawerOpen={setDispatchDrawerOpen}
             chatBotActive={chatBotActive}
+            canToggleGlobalBot={canToggleGlobalBot}
             handleToggleGlobalBot={handleToggleGlobalBot}
             releasingId={releasingId}
             handleRelease={handleRelease}

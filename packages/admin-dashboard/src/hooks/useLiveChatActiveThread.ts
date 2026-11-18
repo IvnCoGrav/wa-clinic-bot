@@ -470,7 +470,7 @@ export function useLiveChatActiveThread({
 
     const targetChat = chatsRef.current.find((c) => c.conversationId === conversationId);
     if (targetChat && ((targetChat.unreadCount || 0) > 0 || targetChat.isManualUnread)) {
-      apiRequest(`/api/admin/conversations/${conversationId}/read`, { method: 'PATCH' })
+      apiRequest(`/api/admin/live-chat/conversations/${conversationId}/read`, { method: 'PATCH' })
         .then((res: any) => {
           if (res?.degraded) void refreshChatItem(conversationId);
         })

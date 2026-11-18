@@ -62,7 +62,7 @@ export const LiveChatMessageActions: React.FC<LiveChatMessageActionsProps> = ({
         <Copy size={11} />
       </button>
     )}
-    {!isRevoked && (
+    {!isRevoked && !isInternalNote && (
       <button
         type="button"
         onClick={(e) => {

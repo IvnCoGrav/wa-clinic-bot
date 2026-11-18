@@ -72,6 +72,7 @@ export interface LiveChatThreadListProps {
   handleClearInChatSearch: () => void;
   loadChats: (reset?: boolean, q?: string, isSearch?: boolean) => Promise<void>;
   chatBotActive: boolean;
+  canToggleGlobalBot?: boolean;
   togglingBotCutoff: boolean;
   handleToggleGlobalBot: (enable: boolean) => void;
   handleMarkAllAsRead: () => void;
@@ -127,6 +128,7 @@ export const LiveChatThreadList: React.FC<LiveChatThreadListProps> = ({
   handleClearInChatSearch,
   loadChats,
   chatBotActive,
+  canToggleGlobalBot = false,
   togglingBotCutoff,
   handleToggleGlobalBot,
   handleMarkAllAsRead,
@@ -486,23 +488,25 @@ export const LiveChatThreadList: React.FC<LiveChatThreadListProps> = ({
                 )}
               </div>
 
-              {/* Mobile Sticky AI Toggle: Melayang bersama Search Bar agar mudah diakses saat scroll */}
-              <div
-                className="lg:hidden shrink-0 flex items-center"
-                title={chatBotActive ? 'Chatbot AI Aktif' : 'Chatbot AI Nonaktif'}
-              >
-                <ToggleSwitch
-                  checked={chatBotActive}
-                  onChange={(enableBot) => handleToggleGlobalBot(enableBot)}
-                  disabled={togglingBotCutoff}
-                  loading={togglingBotCutoff}
-                  variant={chatBotActive ? 'emerald' : 'rose'}
-                  onLabel="ON"
-                  offLabel="OFF"
-                  size="sm"
-                  className="min-h-[44px] py-1.5"
-                />
-              </div>
+              {/* Mobile Sticky AI Toggle: Hanya Super Admin (KNOWN #358 A-004) */}
+              {canToggleGlobalBot && (
+                <div
+                  className="lg:hidden shrink-0 flex items-center"
+                  title={chatBotActive ? 'Chatbot AI Aktif' : 'Chatbot AI Nonaktif'}
+                >
+                  <ToggleSwitch
+                    checked={chatBotActive}
+                    onChange={(enableBot) => handleToggleGlobalBot(enableBot)}
+                    disabled={togglingBotCutoff}
+                    loading={togglingBotCutoff}
+                    variant={chatBotActive ? 'emerald' : 'rose'}
+                    onLabel="ON"
+                    offLabel="OFF"
+                    size="sm"
+                    className="min-h-[44px] py-1.5"
+                  />
+                </div>
+              )}
             </div>
           </div>
         )}

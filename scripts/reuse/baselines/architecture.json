@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generatedFromCommit": "627e7a89",
+  "generatedFromCommit": "3c66d521",
   "layerViolations": [
     {
       "rule": "LAYER_SERVICES",
@@ -162,7 +162,7 @@
     ]
   ],
   "prismaBudget": {
-    "totalCalls": 240,
+    "totalCalls": 237,
     "files": {
       "src/routes/admin/auth.subroute.ts": 2,
       "src/routes/admin/ctwa-catchers.subroute.ts": 6,
@@ -181,7 +181,7 @@
       "src/routes/admin/reservation-dispatch-payment-proof.subroute.ts": 16,
       "src/routes/admin/reservation-dispatch-status.subroute.ts": 12,
       "src/routes/admin/reservation-dispatch-trip.subroute.ts": 4,
-      "src/routes/admin/roles.subroute.ts": 3,
+      "src/routes/admin/roles.subroute.ts": 1,
       "src/routes/admin/settings-ai.subroute.ts": 10,
       "src/routes/admin/settings-general.subroute.ts": 9,
       "src/routes/admin/settings-notifications.subroute.ts": 6,
@@ -196,7 +196,7 @@
       "src/routes/telegram-webhook.route.ts": 8,
       "src/routes/tracking.route.ts": 2,
       "src/routes/waba-webhook.route.ts": 1,
-      "src/routes/webhook.route.ts": 7
+      "src/routes/webhook.route.ts": 6
     }
   }
 }

@@ -358,6 +358,29 @@ export function useLiveChatSse({
               });
             }
           }
+
+          // V-06: sinkronkan preview teks di sidebar (chats[].lastMessages) saat pesan diedit/ditarik
+          if (payload.conversationId && (content !== undefined || isRevoked !== undefined || isEdited !== undefined)) {
+            const updatedChats = chatsRef.current.map((c) =>
+              c.conversationId !== payload.conversationId
+                ? c
+                : {
+                    ...c,
+                    lastMessages: (c.lastMessages || []).map((m: any) =>
+                      matchesUpdated(m)
+                        ? {
+                            ...m,
+                            content: content !== undefined ? content : m.content,
+                            is_revoked: isRevoked !== undefined ? isRevoked : m.is_revoked,
+                            is_edited: isEdited !== undefined ? isEdited : m.is_edited,
+                          }
+                        : m
+                    ),
+                  }
+            );
+            chatsRef.current = updatedChats;
+            startTransition(() => setChats([...updatedChats]));
+          }
         } else if ((type === 'message:reaction' || type === 'message.reaction') && (payload?.messageId || payload?.waMessageId)) {
           const { messageId, waMessageId, conversationId, reactions } = payload;
           const idsMatch = (a?: string | null, b?: string | null) => {

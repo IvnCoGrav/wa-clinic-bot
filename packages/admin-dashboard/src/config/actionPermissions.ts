@@ -13,7 +13,9 @@ export type ActionKey =
   | 'update_retention_policy'
   | 'export_customer_audience'
   | 'manage_whatsapp_provider'
-  | 'edit_tenant_landing_html';
+  | 'edit_tenant_landing_html'
+  | 'toggle_global_bot'
+  | 'view_financial_overview';
 
 export interface ActionRule {
   /** Role yang lolos. `*` berarti semua role admin yang login. */
@@ -52,6 +54,16 @@ export const ACTION_RULES: Record<ActionKey, ActionRule> = {
     source: 'src/routes/admin/landings.subroute.ts:142',
     note: 'Staf boleh mengubah landing tenant-nya sendiri; tenant lain dibalas 403. '
       + 'Batas ini berbasis tenant sesi, bukan role.',
+  },
+  toggle_global_bot: {
+    roles: ['super_admin'],
+    source: 'src/routes/admin.route.ts:210 (PATCH /api/admin/settings)',
+    note: 'Menyalakan/mematikan Chatbot AI global hanya diizinkan untuk Super Admin (KNOWN #358 A-004).',
+  },
+  view_financial_overview: {
+    roles: ['super_admin', 'spv_cs'],
+    source: 'prisma/migrations/20261118160000_reconcile_rbac_role_api_scopes (GET /api/admin/financial-analytics)',
+    note: 'Metrik omzet & AOV di Overview hanya untuk Super Admin dan Supervisor CS (KNOWN #358 K-1).',
   },
 };
 

@@ -488,6 +488,31 @@
         "src/scripts/heal-single-card-provenance.ts"
       ],
       "test": "tests/unit/heal-single-card-provenance.test.ts"
+    },
+    {
+      "id": "rbac.role_module_scopes",
+      "title": "Kebijakan Layer 1 RBAC & derivasi scope custom role",
+      "description": "Sumber kebenaran tunggal daftar batas keamanan Layer 1 RBAC (Super Admin only/write-only/restricted sub-paths) dan pemetaan deterministik modul UI ke role_api_scopes tanpa I/O.",
+      "canonical": "src/domain/role-module-scopes.ts",
+      "exports": [
+        "SUPER_ADMIN_ONLY_PREFIXES",
+        "SETTINGS_READ_ALLOWLIST",
+        "SUPER_ADMIN_WRITE_PREFIXES",
+        "SUPER_ADMIN_RESTRICTED_SUBPATHS",
+        "SUPER_ADMIN_ONLY_MODULE_PATHS",
+        "BASELINE_STAFF_API_SCOPES",
+        "MODULE_PATH_TO_API_SCOPES",
+        "isScopeFullyBlockedByLayer1",
+        "deriveApiScopesForAllowedPaths"
+      ],
+      "forbiddenDeclarations": [
+        "deriveApiScopesForAllowedPaths",
+        "isScopeFullyBlockedByLayer1"
+      ],
+      "allowedFiles": [
+        "src/domain/role-module-scopes.ts"
+      ],
+      "test": "tests/unit/rbac-route-contract-matrix.test.ts"
     }
   ]
 }
