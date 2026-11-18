@@ -1,7 +1,8 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { prisma } from '../../src/db/client';
 import { customerService } from '../../src/services/customer.service';
-import { buildAddressText, resolveLocationSource } from '../../src/services/staff-reservation.service';
+import { buildAddressText } from '../../src/services/staff-reservation.service';
+import { resolveLocationSource } from '../../src/domain/location-source';
 import { getGazetteerCoordinates } from '../../src/utils/gazetteer';
 import { geocodingService } from '../../src/integrations/google-maps/geocoding';
 import { DEFAULT_TENANT_ID } from '../../src/config/tenant';

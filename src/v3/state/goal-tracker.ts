@@ -228,6 +228,10 @@ export class GoalTracker {
       const canonicalLocationSource =
         locAdequacy.source === 'unknown' ? null : locAdequacy.source;
 
+      const needsMoveConfirmation = Boolean(
+        customerPrefs.needs_move_confirmation || prefs.needs_move_confirmation
+      );
+
       const baseLocation = prefs.location || (conv.customer?.kelurahan ? {
           rawText: conv.customer.kelurahan,
           kelurahan: conv.customer.kelurahan || undefined,
@@ -251,8 +255,12 @@ export class GoalTracker {
         targetAudience: prefs.targetAudience || undefined,
         momProfile: prefs.momProfile || undefined,
         location: baseLocation
-          ? { ...baseLocation, locationSource: canonicalLocationSource ?? baseLocation.locationSource ?? null }
-          : undefined,
+          ? {
+              ...baseLocation,
+              locationSource: canonicalLocationSource ?? baseLocation.locationSource ?? null,
+              needsMoveConfirmation: needsMoveConfirmation || baseLocation.needsMoveConfirmation || undefined,
+            }
+          : (needsMoveConfirmation ? ({ rawText: '', needsMoveConfirmation: true } as any) : undefined),
         childProfile: prefs.childProfile || (prefs.childAgeMonths ? {
           ageMonths: prefs.childAgeMonths,
           symptoms: prefs.symptoms || []
@@ -527,8 +535,11 @@ export class GoalTracker {
       const locSource = (session.location as any)?.locationSource ?? null;
       const isAdequatePin = locSource === 'gps_pin' || locSource === 'manual_staff';
       const locLine = `• Lokasi: ${session.location.kelurahan || '-'}, ${session.location.kecamatan || '-'}, ${session.location.kota || '-'} (Jarak: ${session.location.distanceKm || '-'} km)`;
+      const needsMoveConfirmation = Boolean((session.location as any)?.needsMoveConfirmation);
       if (savedAddresses.length > 1) {
         lines.push(locLine + ' [STATUS: SUDAH DIKETAHUI (boleh konfirmasi pilihan rumah tersimpan via [ALAMAT TERSIMPAN CUSTOMER])]');
+      } else if (needsMoveConfirmation) {
+        lines.push(locLine + ' [STATUS: PERLU KONFIRMASI PINDAH RUMAH — titik GPS lapangan berbeda jauh dari titik tersimpan; jangan minta shareloc berulang, jangan mengunci alamat baru sepihak sebelum konfirmasi]');
       } else if (isAdequatePin) {
         lines.push(locLine + ' [STATUS: SUDAH DIKETAHUI (titik presisi/terverifikasi staf)]');
       } else {

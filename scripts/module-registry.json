@@ -381,6 +381,113 @@
         "src/services/reservation-payment-verification.service.ts"
       ],
       "test": "tests/integration/admin-verify-payment.test.ts"
+    },
+    {
+      "id": "location.source_seam",
+      "title": "Sumber & label lokasi kanonis (anti-siklus)",
+      "description": "Normalisasi sumber lokasi (gps_pin/manual_staff/estimated_area) dan label dinamis sebagai seam bersama domain/services untuk memutus siklus import (Plan Lokasi Kepercayaan v2.2).",
+      "canonical": "src/domain/location-source.ts",
+      "exports": [
+        "resolveEffectiveLocationSource",
+        "resolveLocationSource",
+        "buildLocationSourceLabel",
+        "STAFF_VERIFIED_LOCATION_LABEL",
+        "FIELD_VERIFIED_LOCATION_LABEL"
+      ],
+      "forbiddenDeclarations": [
+        "resolveLocationSource",
+        "STAFF_VERIFIED_LOCATION_LABEL"
+      ],
+      "allowedFiles": [
+        "src/domain/location-source.ts"
+      ],
+      "test": "tests/unit/staff-location-sync.test.ts"
+    },
+    {
+      "id": "location.adequacy",
+      "title": "Kecukupan, presisi, dan precedence lokasi tugas",
+      "description": "Resolver kanonis kecukupan/presisi/kepercayaan lokasi serta precedence titik tugas (pemilik koordinat) berbasis status; mencegah penurunan label & shareloc palsu.",
+      "canonical": "src/domain/location-adequacy.ts",
+      "exports": [
+        "resolveLocationAdequacy",
+        "resolveTaskLocationPrecedence",
+        "extractStaffVerifiedCoords",
+        "SAME_PLACE_TOLERANCE_M"
+      ],
+      "forbiddenDeclarations": [
+        "resolveLocationAdequacy",
+        "resolveTaskLocationPrecedence"
+      ],
+      "allowedFiles": [
+        "src/domain/location-adequacy.ts"
+      ],
+      "test": "tests/unit/location-adequacy.test.ts"
+    },
+    {
+      "id": "location.trust_verification",
+      "title": "Verifikasi lapangan lokasi (field_verified)",
+      "description": "Kontrak derivasi field_verified dari bukti GPS lapangan nyata (foto + GPS segar/valid + rumah sama) dan riwayat verifikasi.",
+      "canonical": "src/domain/location-trust.ts",
+      "exports": [
+        "deriveFieldVerification",
+        "hasFieldVerifiedGpsHistory"
+      ],
+      "forbiddenDeclarations": [
+        "deriveFieldVerification"
+      ],
+      "allowedFiles": [
+        "src/domain/location-trust.ts"
+      ],
+      "test": "tests/unit/staff-task-location-precedence.test.ts"
+    },
+    {
+      "id": "location.gps_tier",
+      "title": "Pemilihan tier kandidat GPS",
+      "description": "Pemilih deterministik kandidat koordinat berdasarkan hierarki tier dan kebaruan dalam tier yang sama.",
+      "canonical": "src/domain/gps-tier.ts",
+      "exports": [
+        "pickGpsTier"
+      ],
+      "forbiddenDeclarations": [
+        "pickGpsTier"
+      ],
+      "allowedFiles": [
+        "src/domain/gps-tier.ts"
+      ],
+      "test": "tests/unit/location-ingest.test.ts"
+    },
+    {
+      "id": "location.travel_duration",
+      "title": "Estimasi durasi tempuh motor",
+      "description": "Estimasi durasi tempuh sepeda motor dari jarak km (kalibrasi + buffer) untuk kartu/itinerary staf.",
+      "canonical": "src/utils/travel-duration.ts",
+      "exports": [
+        "estimateTravelDurationMinutes"
+      ],
+      "forbiddenDeclarations": [
+        "estimateTravelDurationMinutes"
+      ],
+      "allowedFiles": [
+        "src/utils/travel-duration.ts"
+      ],
+      "test": "tests/unit/staff-location-sync.test.ts"
+    },
+    {
+      "id": "location.heal_provenance",
+      "title": "Healing provenance kartu lokasi (data)",
+      "description": "Skrip idempoten (default dry-run, tenant-scoped) untuk memperbaiki provenance 1-kartu yang cocok dengan pin WA pelanggan; audit trail, tanpa tulis last_used_at.",
+      "canonical": "src/scripts/heal-single-card-provenance.ts",
+      "exports": [
+        "runHeal",
+        "hasWaGpsEvidence"
+      ],
+      "forbiddenDeclarations": [
+        "runHeal"
+      ],
+      "allowedFiles": [
+        "src/scripts/heal-single-card-provenance.ts"
+      ],
+      "test": "tests/unit/heal-single-card-provenance.test.ts"
     }
   ]
 }

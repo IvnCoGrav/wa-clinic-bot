@@ -15,6 +15,7 @@ const staffAuth = read('packages/admin-dashboard/src/contexts/StaffAuthContext.t
 const staffToday = read('packages/admin-dashboard/src/pages/staff/StaffToday.tsx');
 const geoUtils = read('packages/admin-dashboard/src/utils/geoUtils.ts');
 const staffReservation = read('src/services/staff-reservation.service.ts');
+const staffLocation = read('src/services/staff-location.service.ts');
 const quickReplies = read('src/routes/staff/quick-replies.subroute.ts');
 const staffLogin = read('packages/admin-dashboard/src/pages/staff/StaffLogin.tsx');
 const layout = read('packages/admin-dashboard/src/components/common/Layout.tsx');
@@ -44,9 +45,11 @@ describe('S-06 GPS warm-up', () => {
 
 describe('S-08 template & ambang operasional', () => {
   it('ambang jarak memakai jangkauan tenant, bukan konstanta 45 km', () => {
-    expect(staffReservation).toContain('clinicLoc.maxCoverageKm');
-    expect(staffReservation).toContain('getClinicLocationAsync(tenantId)');
-    expect(staffReservation).not.toContain('const MAX_ALLOWED_DISTANCE_KM = 45;');
+    // Logika update lokasi staf diekstrak ke staff-location.service.ts (refactor plan v2.1)
+    const locationLogic = `${staffReservation}\n${staffLocation}`;
+    expect(locationLogic).toContain('clinicLoc.maxCoverageKm');
+    expect(locationLogic).toContain('getClinicLocationAsync(tenantId)');
+    expect(locationLogic).not.toContain('const MAX_ALLOWED_DISTANCE_KM = 45;');
   });
 
   it('quick reply staf dibaca dari DB per tenant', () => {

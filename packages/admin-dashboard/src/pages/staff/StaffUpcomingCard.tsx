@@ -129,6 +129,13 @@ export const StaffUpcomingCard: React.FC<StaffUpcomingCardProps> = ({
             </div>
           </div>
 
+          {(item.address as any).needsMoveConfirmation && (
+            <div className="mb-2 flex items-center gap-2 px-2.5 py-1.5 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-300 dark:border-amber-900/50 text-amber-900 dark:text-amber-200">
+              <MapPin size={12} className="text-warning flex-shrink-0" />
+              <p className="text-[10px] font-bold leading-snug">Perlu konfirmasi pindah rumah</p>
+            </div>
+          )}
+
           {/* Foto Depan Rumah & Patokan Landmark */}
           {item.address.housePhotoUrl ? (
             <div className="flex items-center gap-2 p-1.5 rounded-lg bg-surface border border-divider">

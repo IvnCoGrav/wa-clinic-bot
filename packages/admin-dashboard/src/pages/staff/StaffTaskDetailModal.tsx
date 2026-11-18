@@ -307,14 +307,14 @@ export const StaffTaskDetailModal: React.FC<StaffTaskDetailModalProps> = ({
             type="button"
             onClick={(e) => onNavigate(task, e)}
             className={`flex-1 py-3 px-4 rounded-2xl text-xs font-bold transition flex items-center justify-center space-x-1.5 shadow-xs cursor-pointer active:scale-95 ${
-              needsNavigationPreflight(task.address?.locationSource)
+              needsNavigationPreflight(task.address)
                 ? 'bg-warning-soft hover:bg-warning text-warning border border-warning-line'
                 : 'bg-accent hover:bg-accent-hover text-on-solid'
             }`}
           >
             <Navigation size={14} />
             <span>
-              {needsNavigationPreflight(task.address?.locationSource)
+              {needsNavigationPreflight(task.address)
                 ? 'Buka Peta (Estimasi)'
                 : 'Buka Peta Navigasi'}
             </span>

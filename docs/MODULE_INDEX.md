@@ -7,7 +7,7 @@
 
 ## 1. Daftar Kapabilitas Kanonis Aktif
 
-Total kapabilitas terdaftar: **20 modul**.
+Total kapabilitas terdaftar: **26 modul**.
 
 | ID Kapabilitas | Judul & Deskripsi | Modul Kanonis | Ekspor Resmi | Test File |
 |---|---|---|---|---|
@@ -15,7 +15,13 @@ Total kapabilitas terdaftar: **20 modul**.
 | `date.parse_indonesian` | **Parser tanggal bahasa Indonesia**<br>Parsing ekspresi tanggal bahasa alami Indonesia (hari, nama bulan teks/angka, relatif) menjadi objek Date standar. | [`src/utils/indonesian-date-parser.ts`](../src/utils/indonesian-date-parser.ts) | `parseIndonesianDate`, `parseHistoricalIndonesianDate`, `applyBookingTimeToDate` | [`indonesian-date-parser.test.ts`](../tests/unit/v3/indonesian-date-parser.test.ts) |
 | `json.extract` | **Ekstraksi JSON dari output AI**<br>Mengekstrak blok JSON seimbang dari respons teks LLM yang mengandung markdown atau teks pelengkap. | [`src/utils/json-extract.ts`](../src/utils/json-extract.ts) | `extractBalancedJson`, `extractJsonContent`, `repairTruncatedJson` | [`json-extract.test.ts`](../tests/unit/json-extract.test.ts) |
 | `livechat.serialize` | **Proyeksi DTO LiveChat**<br>Memetakan baris percakapan/kustomer/reservasi menjadi DTO LiveChat (badge reservasi, sumber lokasi, awaiting-reply) tanpa akses DB. | [`src/services/live-chat.serializer.ts`](../src/services/live-chat.serializer.ts) | `serializeLiveChatConversation` | [`livechat-payload-completeness.test.ts`](../tests/unit/livechat-payload-completeness.test.ts) |
+| `location.adequacy` | **Kecukupan, presisi, dan precedence lokasi tugas**<br>Resolver kanonis kecukupan/presisi/kepercayaan lokasi serta precedence titik tugas (pemilik koordinat) berbasis status; mencegah penurunan label & shareloc palsu. | [`src/domain/location-adequacy.ts`](../src/domain/location-adequacy.ts) | `resolveLocationAdequacy`, `resolveTaskLocationPrecedence`, `extractStaffVerifiedCoords`, `SAME_PLACE_TOLERANCE_M` | [`location-adequacy.test.ts`](../tests/unit/location-adequacy.test.ts) |
 | `location.clinic_question` | **Klasifikasi pertanyaan lokasi klinik**<br>Mendeteksi apakah pesan customer menanyakan lokasi atau alamat klinik fisik. | [`src/utils/location-classifier.ts`](../src/utils/location-classifier.ts) | `isClinicLocationQuestion` | [`location-classifier.test.ts`](../tests/unit/location-classifier.test.ts) |
+| `location.gps_tier` | **Pemilihan tier kandidat GPS**<br>Pemilih deterministik kandidat koordinat berdasarkan hierarki tier dan kebaruan dalam tier yang sama. | [`src/domain/gps-tier.ts`](../src/domain/gps-tier.ts) | `pickGpsTier` | [`location-ingest.test.ts`](../tests/unit/location-ingest.test.ts) |
+| `location.heal_provenance` | **Healing provenance kartu lokasi (data)**<br>Skrip idempoten (default dry-run, tenant-scoped) untuk memperbaiki provenance 1-kartu yang cocok dengan pin WA pelanggan; audit trail, tanpa tulis last_used_at. | [`src/scripts/heal-single-card-provenance.ts`](../src/scripts/heal-single-card-provenance.ts) | `runHeal`, `hasWaGpsEvidence` | [`heal-single-card-provenance.test.ts`](../tests/unit/heal-single-card-provenance.test.ts) |
+| `location.source_seam` | **Sumber & label lokasi kanonis (anti-siklus)**<br>Normalisasi sumber lokasi (gps_pin/manual_staff/estimated_area) dan label dinamis sebagai seam bersama domain/services untuk memutus siklus import (Plan Lokasi Kepercayaan v2.2). | [`src/domain/location-source.ts`](../src/domain/location-source.ts) | `resolveEffectiveLocationSource`, `resolveLocationSource`, `buildLocationSourceLabel`, `STAFF_VERIFIED_LOCATION_LABEL`, `FIELD_VERIFIED_LOCATION_LABEL` | [`staff-location-sync.test.ts`](../tests/unit/staff-location-sync.test.ts) |
+| `location.travel_duration` | **Estimasi durasi tempuh motor**<br>Estimasi durasi tempuh sepeda motor dari jarak km (kalibrasi + buffer) untuk kartu/itinerary staf. | [`src/utils/travel-duration.ts`](../src/utils/travel-duration.ts) | `estimateTravelDurationMinutes` | [`staff-location-sync.test.ts`](../tests/unit/staff-location-sync.test.ts) |
+| `location.trust_verification` | **Verifikasi lapangan lokasi (field_verified)**<br>Kontrak derivasi field_verified dari bukti GPS lapangan nyata (foto + GPS segar/valid + rumah sama) dan riwayat verifikasi. | [`src/domain/location-trust.ts`](../src/domain/location-trust.ts) | `deriveFieldVerification`, `hasFieldVerifiedGpsHistory` | [`staff-task-location-precedence.test.ts`](../tests/unit/staff-task-location-precedence.test.ts) |
 | `log.date_key` | **Kunci tanggal nama file log harian**<br>Menghasilkan tanggal YYYY-MM-DD dari komponen lokal server untuk penamaan file log harian (llm-*.jsonl, app-*.log). | [`src/utils/log-date.ts`](../src/utils/log-date.ts) | `getLogDateString` | [`log-date.test.ts`](../tests/unit/log-date.test.ts) |
 | `log.staff_rejection` | **Logging penolakan bisnis rute staf**<br>Logging terstruktur ke console.warn untuk penolakan bisnis (HTTP 400) rute staf agar otomatis diserap ke logs/app-YYYY-MM-DD.log. | [`src/utils/staff-rejection-log.ts`](../src/utils/staff-rejection-log.ts) | `logStaffRejection` | [`staff-rejection-log.test.ts`](../tests/unit/staff-rejection-log.test.ts) |
 | `migration.staging` | **Akses data staging migrasi & FAQ**<br>Query tenant-scoped untuk antrean staging migrasi legacy, LTV customer, serta staging FAQ medis/umum (termasuk batch chunk anti N+1). | [`src/services/migration-staging.service.ts`](../src/services/migration-staging.service.ts) | `listLegacyStaging`, `listLegacyStagingByStatus`, `updateLegacyStagingStatus`, `bulkApproveStagingPurchases`, `countTenantConversations`, `clearPendingFaqStaging`, `deleteAllFaqStaging`, `listFaqStaging`, `reviewMedicalFaqStaging`, `reviewGeneralFaqStaging` | [`migration-staging.test.ts`](../tests/unit/migration-staging.test.ts) |
@@ -70,6 +76,15 @@ Total kapabilitas terdaftar: **20 modul**.
 - **File yang Diizinkan:** `src/services/live-chat.serializer.ts`
 - **File Test:** [`tests/unit/livechat-payload-completeness.test.ts`](../tests/unit/livechat-payload-completeness.test.ts)
 
+### `location.adequacy` — Kecukupan, presisi, dan precedence lokasi tugas
+
+- **Deskripsi:** Resolver kanonis kecukupan/presisi/kepercayaan lokasi serta precedence titik tugas (pemilik koordinat) berbasis status; mencegah penurunan label & shareloc palsu.
+- **File Kanonis:** [`src/domain/location-adequacy.ts`](../src/domain/location-adequacy.ts)
+- **Ekspor Kanonis:** `resolveLocationAdequacy`, `resolveTaskLocationPrecedence`, `extractStaffVerifiedCoords`, `SAME_PLACE_TOLERANCE_M`
+- **Simbol Terlarang di Luar Kanonis:** `resolveLocationAdequacy`, `resolveTaskLocationPrecedence`
+- **File yang Diizinkan:** `src/domain/location-adequacy.ts`
+- **File Test:** [`tests/unit/location-adequacy.test.ts`](../tests/unit/location-adequacy.test.ts)
+
 ### `location.clinic_question` — Klasifikasi pertanyaan lokasi klinik
 
 - **Deskripsi:** Mendeteksi apakah pesan customer menanyakan lokasi atau alamat klinik fisik.
@@ -78,6 +93,51 @@ Total kapabilitas terdaftar: **20 modul**.
 - **Simbol Terlarang di Luar Kanonis:** `isClinicLocationQuestion`
 - **File yang Diizinkan:** `src/utils/location-classifier.ts`
 - **File Test:** [`tests/unit/location-classifier.test.ts`](../tests/unit/location-classifier.test.ts)
+
+### `location.gps_tier` — Pemilihan tier kandidat GPS
+
+- **Deskripsi:** Pemilih deterministik kandidat koordinat berdasarkan hierarki tier dan kebaruan dalam tier yang sama.
+- **File Kanonis:** [`src/domain/gps-tier.ts`](../src/domain/gps-tier.ts)
+- **Ekspor Kanonis:** `pickGpsTier`
+- **Simbol Terlarang di Luar Kanonis:** `pickGpsTier`
+- **File yang Diizinkan:** `src/domain/gps-tier.ts`
+- **File Test:** [`tests/unit/location-ingest.test.ts`](../tests/unit/location-ingest.test.ts)
+
+### `location.heal_provenance` — Healing provenance kartu lokasi (data)
+
+- **Deskripsi:** Skrip idempoten (default dry-run, tenant-scoped) untuk memperbaiki provenance 1-kartu yang cocok dengan pin WA pelanggan; audit trail, tanpa tulis last_used_at.
+- **File Kanonis:** [`src/scripts/heal-single-card-provenance.ts`](../src/scripts/heal-single-card-provenance.ts)
+- **Ekspor Kanonis:** `runHeal`, `hasWaGpsEvidence`
+- **Simbol Terlarang di Luar Kanonis:** `runHeal`
+- **File yang Diizinkan:** `src/scripts/heal-single-card-provenance.ts`
+- **File Test:** [`tests/unit/heal-single-card-provenance.test.ts`](../tests/unit/heal-single-card-provenance.test.ts)
+
+### `location.source_seam` — Sumber & label lokasi kanonis (anti-siklus)
+
+- **Deskripsi:** Normalisasi sumber lokasi (gps_pin/manual_staff/estimated_area) dan label dinamis sebagai seam bersama domain/services untuk memutus siklus import (Plan Lokasi Kepercayaan v2.2).
+- **File Kanonis:** [`src/domain/location-source.ts`](../src/domain/location-source.ts)
+- **Ekspor Kanonis:** `resolveEffectiveLocationSource`, `resolveLocationSource`, `buildLocationSourceLabel`, `STAFF_VERIFIED_LOCATION_LABEL`, `FIELD_VERIFIED_LOCATION_LABEL`
+- **Simbol Terlarang di Luar Kanonis:** `resolveLocationSource`, `STAFF_VERIFIED_LOCATION_LABEL`
+- **File yang Diizinkan:** `src/domain/location-source.ts`
+- **File Test:** [`tests/unit/staff-location-sync.test.ts`](../tests/unit/staff-location-sync.test.ts)
+
+### `location.travel_duration` — Estimasi durasi tempuh motor
+
+- **Deskripsi:** Estimasi durasi tempuh sepeda motor dari jarak km (kalibrasi + buffer) untuk kartu/itinerary staf.
+- **File Kanonis:** [`src/utils/travel-duration.ts`](../src/utils/travel-duration.ts)
+- **Ekspor Kanonis:** `estimateTravelDurationMinutes`
+- **Simbol Terlarang di Luar Kanonis:** `estimateTravelDurationMinutes`
+- **File yang Diizinkan:** `src/utils/travel-duration.ts`
+- **File Test:** [`tests/unit/staff-location-sync.test.ts`](../tests/unit/staff-location-sync.test.ts)
+
+### `location.trust_verification` — Verifikasi lapangan lokasi (field_verified)
+
+- **Deskripsi:** Kontrak derivasi field_verified dari bukti GPS lapangan nyata (foto + GPS segar/valid + rumah sama) dan riwayat verifikasi.
+- **File Kanonis:** [`src/domain/location-trust.ts`](../src/domain/location-trust.ts)
+- **Ekspor Kanonis:** `deriveFieldVerification`, `hasFieldVerifiedGpsHistory`
+- **Simbol Terlarang di Luar Kanonis:** `deriveFieldVerification`
+- **File yang Diizinkan:** `src/domain/location-trust.ts`
+- **File Test:** [`tests/unit/staff-task-location-precedence.test.ts`](../tests/unit/staff-task-location-precedence.test.ts)
 
 ### `log.date_key` — Kunci tanggal nama file log harian
 

@@ -1059,15 +1059,11 @@ export const CustomerDatabase: React.FC = () => {
                       </button>
                     </div>
                     {(() => {
-                      const badge = getLocationBadgeConfig(
-                        detailData,
-                        detailData?.preferences?.location_source_label
-                      );
+                      const badge = getLocationBadgeConfig(detailData);
                       const hasSource = !!(
                         detailData?.location_source ||
                         detailData?.effective_location_source ||
-                        detailData?.preferences?.location_source ||
-                        detailData?.preferences?.location_source_label
+                        detailData?.preferences?.location_source
                       );
                       if (!hasSource) return null;
                       return (

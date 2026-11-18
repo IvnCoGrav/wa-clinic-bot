@@ -66,7 +66,7 @@ describe('location-adequacy — sumber kebenaran lokasi tunggal', () => {
     expect(r.needsShareloc).toBe(true);
   });
 
-  it('bukti lapangan (foto rumah + riwayat kunjungan + alamat lengkap) → memadai', () => {
+  it('bukti lapangan tanpa GPS lapangan segar TIDAK cukup untuk field_verified (A-007)', () => {
     const r = resolveLocationAdequacy({
       columnSource: 'estimated_area',
       lat: -7.3805925,
@@ -76,9 +76,9 @@ describe('location-adequacy — sumber kebenaran lokasi tunggal', () => {
       hasVisitedAddress: true,
       hasCompleteAddress: true,
     });
-    expect(r.isAdequate).toBe(true);
-    expect(r.needsShareloc).toBe(false);
-    expect(r.reason).toBe('field_verified');
+    expect(r.isAdequate).toBe(false);
+    expect(r.needsShareloc).toBe(true);
+    expect(r.isFieldVerified).toBe(false);
   });
 
   it('rumah BARU (belum pernah dikunjungi) tidak boleh memakai bukti lapangan rumah lama', () => {

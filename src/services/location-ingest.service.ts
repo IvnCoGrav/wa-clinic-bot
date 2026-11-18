@@ -1,73 +1,36 @@
 import { DEFAULT_TENANT_ID } from '../config/tenant';
+import { type GpsCandidate, pickGpsTier } from '../domain/gps-tier';
+import { distanceMeters, hasValidCoords, SAME_PLACE_TOLERANCE_M } from '../domain/location-adequacy';
 
-/**
- * Kandidat koordinat untuk pemilihan tier GPS.
- * Sumber: pesan shareloc customer, shareloc bidan, koordinat tersimpan di DB, hasil geocoding.
- */
-export interface GpsCandidate {
-  source: string;
-  lat: number;
-  lng: number;
-  at: string; // ISO timestamp sumber diperoleh
-}
+export type { GpsCandidate };
+export { pickGpsTier };
 
-/**
- * Hierarki tier koordinat (angka makin kecil = makin tinggi kepentingannya).
- * Invarian dari refresh (customer.service:1757-1789):
- *   bidan_shareloc > customer_shareloc > db_coords > geocoding
- */
-const TIER_RANK: Record<string, number> = {
-  bidan_shareloc: 0,
-  customer_shareloc: 1,
-  db_coords: 2,
-  geocoding: 3,
-};
-
-const UNKNOWN_TIER_RANK = 99;
 const COORD_EPSILON = 1e-6;
 
-/**
- * Pemilih kandidat koordinat berbasis tier tegas:
- *   1. Tier lebih tinggi selalu menang, tanpa peduli timestamp.
- *   2. Di dalam tier yang sama, kandidat TERBARU yang menang.
- *   3. Daftar kosong / semua kandidat tidak valid → null (tanpa halusinasi).
- */
-export function pickGpsTier(candidates: GpsCandidate[]): GpsCandidate | null {
-  if (!Array.isArray(candidates) || candidates.length === 0) return null;
-
-  const valid = candidates.filter(
-    (c) =>
-      c &&
-      Number.isFinite(Number(c.lat)) &&
-      Number.isFinite(Number(c.lng)) &&
-      !(Number(c.lat) === 0 && Number(c.lng) === 0) &&
-      Math.abs(Number(c.lat)) <= 90 &&
-      Math.abs(Number(c.lng)) <= 180
-  );
-  if (valid.length === 0) return null;
-
-  const rankOf = (c: GpsCandidate) => TIER_RANK[c.source] ?? UNKNOWN_TIER_RANK;
-  const timeOf = (c: GpsCandidate) => {
-    const t = Date.parse(c.at);
-    return Number.isFinite(t) ? t : 0;
-  };
-
-  let best = valid[0];
-  let bestRank = rankOf(best);
-  let bestTime = timeOf(best);
-  for (const c of valid.slice(1)) {
-    const r = rankOf(c);
-    const t = timeOf(c);
-    if (r < bestRank || (r === bestRank && t > bestTime)) {
-      best = c;
-      bestRank = r;
-      bestTime = t;
-    }
-  }
-  return best;
-}
-
 export type IngestResult = { status: 'saved' | 'skipped' | 'error'; reason: string };
+
+/**
+ * Satu-satunya penyusun `incomingMessage.location` untuk choke point GPS.
+ * Dipakai webhook WAHA & WABA (anti duplikasi + menjaga route tetap ramping).
+ */
+export function buildPinIncomingMessage(loc: {
+  latitude: number | string | null | undefined;
+  longitude: number | string | null | undefined;
+  address?: string | null;
+  name?: string | null;
+}): { type: 'location'; location: { latitude: number; longitude: number; address?: string; name?: string } } {
+  const address = typeof loc.address === 'string' && loc.address.trim() ? loc.address.trim() : undefined;
+  const name = typeof loc.name === 'string' && loc.name.trim() ? loc.name.trim() : undefined;
+  return {
+    type: 'location',
+    location: {
+      latitude: Number(loc.latitude),
+      longitude: Number(loc.longitude),
+      ...(address ? { address } : {}),
+      ...(name ? { name } : {}),
+    },
+  };
+}
 
 /**
  * Kontrak TUNGGAL untuk semua penulis koordinat GPS pin WhatsApp.
@@ -112,6 +75,8 @@ export class LocationIngestService {
     const loc = incomingMessage.location || {};
     const lat = Number(loc.latitude);
     const lng = Number(loc.longitude);
+    const rawLandmark = typeof loc.name === 'string' && loc.name.trim() ? loc.name.trim() : undefined;
+    const rawAddress = typeof loc.address === 'string' && loc.address.trim() ? loc.address.trim() : undefined;
     if (
       !Number.isFinite(lat) ||
       !Number.isFinite(lng) ||
@@ -122,8 +87,26 @@ export class LocationIngestService {
       return { status: 'skipped', reason: 'invalid_coords' };
     }
 
+    // F6.3 (A-003): bila pin baru >150m dari titik tersimpan, simpan address_candidate
+    // dan jangan timpa alamat/landmark teks kartu utama secara diam-diam.
+    const existingCoords = {
+      lat: customer?.lat != null ? Number(customer.lat) : null,
+      lng: customer?.lng != null ? Number(customer.lng) : null,
+    };
+    const newCoords = { lat, lng };
+    const sameHouse =
+      !hasValidCoords(existingCoords) ||
+      !hasValidCoords(newCoords) ||
+      distanceMeters(existingCoords, newCoords) <= SAME_PLACE_TOLERANCE_M;
+    const allowAddressWrite = sameHouse;
+    const candidateAddress = !allowAddressWrite ? (rawAddress || rawLandmark || null) : null;
+
     // Idempoten: GPS identik dengan yang sudah tersimpan + jarak/ongkir lengkap +
     // share_location_sent → tidak perlu API eksternal ulang (retry aman).
+    const existingCandidate = (customer?.preferences as any)?.address_candidate;
+    const candidateAlreadyStored =
+      !candidateAddress ||
+      (existingCandidate && String(existingCandidate.address || '') === String(candidateAddress));
     const alreadyCurrent =
       customer?.lat != null &&
       customer?.lng != null &&
@@ -131,7 +114,9 @@ export class LocationIngestService {
       Math.abs(Number(customer.lng) - lng) < COORD_EPSILON &&
       customer?.distance_km != null &&
       customer?.ongkir != null &&
-      customer?.share_location_sent === true;
+      customer?.share_location_sent === true &&
+      (!rawLandmark || (customer.preferences as any)?.landmark === rawLandmark || !allowAddressWrite) &&
+      (allowAddressWrite ? (!rawAddress || (customer.preferences as any)?.address === rawAddress) : candidateAlreadyStored);
     if (alreadyCurrent) {
       return { status: 'skipped', reason: 'already_current' };
     }
@@ -154,6 +139,8 @@ export class LocationIngestService {
       await customerService.updateCustomerLocation(
         customer.id,
         {
+          address: allowAddressWrite ? rawAddress : undefined,
+          landmark: allowAddressWrite ? rawLandmark : undefined,
           kelurahan: resolved.kelurahan,
           kecamatan: resolved.kecamatan,
           kota: resolved.kota,
@@ -169,6 +156,34 @@ export class LocationIngestService {
         },
         tenantId
       );
+      if (candidateAddress) {
+        try {
+          const { prisma } = await import('../db/client');
+          const fresh = await prisma.customer.findFirst({
+            where: { id: customer.id, tenant_id: tenantId },
+            select: { preferences: true },
+          });
+          const prefs = (fresh?.preferences as any) || {};
+          await prisma.customer.updateMany({
+            where: { id: customer.id, tenant_id: tenantId },
+            data: {
+              preferences: {
+                ...prefs,
+                address_candidate: {
+                  address: rawAddress || null,
+                  landmark: rawLandmark || null,
+                  lat,
+                  lng,
+                  capturedAt: new Date().toISOString(),
+                  reason: 'far_pin_conflict',
+                },
+              } as any,
+            },
+          });
+        } catch (candErr: any) {
+          console.warn('[LOCATION INGEST] gagal simpan address_candidate:', candErr?.message);
+        }
+      }
       await customerService.markShareLocationSent(customer.id, tenantId);
       console.log(
         `[LOCATION INGEST] GPS pin saved for ${customer.phone}: ${delivery.distanceKm}km ongkir ${delivery.ongkir}`

@@ -98,11 +98,11 @@ export const StaffChatHeader: React.FC<StaffChatHeaderProps> = ({
           type="button"
           onClick={(e) => onNavigate(task, e)}
           className={`h-9 w-9 flex items-center justify-center rounded-lg shadow-xs transition active:scale-95 cursor-pointer ${
-            needsNavigationPreflight(task.address?.locationSource)
+            needsNavigationPreflight(task.address)
               ? 'bg-warning-soft hover:bg-warning text-warning border border-warning-line'
               : 'bg-accent hover:bg-accent-hover text-on-solid'
           }`}
-          title={needsNavigationPreflight(task.address?.locationSource) ? 'Titik estimasi: konfirmasi patokan dulu' : 'Buka Peta Navigasi Google Maps & Mulai Perjalanan'}
+          title={needsNavigationPreflight(task.address) ? 'Titik estimasi: konfirmasi patokan dulu' : 'Buka Peta Navigasi Google Maps & Mulai Perjalanan'}
         >
           <Navigation size={16} />
         </button>

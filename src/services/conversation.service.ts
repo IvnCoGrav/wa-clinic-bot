@@ -97,6 +97,8 @@ export function buildConversationUpdatedPayload(conversation: any) {
     locationAdequacy: adequacy.reason,
     sharelocNeeded: adequacy.needsShareloc,
     shareLocationSent: Boolean((conversation.customer as any)?.share_location_sent),
+    pinFromCustomerAt: (conversation.customer as any)?.preferences?.pin_from_customer_at || null,
+    pinFromStaffAt: (conversation.customer as any)?.preferences?.pin_from_staff_at || null,
     sharelocRequestedAt:
       (conversation as any)?.session_data?.shareloc_requested_at ??
       (conversation.customer as any)?.preferences?.share_location_requested_at ??

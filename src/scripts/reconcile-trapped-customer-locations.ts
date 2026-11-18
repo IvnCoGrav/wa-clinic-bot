@@ -23,7 +23,7 @@ import { customerService } from '../services/customer.service';
 import { getGazetteerCoordinates, isCrossCityDuplicate, haversineKm } from '../utils/gazetteer';
 import { sanitizeCustomerNameForGreeting } from '../utils/name-sanitizer';
 import { classifyLocationDrift, type ResolvedLocation } from '../utils/location-drift';
-import { STAFF_VERIFIED_LOCATION_LABEL } from '../services/staff-reservation.service';
+
 
 const isCommit = process.argv.includes('--commit');
 const isDryRun = !isCommit;
@@ -66,7 +66,7 @@ async function runSyncStaffLabels() {
 
   const desynced = staffRows.filter((c) => {
     const prefs = (c.preferences as any) || {};
-    return prefs.location_source !== 'manual_staff' || prefs.location_source_label !== STAFF_VERIFIED_LOCATION_LABEL;
+    return prefs.location_source !== 'manual_staff';
   });
 
   console.log(`Ditemukan ${staffRows.length} customer manual_staff. ${desynced.length} baris metadata preferences belum tersinkronisasi.`);
@@ -77,13 +77,13 @@ async function runSyncStaffLabels() {
 
   for (const c of desynced) {
     const currentPrefs = (c.preferences as any) || {};
+    const { location_source_label: _drop, ...restPrefs } = currentPrefs;
     const updatedPrefs = {
-      ...currentPrefs,
+      ...restPrefs,
       location_source: 'manual_staff',
-      location_source_label: STAFF_VERIFIED_LOCATION_LABEL,
     };
 
-    console.log(`[DESYNC] ${c.name || 'No Name'} (${c.phone}) - Prefs lama: source=${currentPrefs.location_source || 'null'}, label=${currentPrefs.location_source_label || 'null'}`);
+    console.log(`[DESYNC] ${c.name || 'No Name'} (${c.phone}) - Prefs lama: source=${currentPrefs.location_source || 'null'}`);
 
     if (isDryRun) {
       summary.push({
@@ -92,7 +92,6 @@ async function runSyncStaffLabels() {
         name: c.name,
         old_location_source: currentPrefs.location_source || null,
         new_location_source: 'manual_staff',
-        new_location_source_label: STAFF_VERIFIED_LOCATION_LABEL,
       });
       continue;
     }
@@ -103,7 +102,7 @@ async function runSyncStaffLabels() {
         data: { preferences: updatedPrefs },
       });
       synced++;
-      console.log(`  [SYNCED] preferences.location_source & location_source_label diperbarui.`);
+      console.log(`  [SYNCED] preferences.location_source diperbarui.`);
     } catch (err: any) {
       failed++;
       console.error(`  [FAILED] ${err.message}`);

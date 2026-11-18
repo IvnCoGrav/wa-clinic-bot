@@ -1,9 +1,11 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import {
   StaffReservationService,
+} from '../../src/services/staff-reservation.service';
+import {
   STAFF_VERIFIED_LOCATION_LABEL,
   resolveLocationSource,
-} from '../../src/services/staff-reservation.service';
+} from '../../src/domain/location-source';
 import { customerService } from '../../src/services/customer.service';
 import { prisma } from '../../src/db/client';
 import { setLiveChatHub } from '../../src/services/live-chat-hub.service';
@@ -85,10 +87,10 @@ describe('Staff Location Synchronization & GPS Precision Alignment (Fase 2)', ()
     expect(lastUpdateData.lat).toBe(-7.34900);
     expect(lastUpdateData.lng).toBe(112.75180);
 
-    // Preferences tersinkronisasi 100%
+    // Preferences tersinkronisasi (F5: label permanen tidak lagi ditulis ke prefs)
     const prefs = lastUpdateData.preferences;
     expect(prefs.location_source).toBe('manual_staff');
-    expect(prefs.location_source_label).toBe(STAFF_VERIFIED_LOCATION_LABEL);
+    expect(prefs.location_source_label).toBeUndefined();
     expect(prefs.location_accuracy_m).toBe(15);
     expect(prefs.landmark).toBe('Pagar hitam no 12');
 
@@ -198,6 +200,6 @@ describe('Staff Location Synchronization & GPS Precision Alignment (Fase 2)', ()
     expect(lastUpdateData).not.toBeNull();
     expect(lastUpdateData.location_source).toBe('manual_staff');
     expect(lastUpdateData.preferences.location_source).toBe('manual_staff');
-    expect(lastUpdateData.preferences.location_source_label).toBe(STAFF_VERIFIED_LOCATION_LABEL);
+    expect(lastUpdateData.preferences.location_source_label).toBeUndefined();
   });
 });

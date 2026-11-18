@@ -125,6 +125,8 @@ export interface LiveChatItem {
   locationAdequacy?: 'gps_pin' | 'staff_verified' | 'field_verified' | 'estimated_area' | 'unknown' | null;
   sharelocNeeded?: boolean;
   shareLocationSent?: boolean;
+  pinFromCustomerAt?: string | null;
+  pinFromStaffAt?: string | null;
   sharelocRequestedAt?: string | null;
 }
 

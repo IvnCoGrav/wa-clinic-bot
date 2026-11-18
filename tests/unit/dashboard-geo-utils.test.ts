@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { isValidLatLng, isValidLatLngPoint, calculateHaversineKm } from '../../packages/admin-dashboard/src/utils/geoUtils';
+import {
+  isValidLatLng,
+  isValidLatLngPoint,
+  calculateHaversineKm,
+  needsNavigationPreflight,
+} from '../../packages/admin-dashboard/src/utils/geoUtils';
 import { isValidLatLng as isValidCustomerLatLng } from '../../packages/admin-dashboard/src/utils/customerMapUtils';
 import { isValidLatLng as isValidDispatchLatLng } from '../../packages/admin-dashboard/src/utils/dispatchMap';
 
@@ -46,5 +51,21 @@ describe('Admin Dashboard geoUtils Consolidation (F5-4)', () => {
     const dist = calculateHaversineKm(-7.2575, 112.7521, -7.3797, 112.7876);
     expect(dist).toBeGreaterThan(13);
     expect(dist).toBeLessThan(17);
+  });
+
+  it('needsNavigationPreflight: gps_pin dan field_verified tidak butuh preflight modal', () => {
+    // gps_pin (string) → false
+    expect(needsNavigationPreflight('gps_pin')).toBe(false);
+
+    // manual_staff / estimated_area (string) → true
+    expect(needsNavigationPreflight('manual_staff')).toBe(true);
+    expect(needsNavigationPreflight('estimated_area')).toBe(true);
+    expect(needsNavigationPreflight(null)).toBe(true);
+
+    // Opsi 6.3: field_verified (dengan foto + GPS valid) → false (bypasses modal)
+    expect(needsNavigationPreflight('manual_staff', true)).toBe(false);
+    expect(needsNavigationPreflight({ locationSource: 'manual_staff', isFieldVerified: true })).toBe(false);
+    expect(needsNavigationPreflight({ locationSource: 'manual_staff', isFieldVerified: false })).toBe(true);
+    expect(needsNavigationPreflight({ locationSource: 'gps_pin', isFieldVerified: false })).toBe(false);
   });
 });

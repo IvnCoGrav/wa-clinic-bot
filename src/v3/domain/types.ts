@@ -36,6 +36,11 @@ export interface LocationState {
    * dianggap alamat terkunci.
    */
   isEstimatedCentroid?: boolean;
+  /**
+   * F6: titik GPS lapangan berbeda jauh (>150m) dari titik tersimpan.
+   * State-gated: prompt harus mengonfirmasi, bukan mengunci pindah rumah sepihak.
+   */
+  needsMoveConfirmation?: boolean;
 }
 
 export interface ChildState {

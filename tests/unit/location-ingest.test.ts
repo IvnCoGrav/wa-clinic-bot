@@ -68,13 +68,22 @@ const gpsPinMessage = () => ({
 });
 
 describe('pickGpsTier (hierarki pemilihan sumber koordinat)', () => {
-  it('bidan_shareloc mengalahkan customer_shareloc meski kandidatnya lebih lama', () => {
-    const picked = pickGpsTier([
+  it('bidan_shareloc setara dengan customer_shareloc (tier sama: yang terbaru menang)', () => {
+    const picked1 = pickGpsTier([
       { source: 'customer_shareloc', lat: -7.36, lng: 112.79, at: '2026-09-26T01:34:00.000Z' },
       { source: 'bidan_shareloc', lat: -7.35, lng: 112.78, at: '2026-09-25T10:00:00.000Z' },
     ]);
-    expect(picked?.source).toBe('bidan_shareloc');
-    expect(picked?.lat).toBe(-7.35);
+    // customer_shareloc lebih baru (26 Sep vs 25 Sep) → menang
+    expect(picked1?.source).toBe('customer_shareloc');
+    expect(picked1?.lat).toBe(-7.36);
+
+    const picked2 = pickGpsTier([
+      { source: 'customer_shareloc', lat: -7.36, lng: 112.79, at: '2026-09-25T01:34:00.000Z' },
+      { source: 'bidan_shareloc', lat: -7.35, lng: 112.78, at: '2026-09-26T10:00:00.000Z' },
+    ]);
+    // bidan_shareloc lebih baru (26 Sep vs 25 Sep) → menang
+    expect(picked2?.source).toBe('bidan_shareloc');
+    expect(picked2?.lat).toBe(-7.35);
   });
 
   it('customer_shareloc mengalahkan db_coords dan geocoding', () => {
@@ -183,5 +192,42 @@ describe('ingestGpsPin (kasus Agatha: GPS baru saat lokasi sudah ada)', () => {
       tenantId: TENANT,
     });
     expect(viaType.status).toBe('saved');
+  });
+
+  it('Kasus Bunda Amaliah: Pin WhatsApp dengan name dan address diteruskan ke updateCustomerLocation', async () => {
+    const amaliahPinMsg = {
+      type: 'location',
+      location: {
+        latitude: -7.291799,
+        longitude: 112.800239,
+        name: 'SOLACE HOUSE',
+        address: 'Jalan Keputih Gang III C No. 16',
+      },
+    };
+
+    const res = await locationIngestService.ingestGpsPin({
+      customer: {
+        id: 'e4666bf9-8747-4d3f-8f49-c0041ae97d1e',
+        tenant_id: TENANT,
+        phone: '6285646767371',
+        lat: null,
+        lng: null,
+      },
+      incomingMessage: amaliahPinMsg,
+      tenantId: TENANT,
+    });
+
+    expect(res.status).toBe('saved');
+    expect(customerService.updateCustomerLocation).toHaveBeenCalledWith(
+      'e4666bf9-8747-4d3f-8f49-c0041ae97d1e',
+      expect.objectContaining({
+        lat: -7.291799,
+        lng: 112.800239,
+        landmark: 'SOLACE HOUSE',
+        address: 'Jalan Keputih Gang III C No. 16',
+        isNativePin: true,
+      }),
+      TENANT
+    );
   });
 });

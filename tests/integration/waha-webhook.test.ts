@@ -374,10 +374,14 @@ describe('WAHA Webhook & Guard Clause Integration Tests', { timeout: 20000 }, ()
       expect.objectContaining({
         tenantId: DEFAULT_TENANT_ID,
         customer: expect.objectContaining({ id: customer.id }),
-        incomingMessage: {
+        incomingMessage: expect.objectContaining({
           type: 'location',
-          location: { latitude: -7.3564516847907635, longitude: 112.78985794633627 },
-        },
+          location: expect.objectContaining({
+            latitude: -7.3564516847907635,
+            longitude: 112.78985794633627,
+            address: 'Jl. Rungkut No. 1',
+          }),
+        }),
       })
     );
 

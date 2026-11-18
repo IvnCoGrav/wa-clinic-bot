@@ -213,6 +213,8 @@ export function serializeLiveChatConversation(
     locationAdequacy: adequacy.reason,
     sharelocNeeded: adequacy.needsShareloc,
     shareLocationSent: Boolean((c.customer as any)?.share_location_sent),
+    pinFromCustomerAt: (c.customer as any)?.preferences?.pin_from_customer_at || null,
+    pinFromStaffAt: (c.customer as any)?.preferences?.pin_from_staff_at || null,
     sharelocRequestedAt:
       (c as any)?.session_data?.shareloc_requested_at ||
       (c.customer as any)?.preferences?.share_location_requested_at ||

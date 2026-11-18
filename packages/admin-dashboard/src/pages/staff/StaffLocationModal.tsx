@@ -283,7 +283,13 @@ export const StaffLocationModal: React.FC<StaffLocationModalProps> = ({
           {/* Bagian 2: Foto Tampak Depan Rumah */}
           <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <span className="block text-xs font-bold text-ink">2. Foto Tampak Depan Rumah:</span>
+              <span className="block text-xs font-bold text-ink">
+                2. Foto Tampak Depan Rumah{' '}
+                <span className="text-[11px] font-normal text-ink-2">
+                  (Wajib untuk status Terverifikasi Lapangan Penuh)
+                </span>
+                :
+              </span>
               {processingPhoto && (
                 <span className="text-[10px] text-accent font-medium animate-pulse">Mengompres foto...</span>
               )}
