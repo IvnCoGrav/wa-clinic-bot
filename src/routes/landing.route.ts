@@ -183,6 +183,7 @@ async function renderPricelist(reply: FastifyReply, request: FastifyRequest): Pr
         { tenantId, source: getCatalogSource(tenantId) },
         '[PRICELIST] Katalog tidak tersedia dari database; halaman dialihkan ke mode fail-closed'
       );
+      applyLandingSecurityHeaders(reply);
       return reply
         .status(503)
         .header('Retry-After', '60')
@@ -193,6 +194,7 @@ async function renderPricelist(reply: FastifyReply, request: FastifyRequest): Pr
     payloadJson = serializePayloadForHtml(payload);
   } catch (err: any) {
     request.log.error(err, '[PRICELIST] Gagal membangun payload dinamis');
+    applyLandingSecurityHeaders(reply);
     return reply
       .status(503)
       .header('Retry-After', '60')
@@ -224,20 +226,36 @@ async function renderPricelist(reply: FastifyReply, request: FastifyRequest): Pr
     clinicName: brandName,
   });
 
-  reply.header('X-Content-Type-Options', 'nosniff');
-  reply.header('X-Frame-Options', 'DENY');
+  applyLandingSecurityHeaders(reply);
   return reply.type('text/html; charset=utf-8').status(200).send(html);
+}
+
+/**
+ * Terapkan header keamanan CSP, XFO, dan nosniff untuk landing /cta /pricelist.
+ * Menjamin skrip Meta Pixel (connect.facebook.net) dapat dimuat browser client
+ * dan mencegah clickjacking melalui frame-ancestors 'none' & X-Frame-Options: DENY.
+ */
+export function applyLandingSecurityHeaders(reply: FastifyReply, nonce?: string): void {
+  const scriptSrc = nonce
+    ? `'nonce-${nonce}' https://connect.facebook.net`
+    : `'self' 'unsafe-inline' https://connect.facebook.net`;
+
+  const cspDirectives = [
+    `script-src ${scriptSrc}`,
+    "frame-ancestors 'none'",
+    "upgrade-insecure-requests",
+    'report-to csp',
+    'report-uri /api/csp-report',
+  ];
+
+  reply.header('Content-Security-Policy', cspDirectives.join('; '));
+  reply.header('X-Frame-Options', 'DENY');
+  reply.header('X-Content-Type-Options', 'nosniff');
 }
 
 async function renderLanding(reply: FastifyReply, request: FastifyRequest, content: LandingContent, slug: string) {
   const nonce = crypto.randomBytes(16).toString('base64');
-
-  reply.header(
-    'Content-Security-Policy',
-    `script-src 'nonce-${nonce}' https://connect.facebook.net; frame-ancestors 'none'; upgrade-insecure-requests;`
-  );
-  reply.header('X-Frame-Options', 'DENY');
-  reply.header('X-Content-Type-Options', 'nosniff');
+  applyLandingSecurityHeaders(reply, nonce);
 
   if (content.landing_type === 'RAW_HTML' && content.raw_html_content) {
     const { TenantHtmlService } = await import('../services/tenant-html.service');
@@ -446,7 +464,8 @@ export async function landingRoutes(fastify: FastifyInstance) {
       (content.whatsapp_number || '').trim() ||
       query.phone ||
       (isDefaultTenant ? tenantContact.whatsapp_number : '') ||
-      (isDefaultTenant ? process.env.DEFAULT_WHATSAPP_PHONE || '' : '');
+      (isDefaultTenant ? process.env.DEFAULT_WHATSAPP_PHONE || '' : '') ||
+      (process.env.DEFAULT_WHATSAPP_PHONE || '');
 
     let rawMsg = query.msg || query.greetings || '';
     if (!rawMsg) {
@@ -491,7 +510,10 @@ export async function landingRoutes(fastify: FastifyInstance) {
             const { prisma } = await import('../db/client');
             const tenant = await prisma.tenant.findUnique({ where: { id: content.tenant_id } });
             if ((tenant as any)?.landing_domain) {
-              tenantDomain = (tenant as any).landing_domain.trim().replace(/\/$/, '');
+              const rawDomain = (tenant as any).landing_domain.trim().replace(/\/+$/, '');
+              tenantDomain = rawDomain.startsWith('http://') || rawDomain.startsWith('https://')
+                ? rawDomain
+                : `https://${rawDomain}`;
             }
           } catch {}
         }
@@ -608,6 +630,36 @@ export async function landingRoutes(fastify: FastifyInstance) {
                 source: 'cta-fallback',
               };
               await (prisma as any).landingPageView.create({ data: viewData });
+
+              // Task 5.3: Tembakkan PageView CAPI jika flag CTA_FALLBACK_CAPI aktif
+              try {
+                const { isCtaFallbackCapi } = await import('../config/feature-flags');
+                if (isCtaFallbackCapi() && pixelId) {
+                  const { capiService } = await import('../services/capi.service');
+                  const syntheticPvId = `pv_cta_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+                  capiService.sendCapiEvent({
+                    eventName: 'PageView',
+                    customer: { phone: '', id: syntheticPvId },
+                    adClick: {
+                      fbclid: viewData.fbclid,
+                      fbp: viewData.fbp,
+                      fbc: viewData.fbc,
+                      ipAddress: viewData.ipAddress,
+                      userAgent: viewData.userAgent,
+                      landingUrl: viewData.landingUrl,
+                      trackingCode: trackingCode || undefined,
+                      utmSource: viewData.utmSource,
+                      utmMedium: viewData.utmMedium,
+                      utmCampaign: viewData.utmCampaign,
+                    },
+                    tenantId: content.tenant_id,
+                    customData: {
+                      source: 'cta-fallback',
+                      traffic_source: viewData.fbclid ? 'paid' : 'organic',
+                    },
+                  }).catch(() => {});
+                }
+              } catch {}
             }
           } catch (fbErr: any) {
             if (fbErr?.code === 'P2002') {
@@ -663,12 +715,7 @@ export async function landingRoutes(fastify: FastifyInstance) {
     const waUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(finalMsg)}`;
 
     const nonce = crypto.randomBytes(16).toString('base64');
-    reply.header(
-      'Content-Security-Policy',
-      `script-src 'nonce-${nonce}' https://connect.facebook.net; frame-ancestors 'none'; upgrade-insecure-requests;`
-    );
-    reply.header('X-Frame-Options', 'DENY');
-    reply.header('X-Content-Type-Options', 'nosniff');
+    applyLandingSecurityHeaders(reply, nonce);
 
     const pixelBlock = pixelId
       ? `
@@ -834,4 +881,47 @@ export async function landingRoutes(fastify: FastifyInstance) {
     }
     return renderLanding(reply, request, content, slug);
   });
+
+  // POST /api/csp-report — Endpoint penerima laporan pelanggaran CSP browser (Task 1.5)
+  fastify.post(
+    '/api/csp-report',
+    {
+      config: {
+        rateLimit: {
+          max: 60,
+          timeWindow: '1 minute',
+          keyGenerator: (req) => req.ip,
+        },
+      },
+    },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      try {
+        const body: any = request.body || {};
+        const report = body['csp-report'] || (Array.isArray(body) ? body[0]?.body : body);
+
+        if (report) {
+          const documentUri =
+            typeof report['document-uri'] === 'string'
+              ? report['document-uri'].split('?')[0]
+              : 'unknown';
+          const blockedUri = report['blocked-uri'] || 'unknown';
+          const violatedDirective =
+            report['violated-directive'] || report['effective-directive'] || 'unknown';
+
+          request.log.warn(
+            {
+              documentUri,
+              blockedUri,
+              violatedDirective,
+            },
+            '[CSP VIOLATION] Pelanggaran CSP dilaporkan browser'
+          );
+        }
+      } catch (err: any) {
+        request.log.warn(`[CSP REPORT ERROR] Gagal memproses laporan: ${err.message}`);
+      }
+
+      return reply.status(204).send();
+    }
+  );
 }

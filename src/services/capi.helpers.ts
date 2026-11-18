@@ -11,6 +11,24 @@ import { escapeRegex } from '../utils/regex-escape';
  */
 
 /**
+ * Memvalidasi apakah alamat IP merupakan IP publik yang valid.
+ * Menolak localhost (127.0.0.1, ::1), rentang privat RFC 1918 (10.*, 172.16-31.*, 192.168.*),
+ * link-local (169.254.*), CGNAT (100.64-127.*), dan IPv6 privat/ULA.
+ */
+export function isPublicIp(ip?: string | null): boolean {
+  if (!ip || typeof ip !== 'string') return false;
+  const clean = ip.trim();
+  if (!clean || clean === '127.0.0.1' || clean === '::1' || clean === 'localhost') return false;
+  // RFC 1918 / Private IPv4
+  if (/^(10\.|192\.168\.|172\.(1[6-9]|2[0-9]|3[0-1])\.|169\.254\.|100\.(6[4-9]|[7-9][0-9]|1[0-1][0-9]|12[0-7])\.)/.test(clean)) {
+    return false;
+  }
+  // IPv6 ULA / link-local / loopback
+  if (/^(fc00|fd00|fe80)/i.test(clean)) return false;
+  return true;
+}
+
+/**
  * Mask nama untuk privasi log.
  * Menyamarkan huruf tengah setiap kata. Misal: "Siti Aminah" -> "S**i A****h"
  */
@@ -179,16 +197,19 @@ export function resolveCanonicalLandingUrl(
   // 3. Jika URL adalah path relatif (misal: /reservasionline atau /cta?fbclid=...)
   if (domain) {
     const cleanPath = url.startsWith('/') ? url : `/${url}`;
+    const cleanDomain = domain.startsWith('http://') || domain.startsWith('https://')
+      ? domain
+      : `https://${domain}`;
     if (cleanPath.startsWith('/cta')) {
       try {
-        const parsedDomain = new URL(domain.startsWith('http') ? domain : `https://${domain}`);
+        const parsedDomain = new URL(cleanDomain);
         const targetPath = (parsedDomain.pathname && parsedDomain.pathname !== '/') ? parsedDomain.pathname : '/reservasionline';
         const qIdx = cleanPath.indexOf('?');
         const query = qIdx !== -1 ? cleanPath.slice(qIdx) : '';
         return `${parsedDomain.origin}${targetPath}${query}`;
       } catch {}
     }
-    return `${domain}${cleanPath}`;
+    return `${cleanDomain}${cleanPath}`;
   }
   // Anti-hardcode domain bisnis: tanpa domain tenant ATAU fallback di
   // `Tenant.settings.capiFallbackLandingDomain`, JANGAN mengarang-nomor domain.
@@ -295,3 +316,36 @@ export function buildLegacyPurchaseEventId(params: {
   const subject = params.reservationId || params.customerId;
   return `${params.trackingCode || 'org'}_pur_${subject}_${params.eventTimeSec}`;
 }
+
+/**
+ * Kontrak Structured Log [CAPI EVENT] (Task 0.3)
+ * Wajib bebas PII (tanpa nomor HP, nama, alamat, IP, atau user agent).
+ */
+export interface StructuredCapiEventLog {
+  event: string;
+  event_id: string;
+  tenant: string;
+  status: number | null;
+  events_received: number;
+  fbtrace_id: string | null;
+  source: string;
+  skipped: boolean;
+  degraded: boolean;
+  reason?: string;
+}
+
+export function formatStructuredCapiEventLog(entry: StructuredCapiEventLog): string {
+  return `[CAPI EVENT] ${JSON.stringify(entry)}`;
+}
+
+export function parseStructuredCapiEventLog(line: string): StructuredCapiEventLog | null {
+  const prefix = '[CAPI EVENT] ';
+  const idx = line.indexOf(prefix);
+  if (idx === -1) return null;
+  try {
+    return JSON.parse(line.slice(idx + prefix.length));
+  } catch {
+    return null;
+  }
+}
+

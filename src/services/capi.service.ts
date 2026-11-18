@@ -14,11 +14,14 @@ import {
   buildDeterministicPurchaseEventId,
   decryptCapiToken,
   formatMetaFbc,
+  formatStructuredCapiEventLog,
+  isPublicIp,
   normalizeCapiMatchingGeo,
   parseCapiValue,
+  parseStructuredCapiEventLog,
   resolveCanonicalLandingUrl,
 } from './capi.helpers';
-import type { CapiMatchingGeo } from './capi.helpers';
+import type { CapiMatchingGeo, StructuredCapiEventLog } from './capi.helpers';
 
 /**
  * Helper murni CAPI kini hidup di `capi.helpers.ts`; re-export menjaga kontrak
@@ -30,13 +33,16 @@ export {
   decryptCapiToken,
   extractValueByFormat,
   formatMetaFbc,
+  formatStructuredCapiEventLog,
+  isPublicIp,
   maskName,
   normalizeCapiMatchingGeo,
   parseCapiValue,
+  parseStructuredCapiEventLog,
   resolveCanonicalLandingUrl,
   sha256Hash,
 } from './capi.helpers';
-export type { CapiMatchingGeo } from './capi.helpers';
+export type { CapiMatchingGeo, StructuredCapiEventLog } from './capi.helpers';
 
 /**
  * Normalisasi HP E.164 didelegasikan ke normalizer kanonis
@@ -406,19 +412,23 @@ export class CapiService {
     customUserData?: Record<string, any>;
     customEventId?: string;
     reservationId?: string;
+    testEventCode?: string;
   }): Promise<{
     success: boolean;
     message?: string;
     status?: number;
     fbtrace_id?: string;
     events_received?: number;
+    eventsReceived?: number;
+    deliveryConfirmed?: boolean;
+    sentEventId?: string;
     metaResponse?: any;
     sentPayload?: any;
     pixelId?: string;
     skipped?: boolean;
     policy?: MetaPurchasePolicy;
   }> {
-    const { eventName, customer, adClick, value, currency, tenantId, customData, eventTime, eventId, customUserData, customEventId, reservationId } = params;
+    const { eventName, customer, adClick, value, currency, tenantId, customData, eventTime, eventId, customUserData, customEventId, reservationId, testEventCode } = params;
 
     // 1. Meta CAPI Sandbox / Dummy Test Guard & Non-Customer Bypass Guard (Skip / Admin CS)
     //    Staf internal (CS/Bidan via nomor resmi klinik) juga dikecualikan: bukan pelanggan.
@@ -589,9 +599,13 @@ export class CapiService {
       }
 
       // Advanced Matching: External ID (hashed customer.id / phone ID)
+      // Guard A-017: Jangan kirim external_id jika menggunakan ID sintetis (pv_, temp_, synthetic_)
       let hashedExternalId: string | undefined;
       const rawExternalId = fullCustomer?.id ? String(fullCustomer.id) : undefined;
-      if (rawExternalId) {
+      const isSyntheticExternalId = rawExternalId
+        ? rawExternalId.startsWith('pv_') || rawExternalId.startsWith('temp_') || rawExternalId.startsWith('synthetic_')
+        : false;
+      if (rawExternalId && !isSyntheticExternalId) {
         hashedExternalId = builder.getNormalizedAndHashedPII(rawExternalId, PII_DATA_TYPE.EXTERNAL_ID) || undefined;
       }
 
@@ -769,7 +783,7 @@ export class CapiService {
       if (hashedGender) {
         userData.ge = [hashedGender];
       }
-      if (clientIp) {
+      if (clientIp && isPublicIp(clientIp)) {
         userData.client_ip_address = clientIp;
       }
       if (effectiveAdClick?.userAgent) {
@@ -906,17 +920,60 @@ export class CapiService {
           }
           eventData.event_id = `${effectiveAdClick?.trackingCode || 'org'}_pur_${customer.id}_${anchorSec ?? originalEventTime}`;
         }
+      } else if (eventName === 'PageView') {
+        // PageView: pertahankan eventID browser murni untuk deduplikasi Pixel ↔ CAPI
+        eventData.event_id = effectiveAdClick?.trackingCode || `pv_${customer.id}_${Math.floor(Date.now() / 1000)}`;
       } else if (effectiveAdClick?.trackingCode) {
-        eventData.event_id = effectiveAdClick.trackingCode;
+        const suffix = `_${eventName.toLowerCase()}`;
+        eventData.event_id = effectiveAdClick.trackingCode.endsWith(suffix)
+          ? effectiveAdClick.trackingCode
+          : `${effectiveAdClick.trackingCode}${suffix}`;
       } else if (effectiveAdClick?.ctwa_clid) {
         // ID stabil satu perjalanan untuk CTWA native tanpa promo code
-        eventData.event_id = `ctwa_${effectiveAdClick.ctwa_clid.slice(0, 20)}_${customer.id}`;
+        const suffix = `_${eventName.toLowerCase()}`;
+        eventData.event_id = `ctwa_${effectiveAdClick.ctwa_clid.slice(0, 20)}_${customer.id}${suffix}`;
       } else {
         eventData.event_id = `org_${customer.id}_${eventName.toLowerCase()}_${Math.floor(Date.now() / 1000)}`;
       }
       // Merge customUserData dari editan admin modal JSON (prioritas admin)
+      // Guard A-005: Normalisasi & hash nilai jika admin mengirim format pseudo-string "sha256(value)"
       if (customUserData && typeof customUserData === 'object') {
-        Object.assign(userData, customUserData);
+        const sanitizedUserData: Record<string, any> = {};
+        for (const [k, v] of Object.entries(customUserData)) {
+          if (typeof v === 'string') {
+            const m = v.match(/^sha256\((.*)\)$/i);
+            if (m) {
+              const inner = m[1].trim();
+              if (/^[a-f0-9]{64}$/i.test(inner)) {
+                sanitizedUserData[k] = [inner.toLowerCase()];
+              } else {
+                const mappedType = k === 'ph' ? PII_DATA_TYPE.PHONE
+                  : k === 'fn' ? PII_DATA_TYPE.FIRST_NAME
+                  : k === 'ln' ? PII_DATA_TYPE.LAST_NAME
+                  : k === 'ct' ? PII_DATA_TYPE.CITY
+                  : k === 'st' ? PII_DATA_TYPE.STATE
+                  : k === 'zp' ? PII_DATA_TYPE.ZIP_CODE
+                  : k === 'country' ? PII_DATA_TYPE.COUNTRY
+                  : k === 'ge' ? PII_DATA_TYPE.GENDER
+                  : k === 'external_id' ? PII_DATA_TYPE.EXTERNAL_ID
+                  : null;
+                if (mappedType) {
+                  const hashed = builder.getNormalizedAndHashedPII(inner, mappedType);
+                  sanitizedUserData[k] = hashed ? [hashed] : undefined;
+                } else {
+                  sanitizedUserData[k] = [crypto.createHash('sha256').update(inner).digest('hex')];
+                }
+              }
+            } else if (/^[a-f0-9]{64}$/i.test(v)) {
+              sanitizedUserData[k] = [v.toLowerCase()];
+            } else {
+              sanitizedUserData[k] = v;
+            }
+          } else {
+            sanitizedUserData[k] = v;
+          }
+        }
+        Object.assign(userData, sanitizedUserData);
       }
 
       const parsedVal = parseCapiValue(value, customData?.allowZero === true);
@@ -963,10 +1020,26 @@ export class CapiService {
         if (dbIsRepeat && !forceSend) {
           if (policy === 'SUPPRESS_REPEAT') {
             console.log(`[CAPI POLICY GUARD] Purchase event for repeat customer ${maskPhoneWithTenantSuffix(customer?.phone)} SUPPRESSED per tenant acquisition policy (${policy}).`);
+            console.log(formatStructuredCapiEventLog({
+              event: eventData.event_name || eventName,
+              event_id: eventData.event_id || 'unknown',
+              tenant: tenantId || 'unknown',
+              status: null,
+              events_received: 0,
+              fbtrace_id: null,
+              source: eventData.custom_data?.source || 'unknown',
+              skipped: true,
+              degraded: false,
+              reason: 'Repeat purchase suppressed (CAC protection)',
+            }));
             return {
               success: true,
               skipped: true,
               policy,
+              sentEventId: eventData.event_id,
+              events_received: 0,
+              eventsReceived: 0,
+              deliveryConfirmed: false,
               message: 'Repeat purchase suppressed (CAC protection).',
             };
           }
@@ -987,12 +1060,32 @@ export class CapiService {
         }
       }
 
-      // Mandat payload bersih: flag internal TIDAK boleh bocor ke Graph API Meta
-      delete eventData.custom_data?.force_send_repeat_purchase;
-      delete eventData.custom_data?.allowZero;
+      // Mandat payload bersih (A-011): flag internal & telemetri bot TIDAK boleh bocor ke Graph API Meta
+      const effectiveTestCode = testEventCode || customData?.test_event_code;
+      const internalFieldsToStrip = [
+        'force_send_repeat_purchase',
+        'allowZero',
+        'allowAged',
+        'testEventCode',
+        'test_event_code',
+        'fuzzyScore',
+        'effectiveScore',
+        'mql_bubble_count',
+        'ruleTriggered',
+        'matchSource',
+        'rawPayload',
+        'reason',
+        'adminSender',
+      ];
+      if (eventData.custom_data) {
+        for (const field of internalFieldsToStrip) {
+          delete eventData.custom_data[field];
+        }
+      }
 
-      const payload = {
+      const payload: any = {
         data: [eventData],
+        ...(effectiveTestCode ? { test_event_code: effectiveTestCode } : {}),
       };
 
       const url = `${GRAPH_API_BASE_URL}/${GRAPH_API_VERSION}/${pixelId}/events?access_token=${accessToken}`;
@@ -1006,25 +1099,78 @@ export class CapiService {
       // mencatat SUCCESS palsu: fallback mengembalikan fake status 200.
       if (response?.isFallback) {
         console.error(`[CAPI FALLBACK] Event ${eventName} untuk customer ${maskPhoneWithTenantSuffix(customer.phone)} TIDAK terkirim ke Meta (circuit breaker fallback aktif).`);
-        return { success: false, message: 'Circuit breaker fallback: event tidak terkirim' };
+        console.log(formatStructuredCapiEventLog({
+          event: eventData.event_name || eventName,
+          event_id: eventData.event_id || 'unknown',
+          tenant: tenantId || 'unknown',
+          status: 503,
+          events_received: 0,
+          fbtrace_id: null,
+          source: eventData.custom_data?.source || 'unknown',
+          skipped: false,
+          degraded: true,
+          reason: 'Circuit breaker fallback',
+        }));
+        return {
+          success: false,
+          message: 'Circuit breaker fallback: event tidak terkirim',
+          sentEventId: eventData.event_id,
+          events_received: 0,
+          eventsReceived: 0,
+          deliveryConfirmed: false,
+        };
       }
 
       if (response && response.status === 200) {
+        const eventsReceived = response.data?.events_received ?? 0;
+        const deliveryConfirmed = response.status === 200 && eventsReceived > 0;
+
         console.log(`[CAPI SUCCESS] Successfully sent event ${eventName} to Meta CAPI.`);
+        console.log(formatStructuredCapiEventLog({
+          event: eventData.event_name || eventName,
+          event_id: eventData.event_id || 'unknown',
+          tenant: tenantId || 'unknown',
+          status: response.status,
+          events_received: eventsReceived,
+          fbtrace_id: response.data?.fbtrace_id ?? null,
+          source: eventData.custom_data?.source || 'unknown',
+          skipped: false,
+          degraded: false,
+        }));
         return {
           success: true,
           status: response.status,
           fbtrace_id: response.data?.fbtrace_id,
-          events_received: response.data?.events_received,
+          events_received: eventsReceived,
+          eventsReceived,
+          deliveryConfirmed,
+          sentEventId: eventData.event_id,
           metaResponse: response.data,
           sentPayload: payload,
           pixelId,
         };
       } else {
         console.error(`[CAPI FAILURE] Meta responded with status ${response?.status || 'unknown'}:`, response?.data);
+        console.log(formatStructuredCapiEventLog({
+          event: eventData.event_name || eventName,
+          event_id: eventData.event_id || 'unknown',
+          tenant: tenantId || 'unknown',
+          status: response?.status ?? 500,
+          events_received: 0,
+          fbtrace_id: response?.data?.error?.fbtrace_id ?? null,
+          source: eventData.custom_data?.source || 'unknown',
+          skipped: false,
+          degraded: true,
+          reason: `Status code ${response?.status || 'unknown'}`,
+        }));
         return {
           success: false,
           status: response?.status,
+          fbtrace_id: response?.data?.error?.fbtrace_id,
+          events_received: 0,
+          eventsReceived: 0,
+          deliveryConfirmed: false,
+          sentEventId: eventData.event_id,
           message: `Status code ${response?.status || 'unknown'}`,
           metaResponse: response?.data,
           sentPayload: payload,
@@ -1034,7 +1180,26 @@ export class CapiService {
     } catch (error: any) {
       // 6. SILENT FAIL: Log error tetapi jangan throw Exception agar tidak merusak critical path caller
       console.error(`[CAPI ERROR] Conversions API failed silently:`, error.message);
-      return { success: false, message: error.message };
+      console.log(formatStructuredCapiEventLog({
+        event: eventName,
+        event_id: 'unknown',
+        tenant: tenantId || 'unknown',
+        status: 500,
+        events_received: 0,
+        fbtrace_id: null,
+        source: 'unknown',
+        skipped: false,
+        degraded: true,
+        reason: error.message,
+      }));
+      return {
+        success: false,
+        message: error.message,
+        sentEventId: undefined,
+        events_received: 0,
+        eventsReceived: 0,
+        deliveryConfirmed: false,
+      };
     }
   }
 
@@ -1107,7 +1272,7 @@ export class CapiService {
         ph: hashedPhone ? [hashedPhone] : undefined,
         fn: hashedFn ? [hashedFn] : undefined,
         country: hashedCountry ? [hashedCountry] : undefined,
-        client_ip_address: params.ipAddress || '127.0.0.1',
+        client_ip_address: isPublicIp(params.ipAddress) ? params.ipAddress : undefined,
         client_user_agent: params.userAgent || 'Admin CAPI Test Connection',
       },
       custom_data: {

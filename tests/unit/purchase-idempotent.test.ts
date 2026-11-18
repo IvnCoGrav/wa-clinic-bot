@@ -77,7 +77,7 @@ describe('Fase 1.2 & 2: Purchase Event Idempotency & Moderation Guards', () => {
       });
 
       expect(sentPayload).not.toBeNull();
-      expect(sentPayload.data[0].event_id).toBe('ctwa_12345678901234567890_cust-ctwa-1');
+      expect(sentPayload.data[0].event_id).toBe('ctwa_12345678901234567890_cust-ctwa-1_contact');
     });
   });
 

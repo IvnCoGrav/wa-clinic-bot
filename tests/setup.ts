@@ -186,6 +186,7 @@ vi.mock('../src/db/client', () => {
         create: vi.fn().mockRejectedValue(new Error('Database offline')),
         update: vi.fn().mockRejectedValue(new Error('Database offline')),
         updateMany: vi.fn().mockRejectedValue(new Error('Database offline')),
+        delete: vi.fn().mockRejectedValue(new Error('Database offline')),
         deleteMany: vi.fn().mockRejectedValue(new Error('Database offline')),
       },
       // CTWA Greeting Catcher (tenant-aware). Default offline → service pakai

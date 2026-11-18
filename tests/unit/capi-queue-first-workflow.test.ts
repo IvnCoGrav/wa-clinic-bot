@@ -230,8 +230,8 @@ describe('Meta CAPI Queue-First & Anti-Duplikat Workflow (Fase 5 Suite)', () => 
     // Iklan disetujui & event dicatat terkirim
     expect(capturedUpdateData.purchase_review_status).toBe('approved');
     expect(capturedUpdateData.purchase_event_sent_at).toBeInstanceOf(Date);
-    // Integritas Kasir: purchase_occurred_at TIDAK ditimpa (tetap null)
-    expect(capturedUpdateData.purchase_occurred_at).toBeUndefined();
+    // Integritas Kasir & CAPI: purchase_occurred_at selalu diset per Task 2.4 (A-014b) agar tidak null saat kirim CAPI
+    expect(capturedUpdateData.purchase_occurred_at).toBeInstanceOf(Date);
 
     // Guard LTV: jangan katrol LTV bila uang belum diterima
     expect(ltvSpy).not.toHaveBeenCalled();

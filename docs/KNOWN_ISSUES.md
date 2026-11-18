@@ -3,6 +3,68 @@
 Catatan temuan yang sengaja dipisah dari fitur aktif, supaya tidak hilang dan
 tidak disalahartikan sebagai bug dari perubahan terbaru.
 
+## 356. [Meta CAPI / Funnel] Audit Menyeluruh 17 Titik Kritis Meta Funnel & Silent Failure (2026-11-18, FASE 0 s.d. 7 IMPLEMENTED & VERIFIED)
+
+- **Status:** IMPLEMENTED & VERIFIED (2026-11-18, FASE 0 s.d. 7 SELESAI). Referensi plan: `plan-remediasi-meta-capi.md`.
+- **Gejala & Ringkasan Audit (A-001 s.d. A-017):**
+  - **A-001 (Edge CSP Block):** CSP di Caddyfile (`Caddyfile:14-22`) membatasi `script-src` hanya `'self' 'unsafe-inline'`, menimpa CSP aplikasi di `/cta` dan `/pricelist`, sehingga file JS pixel `https://connect.facebook.net` diblokir dan browser client gagal memicu event `AddToCart`.
+  - **A-002 (CAPI Silent Delivery Failure):** Response HTTP 200 dari Meta Graph API dengan payload `{"events_received": 0}` (atau respon error Graph API) dianggap sebagai keberhasilan pengiriman, langsung menandai `purchase_event_sent_at` di DB tanpa verifikasi `events_received > 0` dan tanpa mencatat `fbtrace_id`.
+  - **A-003 (AdClick P2002 Constraint Violation):** Pelanggan lama yang mengklik tautan promo baru memicu error PostgreSQL Unique Constraint `P2002` pada `AdClick.customerId` di `src/services/ad-attribution.service.ts` saat menjalankan `updateMany`, mengakibatkan touchpoint atribusi gagal tertaut.
+  - **A-004 (Cross-Funnel Event ID Collision):** Event ID untuk traffic iklan tanpa `eventName` di `src/services/capi.service.ts` hanya berbasis `pur_...` atau tracking code tanpa pembeda jenis event, sehingga event `Contact`, `Lead`, dan `InitiateCheckout` berisiko memiliki `event_id` identik dan saling menganulir di Meta Events Manager.
+  - **A-005 (Modal Telemetry Pseudo-String):** Dashboard CAPI Queue modal form menampilkan telemetry `sha256(...)` literal dan fake IP/UA yang jika disimpan ulang oleh admin menimpa hash SHA-256 asli.
+  - **A-006 (Test Event Code Misplaced):** `testEventCode` diletakkan di dalam `custom_data` alih-alih di root payload request Graph API v19.0, sehingga Meta mengabaikannya dan memperlakukan event sebagai traffic live.
+  - **A-007 (Hardcoded Pixel ID):** Route `meta-attribution.subroute.ts` memiliki hardcoded pixel ID `'1465457801784141'`, melanggar kaidah multi-tenant.
+  - **A-008 (Synthetic External ID Hash):** `tracking.route.ts` meng-hash nilai sintetik `pv_${Date.now()}` sebagai `external_id`, merusak skor Event Match Quality (EMQ) Meta.
+  - **A-009 (Unreject Purchase Crash):** Route `unreject-purchase` mengalami error 404/500 saat dijalankan terhadap item berawalan `lead_*`.
+  - **A-010 (Localhost IP Leaking):** Nilai `127.0.0.1` dari reverse proxy bocor ke Meta `client_ip_address`.
+  - **A-011 (Telemetry Leak in Custom Data):** Field internal seperti `fuzzyScore` dan `mql_bubble_count` bocor masuk ke `custom_data` yang dikirim ke Meta.
+  - **A-012 (Preview vs Dispatch ID Disparity):** Tampilan preview JSON di modal dashboard berbeda dengan `event_id` deterministik yang dieksekusi di backend.
+  - **A-013 (CTWA Catchers Duplication):** Atribusi ganda pada webhook WAHA/WABA saat matching referral keyword.
+  - **A-014 (Purchase Event Truth & Event ID Divergence):**
+    - A-014a: Event ID non-deterministik saat resend / approval ulang; `customPayload.event_id` hilang/diabaikan; resend memaksa format legacy.
+    - A-014b: `purchase_occurred_at` bernilai NULL pada approval dashboard pertama kali jika tidak disediakan input tanggal.
+    - A-014c: CAPI Graph API 200 dengan `events_received: 0` ditandai sebagai sukses terkirim (`purchase_event_sent_at` terisi).
+  - **A-015 (Audit Log PII Leakage & Missing Tenant Boundary):**
+    - A-015a: Telemetri audit log menyimpan nomor HP, alamat fisik, nama customer, API key, raw prompt/WAHA payload.
+    - A-015b: 5 audit log CAPI di route payment-proof tidak menyertakan `tenantId` (tenant leakage).
+  - **A-016 (Ad Attribution Integrity & Test Event Bug):** Detail multi-touch crash dan hilangnya touchpoint referral saat repeat order.
+  - **A-017 (Landing PageView & CSP Rate Limit):** Detail pemblokiran AddToCart dan rate limit report CSP.
+- **Solusi Fondasional (Plan 8 Fase):**
+  - **Fase 0 (Guard & Observability):** Backup Caddyfile, feature flags (`CAPI_STRICT_DELIVERY`, `AUDIT_PII_REDACTION`, `AD_CLICK_DEDUP_MODE`, `PURCHASE_VALUE_GUARD`, `CTA_FALLBACK_CAPI`, `TRACKING_ORIGIN_ENFORCE`, `CSP_REPORT_ENABLED`, `PIXEL_HEALTH_ENABLED`), zero-PII structured logging `[CAPI EVENT]`, read-only invariant script `scripts/capi-invariants.mjs`, PII scanner `scripts/audit-pii-scan.mjs`, red test contracts (Fase 1: edge header & landing CSP; Fase 2: purchase event snapshot; Fase 3: audit payload sanitizer).
+  - **Fase 1 (Edge Header & CSP):** Helper `applyLandingSecurityHeaders`, isolasi CSP Caddyfile ke `@ui path /admin*`, rate-limited `/api/csp-report`, pixel health probe.
+  - **Fase 2 (Purchase Truth & CAPI Delivery):** Skema `purchase_event_id` & `purchase_event_value`, `testEventCode` di root Graph API, evaluasi `events_received > 0`, backfill `purchase_occurred_at`.
+  - **Fase 3 (Audit PII & Tenant Boundary):** Sanitizer audit log universal, mandatori `tenantId`, PII masking di database telemetry.
+  - **Fase 4 (Attribution Integrity):** Penanganan idempotensi `AdClick`, penghapusan hardcoded Pixel ID, pemisahan namespace `event_id` per-event.
+  - **Fase 5 (SaaS Dynamic Domain & PageView):** Normalisasi `external_id`, fail-open LPWA redirect.
+  - **Fase 6 (Payload Sanitization & Value Guard):** Pembersihan field internal `custom_data`, purchase value guard.
+  - **Fase 7 (Final Documentation & Gate):** Penutupan seluruh issue dan verifikasi full test suite.
+- **Bukti Uji Lengkap (Fase 0 s.d. 7):**
+  - Backup `Caddyfile.bak-pre-meta-funnel` terbuat.
+  - Feature flags terdaftar di `.env.example` dan `src/config/feature-flags.ts`.
+  - Structured log `[CAPI EVENT]` tanpa PII terintegrasi di `src/services/capi.service.ts` dan diuji via `tests/unit/capi-structured-log.test.ts` (3 tests passed).
+  - Skrip invariant `scripts/capi-invariants.mjs` dan scanner baseline `scripts/audit-pii-scan.mjs` siap eksekusi.
+  - Helper `applyLandingSecurityHeaders` di `src/routes/landing.route.ts` aktif, rute `/cta` & `/pricelist` menginjeksi CSP `connect.facebook.net` dan `X-Frame-Options: DENY`.
+  - Isolasi CSP Caddyfile ke `@ui path /admin*` membebaskan landing page dari penimpaan header edge.
+  - Endpoint `POST /api/csp-report` aktif menerima laporan CSP browser (204 No Content, query stripped, zero `script-sample`).
+  - Endpoint `GET /api/admin/debug/meta-pixel-health` aktif dan terintegrasi ke kartu observabilitas di `MetaClickCatcher.tsx`.
+  - Skema Prisma `Reservation` diperkaya kolom nullable `purchase_event_id` & `purchase_event_value`, migrasi `20261118120000_add_purchase_event_snapshot` terbuat, `prisma generate` tuntas.
+  - `sendCapiEvent` kini menyematkan `testEventCode` pada root payload Graph API v19.0, memvalidasi `deliveryConfirmed` (`events_received > 0`), dan mengembalikan `sentEventId`.
+  - Route approve Purchase (`reservation-dispatch-payment-proof.subroute.ts`) memberlakukan hirarki kebenaran event_id (`stored` → `legacy` → `deterministic`), selalu mengisi `purchase_occurred_at`, menyimpan snapshot event_id/value, dan menyertakan `tenantId` pada audit log.
+  - Skrip `scripts/backfill-purchase-occurred-at.mjs` siap eksekusi (dry-run/apply).
+  - Modul sanitasi `src/services/audit-payload-sanitizer.ts` (`sanitizeAuditPayload`) aktif mereuse fungsi kanonis `maskPhoneWithTenantSuffix` dan `maskName`, meredaksi nomor telepon, alamat fisik, prompt mentah, dan API key/secret secara deterministik tanpa merusak field komersial Meta (value, currency, event_id, fbtrace_id).
+  - `AuditService.logAdminAction` menerapkan guard keras anti kebocoran antar-tenant (menolak pemanggilan tanpa `tenantId` eksplisit) dan otomatis men-sanitasi payload via `sanitizeAuditPayload`.
+  - Rute admin dispatch (`reservation-dispatch-payment-proof.subroute.ts` dan `reservation-dispatch-status.subroute.ts`) telah dimigrasikan untuk selalu menyertakan `tenantId`, serta rute `unreject-purchase` mereset/memulihkan field `lead_*` saat pembatalan penolakan reservasi (menutup celah A-009).
+  - Penanganan multi-touch `AdClick` (`src/services/ad-attribution.service.ts`) mengecek `existingAdClick` customer terlebih dahulu sebelum memicu `updateMany`, memperbarui telemetri kampanye baru secara aman dan mencegah error database `P2002 @unique customerId` saat repeat order.
+  - Pemisahan namespace `event_id` lintas funnel (`${trackingCode}_${eventName.toLowerCase()}`) aktif di `capi.service.ts`, mencegah tabrakan deduplikasi Meta antara `Contact`, `Lead`, dan `InitiateCheckout`.
+  - Hardcoded Pixel ID `'1465457801784141'` dibersihkan dari `meta-attribution.subroute.ts` dan `MetaClickCatcher.tsx`, beralih ke resolusi multi-tenant dinamis berbasis basis data / env.
+  - Helper `isPublicIp` aktif memfilter alamat loopback (`127.0.0.1`, `::1`) dan subnet privat RFC 1918 dari pengiriman ke Meta CAPI.
+  - Guard ID sintetis mencegah pengiriman `external_id` palsu (`pv_*`, `temp_*`), dan sanitizer `customUserData` menormalisasi input modal `sha256(...)` menjadi hash SHA-256 riil 64-karakter hex.
+  - Preview `event_id` di `MetaCapiQueue.tsx` disinkronkan dengan formula deterministik backend, dan fallback IP/UA palsu (`114.122.34.56` / dummy iPhone) dihapus.
+  - (Fase 5) Normalisasi domain kanonik di `src/services/capi.helpers.ts` (`resolveCanonicalLandingUrl`) menjamin resolusi skema HTTPS dan path valid; perbaikan `cleanPhone` di `src/routes/landing.route.ts` menerapkan fail-open default WhatsApp phone sehingga customer tidak pernah dialihkan ke tautan kosong/rusak; integrasi `CTA_FALLBACK_CAPI` menyalakan penembakan event PageView CAPI secara terkendali.
+  - (Fase 6) Sanitasi `custom_data` di `src/services/capi.service.ts` memfilter 11 parameter telemetri bot internal (`fuzzyScore`, `effectiveScore`, `mql_bubble_count`, dll.); penegakan `PURCHASE_VALUE_GUARD` di `src/routes/admin/reservation-dispatch-crud.subroute.ts` menjaga integritas pembukuan dan metrik ROAS Meta dari manipulasi nilai transaksi pasca-pengiriman CAPI.
+  - (Fase 7) Dokumentasi sistemik diperbarui di `docs/KNOWN_ISSUES.md` (Issue #356) dan `docs/FEATURE_INVENTORY.md`. Seluruh suite unit dan integrasi CAPI (11 files / 58 tests) **HIJAU** (100% passed).
+  - Typecheck (`tsc --noEmit`), Anti-Spaghetti Reuse Gate (`npm run check:reuse` — 189 baseline / 0 new violations), server build (`npm run build`), dan admin dashboard build (`npm --prefix packages/admin-dashboard run build`) **HIJAU** (0 error).
+
 ## 355. [Live Chat] Banner "JADWAL"/Reservasi Customer Lain Menempel pada Chat Nomor Baru (2026-11-18, RESOLVED)
 
 - **Status:** RESOLVED (2026-11-18).
@@ -4474,13 +4536,16 @@ Keputusan user: (1) tahan booking lokasi tak presisi + notifikasi admin saja; (2
   mengembalikan `mock_cal_event_*`; `:55`/`:97` hardcode 60 menit (abaikan
   `duration_minutes`); `deleteEvent` menelan error. Jalur create bot & manual POST
   tidak memanggil GCal sama sekali.
-- **173i — Efek samping hilang (RESOLVED, 2026-09-30):** (a) follow-up WAHA tidak
+- **173i — Efek samping hilang (RESOLVED, 2026-09-30; REFINED 2026-11-18 Fase 2):** (a) follow-up WAHA tidak
   lagi ditandai `SENT` bila kirim gagal → `FAILED` + alert (`follow-up.service.ts`);
   (b) `completeTask` staf kini memanggil `onReservationCompleted` + guard status
   cancelled/rejected (`staff-reservation.service.ts`); (c) CAPI Purchase tidak lagi
   ditandai `approved` sebelum Meta menerima — `sendCapiEvent` di-await, gagal →
-  `pending` + alert (`purchase-detection.service.ts`); (d) DELETE hard mengirim
-  notifikasi staf SEBELUM reservasi dihapus (`reservations.subroute.ts`);
+  `pending` + alert (`purchase-detection.service.ts`). **Refinement 2026-11-18 (Fase 2 / A-002 / A-014a):**
+  pengecekan keberhasilan CAPI diperketat mengevaluasi `events_received > 0` & `deliveryConfirmed`
+  (mencegah HTTP 200 dengan 0 events diterima sebagai sukses), snapshot `purchase_event_id` &
+  `purchase_event_value` disimpan di tabel `reservations`, dan `purchase_occurred_at` selalu diisi;
+  (d) DELETE hard mengirim notifikasi staf SEBELUM reservasi dihapus (`reservations.subroute.ts`);
   (e) `createSeries` menjalankan lifecycle + follow-up + notifikasi staf per sesi
   (`reservation-series.service.ts`). Test: `reservation-silent-failure-audit.test.ts`,
   `reservation-series.test.ts`.

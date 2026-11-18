@@ -138,50 +138,71 @@ export async function matchAdClickAndFireContact(
       }
     }
 
-    // Atomic DB updateMany to avoid race conditions on website /cta clicks
+    // Atomic DB update / link to avoid race conditions and P2002 on repeat customer
     try {
       const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
       const now = new Date();
-      const updateResult = await prisma.adClick.updateMany({
-        where: {
-          trackingCode,
-          ...(tenantId ? { tenant_id: tenantId } : {}),
-          matchedAt: null,
-          // Penegakan expiry: kode dengan expires_at wajib belum kedaluwarsa.
-          // Fallback createdAt hanya untuk baris legacy sebelum kolom expires_at diisi.
-          OR: [
-            { expires_at: { gt: now } },
-            { expires_at: null, createdAt: { gte: sevenDaysAgo } },
-          ],
-        },
 
-        data: {
-          matchedAt: new Date(),
-          customerId: customer.id,
-        },
-      });
-
-      if (updateResult.count === 1) {
-        matched = true;
-        isNewlyLinked = true;
-        console.log(`[ATTRIBUTION SUCCESS - WEB CTA] Linked trackingCode ${trackingCode} to customer ${maskPhone(customer.phone)}`);
-        matchedAdClick = await prisma.adClick.findFirst({
-          where: { trackingCode, customerId: customer.id },
+      // Cek apakah customer sudah memiliki AdClick sebelumnya (mencegah P2002 @unique customerId)
+      let existingAdClick: any = null;
+      try {
+        existingAdClick = await prisma.adClick.findUnique({
+          where: { customerId: customer.id },
         });
-      } else {
-        // Cek apakah customer sudah memiliki AdClick
-        let existingAdClick: any = null;
+      } catch {
+        // Best-effort: bila DB offline atau unit test mock
+      }
+
+      if (existingAdClick) {
+        // Customer sudah memiliki record AdClick.
+        // 1. Cari apakah ada Web CTA AdClick yang belum di-claim dengan trackingCode ini
+        let incomingClick: any = null;
         try {
-          existingAdClick = await prisma.adClick.findUnique({
-            where: { customerId: customer.id },
+          incomingClick = await prisma.adClick.findFirst({
+            where: {
+              trackingCode,
+              ...(tenantId ? { tenant_id: tenantId } : {}),
+              matchedAt: null,
+              customerId: null,
+              OR: [
+                { expires_at: { gt: now } },
+                { expires_at: null, createdAt: { gte: sevenDaysAgo } },
+              ],
+            },
           });
         } catch {
-          // Best-effort: bila DB offline atau unit test mock
+          // Best-effort
         }
 
-        if (existingAdClick) {
-          // Customer sudah memiliki record AdClick.
-          // Cek apakah campaign tag sama persis
+        if (incomingClick) {
+          // Pindahkan/perbarui telemetry dari incomingClick ke existingAdClick
+          const updated = await prisma.adClick.update({
+            where: { id: existingAdClick.id },
+            data: {
+              trackingCode: incomingClick.trackingCode || trackingCode,
+              utmCampaign: incomingClick.utmCampaign || existingAdClick.utmCampaign,
+              utmSource: incomingClick.utmSource || existingAdClick.utmSource,
+              utmMedium: incomingClick.utmMedium || existingAdClick.utmMedium,
+              fbclid: incomingClick.fbclid || existingAdClick.fbclid,
+              fbc: incomingClick.fbc || existingAdClick.fbc,
+              fbp: incomingClick.fbp || existingAdClick.fbp,
+              landingUrl: incomingClick.landingUrl || existingAdClick.landingUrl,
+              ipAddress: incomingClick.ipAddress || existingAdClick.ipAddress,
+              userAgent: incomingClick.userAgent || existingAdClick.userAgent,
+              matchedAt: new Date(),
+              phone: customer.phone,
+            },
+          });
+          // Hapus baris sementara agar tidak orphaned
+          try {
+            await prisma.adClick.delete({ where: { id: incomingClick.id } });
+          } catch {}
+          matched = true;
+          isNewlyLinked = true;
+          matchedAdClick = updated;
+          console.log(`[ATTRIBUTION SUCCESS - WEB CTA REPEAT] Updated existing AdClick for customer ${maskPhone(customer.phone)} with trackingCode ${trackingCode}`);
+        } else {
+          // Direct CTWA atau klik lama: cek apakah campaign tag sama persis
           const isSameCampaign = existingAdClick.utmCampaign === trackingCode || existingAdClick.trackingCode === trackingCode;
           if (isSameCampaign) {
             matched = true;
@@ -203,9 +224,35 @@ export async function matchAdClickAndFireContact(
             matchedAdClick = updated;
             console.log(`[ATTRIBUTION SUCCESS - DIRECT CTWA REPEAT] Updated campaign tag ${trackingCode} on customer ${maskPhone(customer.phone)}`);
           }
+        }
+      } else {
+        // Customer baru tanpa AdClick -> Coba link ke Web CTA AdClick (trackingCode di query landing page)
+        const updateResult = await prisma.adClick.updateMany({
+          where: {
+            trackingCode,
+            ...(tenantId ? { tenant_id: tenantId } : {}),
+            matchedAt: null,
+            customerId: null,
+            OR: [
+              { expires_at: { gt: now } },
+              { expires_at: null, createdAt: { gte: sevenDaysAgo } },
+            ],
+          },
+          data: {
+            matchedAt: new Date(),
+            customerId: customer.id,
+          },
+        });
+
+        if (updateResult.count === 1) {
+          matched = true;
+          isNewlyLinked = true;
+          console.log(`[ATTRIBUTION SUCCESS - WEB CTA] Linked trackingCode ${trackingCode} to customer ${maskPhone(customer.phone)}`);
+          matchedAdClick = await prisma.adClick.findFirst({
+            where: { trackingCode, customerId: customer.id },
+          });
         } else {
-          // Customer baru tanpa AdClick -> Buat record AdClick baru
-          // Generate unique tracking code agar tidak menabrak constraint @unique trackingCode jika kampanye digunakan bersama
+          // Customer baru tanpa AdClick web -> Buat record AdClick baru
           const uniqueTrackingCode = `ctwa_${randomUUID().replace(/-/g, '').slice(0, 16)}`;
           try {
             const directAdClick = await prisma.adClick.create({

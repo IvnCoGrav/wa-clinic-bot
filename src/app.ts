@@ -192,7 +192,7 @@ export function buildApp() {
   // Fastify utk 'application/json' (matching string menang atas regex).
   // Simpan raw body (Buffer) untuk verifikasi X-Hub-Signature-256 Meta dan dukung
   // Beacon navigator.sendBeacon bertipe 'text/plain;charset=UTF-8' (zero-preflight simple request).
-  app.addContentTypeParser(['application/json', 'text/plain'], { parseAs: 'buffer' }, (req, body, done) => {
+  app.addContentTypeParser(['application/json', 'text/plain', 'application/csp-report', 'application/reports+json'], { parseAs: 'buffer' }, (req, body, done) => {
     (req as any).rawBody = body;
     const str = body.toString('utf8');
     const isTextPlain = ((req.headers['content-type'] as string) || '').toLowerCase().includes('text/plain');

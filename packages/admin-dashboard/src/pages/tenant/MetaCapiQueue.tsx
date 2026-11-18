@@ -37,6 +37,8 @@ interface QueueItem {
   child_name?: string | null;
   purchase_occurred_at: string | null;
   purchase_event_sent_at: string | null;
+  purchase_event_id?: string | null;
+  purchase_event_value?: number | null;
   purchase_review_status: string;
   value: number | null;
   distanceKm?: string | null;
@@ -357,10 +359,14 @@ export const buildCapiJsonPayload = (item: QueueItem, wabaConfigured: boolean = 
   // Amplop business_messaging HANYA untuk native (paritas capi.service.ts:1108)
   const useBusinessMessaging = isCtwaNative && wabaConfigured;
 
+  const generatedEventId = eventName === 'Purchase'
+    ? (item.purchase_event_id || (item.attribution.trackingCode ? `${item.attribution.trackingCode}_pur_${item.customer.id}_${occurredTimestamp}` : `pur_${item.id}`))
+    : (item.attribution.trackingCode ? `${item.attribution.trackingCode}_${eventName.toLowerCase()}` : `${eventName.toLowerCase()}_${item.id.replace('lead_', '').slice(0, 8)}`);
+
   return {
     event_name: eventName,
     event_time: occurredTimestamp,
-    event_id: item.attribution.trackingCode || `${eventName.toLowerCase()}_${item.id.replace('lead_', '').slice(0, 8)}`,
+    event_id: generatedEventId,
     event_source_url: landingUrl,
     action_source: useBusinessMessaging ? 'business_messaging' : 'chat',
     ...(useBusinessMessaging ? { messaging_channel: 'whatsapp' } : {}),
@@ -374,11 +380,11 @@ export const buildCapiJsonPayload = (item: QueueItem, wabaConfigured: boolean = 
       country: `sha256(id)`,
       external_id: item.customer.id ? `sha256(${item.customer.id})` : undefined,
       ge: isMoms ? `sha256(f)` : undefined,
-      fbp: item.attribution.fbp || (!isCtwaAny && item.attribution.isPaid ? 'fb.1.1787293849.1029384756' : undefined),
+      fbp: item.attribution.fbp || undefined,
       fbc: resolvedFbc,
       ctwa_clid: item.attribution.ctwa_clid || undefined,
-      client_ip_address: item.attribution.ipAddress || (!isCtwaAny && item.attribution.isPaid ? '114.122.34.56' : undefined),
-      client_user_agent: item.attribution.userAgent || (!isCtwaAny && item.attribution.isPaid ? 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148' : undefined),
+      client_ip_address: item.attribution.ipAddress || undefined,
+      client_user_agent: item.attribution.userAgent || undefined,
     },
     custom_data:
       eventName === 'Purchase'

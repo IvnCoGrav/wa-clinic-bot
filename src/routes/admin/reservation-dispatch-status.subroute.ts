@@ -163,6 +163,7 @@ export async function reservationDispatchStatusRoutes(fastify: FastifyInstance) 
           await auditService.logAdminAction({
             apiKey: (request as any).adminKeyUsed,
             adminIdentity: (request as any).adminIdentity,
+            tenantId,
             action: 'DELETE_HOLD_RESERVATION',
             targetId: id,
             payload: { previousStatus: 'hold', deleted: true },
@@ -194,6 +195,7 @@ export async function reservationDispatchStatusRoutes(fastify: FastifyInstance) 
         await auditService.logAdminAction({
           apiKey: (request as any).adminKeyUsed,
           adminIdentity: (request as any).adminIdentity,
+          tenantId,
           action: 'RELEASE_HOLD_RESERVATION',
           targetId: id,
           payload: { previousStatus: 'hold', newStatus: 'cancelled' },
@@ -285,6 +287,7 @@ export async function reservationDispatchStatusRoutes(fastify: FastifyInstance) 
         await auditService.logAdminAction({
           apiKey: (request as any).adminKeyUsed,
           adminIdentity: (request as any).adminIdentity,
+          tenantId,
           action: 'CONFIRM_RESERVATION',
           targetId: id,
           payload: { status: 'confirmed' },
@@ -391,6 +394,7 @@ export async function reservationDispatchStatusRoutes(fastify: FastifyInstance) 
         await auditService.logAdminAction({
           apiKey: (request as any).adminKeyUsed,
           adminIdentity: (request as any).adminIdentity,
+          tenantId,
           action: 'COMPLETE_RESERVATION',
           targetId: id,
           payload: { status: 'completed' },
@@ -501,6 +505,7 @@ export async function reservationDispatchStatusRoutes(fastify: FastifyInstance) 
       await auditService.logAdminAction({
         apiKey: (request as any).adminKeyUsed,
         adminIdentity: (request as any).adminIdentity,
+        tenantId,
         action: 'BULK_COMPLETE_RESERVATIONS',
         payload: { completed, skipped, requested: ids.length },
         ipAddress: request.ip,
@@ -637,6 +642,7 @@ export async function reservationDispatchStatusRoutes(fastify: FastifyInstance) 
         await auditService.logAdminAction({
           apiKey: (request as any).adminKeyUsed,
           adminIdentity: (request as any).adminIdentity,
+          tenantId,
           action: 'UPDATE_RESERVATION_STATUS',
           targetId: id,
           payload: { status },
@@ -758,6 +764,7 @@ export async function reservationDispatchStatusRoutes(fastify: FastifyInstance) 
         await auditService.logAdminAction({
           apiKey: (request as any).adminKeyUsed,
           adminIdentity: (request as any).adminIdentity,
+          tenantId,
           action: 'SET_RESERVATION_DATE',
           targetId: id,
           payload: { bookingDate },

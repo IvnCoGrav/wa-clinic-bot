@@ -315,6 +315,11 @@ model Reservation {
   purchase_event_sent_at   DateTime?
   purchase_occurred_at     DateTime?
   purchase_value           Int?
+  /// Task 2.1 (A-014a/A-002): Snapshot event_id pasti yang dikirimkan ke Meta CAPI.
+  /// Mencegah divergensi format ID saat resend/approval ulang.
+  purchase_event_id        String?
+  /// Task 2.1 (A-014a): Nilai transaksi pasti yang dilaporkan ke Meta CAPI saat event dikirim.
+  purchase_event_value     Int?
   // KB-6 (2026-09-30): snapshot ongkir saat booking (riwayat abadi meski
   // customer pindah alamat). Nullable agar baris lama tetap valid; baca
   // memakai fallback ke Customer.ongkir bila null.
