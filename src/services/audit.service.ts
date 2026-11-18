@@ -14,7 +14,7 @@ export class AuditService {
    * Mencatat riwayat tindakan admin ke tabel audit_logs
    */
   public async logAdminAction(params: {
-    apiKey: string;
+    apiKey?: string;
     adminIdentity?: string;
     action: string;
     targetId?: string;
@@ -23,21 +23,26 @@ export class AuditService {
     tenantId?: string;
   }): Promise<void> {
     const { apiKey, adminIdentity, action, targetId, payload, ipAddress, tenantId } = params;
-    // Cfg-009: tenant audit yang tidak eksplisit adalah sumber salah catat.
+
+    // Task 3.2 (A-015b): tenantId wajib diberikan untuk isolasi multi-tenant yang ketat
     if (!tenantId) {
-      console.warn(`[Audit Service] tenantId tidak diberikan untuk action '${action}' — memakai default-tenant.`);
+      throw new Error(`[Audit Service] tenantId wajib diberikan untuk action '${action}'.`);
     }
-    const effectiveTenant = tenantId || DEFAULT_TENANT_ID;
-    const hashedKey = this.hashApiKey(apiKey);
+
+    const { sanitizeAuditPayload } = await import('./audit-payload-sanitizer');
+    const sanitizedPayload = payload ? sanitizeAuditPayload(action, payload) : null;
+    const payloadStr = sanitizedPayload ? JSON.stringify(sanitizedPayload) : null;
+
+    const effectiveApiKey = apiKey || 'system-audit-key';
+    const hashedKey = this.hashApiKey(effectiveApiKey);
     const shortHashedKey = hashedKey.substring(0, 16);
-    const payloadStr = payload ? JSON.stringify(payload) : null;
 
     // Cfg-009: retry 1x agar kegagalan sesaat tidak menghilangkan jejak audit.
     for (let attempt = 0; attempt < 2; attempt++) {
       try {
         await prisma.auditLog.create({
           data: {
-            tenant_id: effectiveTenant,
+            tenant_id: tenantId,
             admin_key: shortHashedKey,
             admin_identity: adminIdentity || 'Unknown Admin',
             action,

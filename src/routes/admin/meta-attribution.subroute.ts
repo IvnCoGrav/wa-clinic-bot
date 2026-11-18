@@ -664,10 +664,11 @@ export async function metaAttributionAdminRoutes(fastify: FastifyInstance) {
           },
         });
 
+        const tenantMetaPixelId = (await getTenantForCapiHealth(tenantId))?.meta_pixel_id || process.env.FB_PIXEL_ID || null;
         const fullAuditPayload = {
           eventName,
           status: result.success ? 'SUCCESS' : 'FAILED',
-          metaPixelId: (result as any).pixelId || '1465457801784141',
+          metaPixelId: (result as any).pixelId || tenantMetaPixelId,
           httpStatus: (result as any).status || 200,
           customer: {
             id: effectiveCustomer.id,
@@ -743,12 +744,60 @@ export async function metaAttributionAdminRoutes(fastify: FastifyInstance) {
   );
 
   /**
+   * GET /api/admin/debug/meta-pixel-health
+   * Task 1.7: Probe kesehatan Meta Pixel & CSP landing tanpa memicu pembuatan AdClick.
+   */
+  fastify.get('/api/admin/debug/meta-pixel-health', async (_request: FastifyRequest, reply: FastifyReply) => {
+    try {
+      const res = await fastify.inject({
+        method: 'GET',
+        url: '/cta',
+        headers: {
+          'user-agent': 'MetaPixelHealthBot/1.0 (HealthCheck)',
+        },
+      });
+
+      const csp = (res.headers['content-security-policy'] as string) || '';
+      const xfo = (res.headers['x-frame-options'] as string) || '';
+      const body = res.body || '';
+
+      const hasFbScript = csp.includes('https://connect.facebook.net') || csp.includes('connect.facebook.net');
+      const hasXfoDeny = xfo.toUpperCase() === 'DENY';
+      const hasFbqInit = body.includes("fbq('init'");
+      const hasAddToCart = body.includes("fbq('track', 'AddToCart'");
+
+      const isOk = res.statusCode === 200 && hasFbScript && hasXfoDeny;
+
+      return reply.send({
+        status: isOk ? 'ok' : 'degraded',
+        statusCode: res.statusCode,
+        checks: {
+          cspValid: hasFbScript,
+          xfoDeny: hasXfoDeny,
+          fbqInit: hasFbqInit,
+          addToCart: hasAddToCart,
+        },
+        headers: {
+          'content-security-policy': csp,
+          'x-frame-options': xfo,
+        },
+      });
+    } catch (err: any) {
+      return reply.status(500).send({
+        status: 'error',
+        error: err.message,
+      });
+    }
+  });
+
+  /**
    * GET /api/admin/debug/meta-manual-history
    * Mengambil riwayat pengiriman event manual dari AuditLog.
    */
   fastify.get('/api/admin/debug/meta-manual-history', async (request: FastifyRequest, reply: FastifyReply) => {
     try {
       const tenantId = tenantOf(request);
+      const tenantMetaPixelId = (await getTenantForCapiHealth(tenantId))?.meta_pixel_id || process.env.FB_PIXEL_ID || null;
       const { logs, customers, reservations } = await getManualSendHistory(tenantId);
 
       const customerMap = new Map(customers.map((c: any) => [c.id, c]));
@@ -784,7 +833,7 @@ export async function metaAttributionAdminRoutes(fastify: FastifyInstance) {
           timestamp: log.created_at,
           eventName,
           status,
-          metaPixelId: parsedPayload.metaPixelId || '1465457801784141',
+          metaPixelId: parsedPayload.metaPixelId || tenantMetaPixelId,
           customer: {
             phone,
             name,

@@ -94,6 +94,7 @@ describe('header keamanan /admin/*', () => {
     expect(cspLine).toContain("object-src 'none'");
     expect(cspLine).toContain("base-uri 'self'");
     expect(cspLine).not.toContain("'unsafe-eval'");
-    expect(cspLine).not.toMatch(/script-src [^;]*\bhttps:/);
+    // Task 1.9: Mengizinkan hanya https://connect.facebook.net pada script-src bila ada, tolak https: bebas
+    expect(cspLine).not.toMatch(/script-src [^;]*\bhttps:(?!\/\/connect\.facebook\.net)/);
   });
 });

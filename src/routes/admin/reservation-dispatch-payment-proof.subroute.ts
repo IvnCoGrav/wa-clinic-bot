@@ -69,6 +69,7 @@ export async function reservationDispatchPaymentProofRoutes(fastify: FastifyInst
           adminIdentity: (request as any).adminIdentity,
           action: remove ? 'ADMIN_REMOVE_PROOF' : 'ADMIN_UPLOAD_PROOF',
           targetId: id,
+          tenantId,
           payload: remove ? { removed: true } : { proofUrl },
           ipAddress: request.ip,
         });
@@ -217,6 +218,7 @@ export async function reservationDispatchPaymentProofRoutes(fastify: FastifyInst
             adminIdentity: (request as any).adminIdentity,
             action: 'MQL_LEAD_EVENT_SENT',
             targetId: customerId,
+            tenantId,
             payload: { mql_triggered_at: occurredAt.toISOString() },
             ipAddress: request.ip,
           });
@@ -348,8 +350,14 @@ export async function reservationDispatchPaymentProofRoutes(fastify: FastifyInst
           } catch {}
         }
 
-        const { buildLegacyPurchaseEventId } = await import('../../services/capi.service');
-        const legacyEventIdForResend = existing.purchase_event_sent_at != null && !customPayload?.event_id
+        const { buildLegacyPurchaseEventId, buildDeterministicPurchaseEventId } = await import('../../services/capi.service');
+
+        // Task 2.4 (A-014a): Hirarki kebenaran event_id:
+        // 1. Stored snapshot di DB (purchase_event_id) jika sudah pernah terkirim / tersimpan.
+        // 2. Legacy event ID jika purchase_event_sent_at sudah ada tapi purchase_event_id belum tersimpan.
+        // 3. Deterministic purchase event ID pur_{tenantId}_{reservationId}.
+        const storedEventId = (existing as any).purchase_event_id || undefined;
+        const legacyEventId = !storedEventId && existing.purchase_event_sent_at != null
           ? buildLegacyPurchaseEventId({
               trackingCode: (existing.customer as any)?.adClick?.trackingCode,
               reservationId: existing.id,
@@ -357,6 +365,14 @@ export async function reservationDispatchPaymentProofRoutes(fastify: FastifyInst
               eventTimeSec: Math.floor(occurredAt.getTime() / 1000),
             })
           : undefined;
+        const effectiveEventId = storedEventId || legacyEventId || buildDeterministicPurchaseEventId(tenantId, existing.id);
+
+        if (customPayload?.event_id && customPayload.event_id !== effectiveEventId) {
+          request.log.warn(
+            { providedEventId: customPayload.event_id, canonicalEventId: effectiveEventId },
+            '[CAPI APPROVE] customPayload.event_id diabaikan demi integritas deduplikasi Meta CAPI; menggunakan canonical event_id.'
+          );
+        }
 
         const capiResult = await capiService.sendCapiEvent({
           eventName,
@@ -368,7 +384,7 @@ export async function reservationDispatchPaymentProofRoutes(fastify: FastifyInst
           eventTime,
           customData,
           customUserData: customPayload?.user_data,
-          customEventId: customPayload?.event_id ?? legacyEventIdForResend,
+          customEventId: effectiveEventId,
           reservationId: existing.id,
         });
         capiSkipped = capiResult.skipped === true;
@@ -382,13 +398,23 @@ export async function reservationDispatchPaymentProofRoutes(fastify: FastifyInst
           });
         }
 
+        // CAPI delivery evaluation (A-002):
+        // Jika CAPI_STRICT_DELIVERY aktif, purchase_event_sent_at hanya ditulis jika deliveryConfirmed === true
+        const { isCapiStrictDelivery } = await import('../../config/feature-flags');
+        const strictDelivery = isCapiStrictDelivery();
+        const shouldStampSentAt = strictDelivery
+          ? capiResult.deliveryConfirmed === true
+          : (capiResult.success && !capiResult.skipped);
+
         const reservation = await prisma.reservation.update({
           where: { id },
           data: {
-            ...(existing.purchase_occurred_at ? { purchase_occurred_at: occurredDate } : {}),
+            purchase_occurred_at: occurredDate, // Task 2.4: SELALU diisi saat approve
             purchase_value: resolvedVal ?? undefined,
+            purchase_event_value: resolvedVal ?? (existing as any).purchase_event_value ?? undefined,
+            purchase_event_id: capiResult.sentEventId || effectiveEventId,
             purchase_review_status: 'approved',
-            ...(capiResult.skipped !== true ? { purchase_event_sent_at: new Date() } : {}),
+            ...(shouldStampSentAt ? { purchase_event_sent_at: new Date() } : {}),
           },
         });
 
@@ -418,9 +444,14 @@ export async function reservationDispatchPaymentProofRoutes(fastify: FastifyInst
           adminIdentity: (request as any).adminIdentity,
           action: 'APPROVE_PURCHASE_EVENT',
           targetId: id,
+          tenantId: tenantId,
           payload: {
             purchase_occurred_at: occurredAt.toISOString(),
             value: resolvedVal,
+            event_id: capiResult.sentEventId || effectiveEventId,
+            events_received: capiResult.eventsReceived ?? capiResult.events_received ?? 0,
+            delivery_confirmed: capiResult.deliveryConfirmed ?? false,
+            fbtrace_id: capiResult.fbtrace_id || null,
             force: forceResend || undefined,
             forceReason: forceResend ? forceReason : undefined,
             allowAged: allowAged || undefined,
@@ -475,6 +506,7 @@ export async function reservationDispatchPaymentProofRoutes(fastify: FastifyInst
             adminIdentity: (request as any).adminIdentity,
             action: 'MQL_LEAD_EVENT_REJECTED',
             targetId: customerId,
+            tenantId,
             payload: { reason: 'ADMIN_MANUAL_OUTLIER_REJECT' },
             ipAddress: request.ip,
           });
@@ -509,6 +541,7 @@ export async function reservationDispatchPaymentProofRoutes(fastify: FastifyInst
           adminIdentity: (request as any).adminIdentity,
           action: 'REJECT_PURCHASE_OUTLIER',
           targetId: id,
+          tenantId,
           payload: { reason: 'ADMIN_MANUAL_OUTLIER_REJECT' },
           ipAddress: request.ip,
         });
@@ -541,6 +574,23 @@ export async function reservationDispatchPaymentProofRoutes(fastify: FastifyInst
       const tenantId = tenantOf(request);
       const { id } = request.params;
       try {
+        if (id.startsWith('lead_')) {
+          const customerId = id.replace('lead_', '');
+          await auditService.logAdminAction({
+            apiKey: (request as any).adminKeyUsed,
+            adminIdentity: (request as any).adminIdentity,
+            action: 'UNREJECT_MQL_LEAD_OUTLIER',
+            targetId: customerId,
+            tenantId,
+            payload: { previous_status: 'ignored_outlier', new_status: 'pending' },
+            ipAddress: request.ip,
+          });
+          return reply.status(200).send({
+            success: true,
+            message: 'Status moderasi lead berhasil dikembalikan ke pending',
+          });
+        }
+
         const existing = await prisma.reservation.findFirst({
           where: { id, tenant_id: tenantId },
         });
@@ -564,6 +614,7 @@ export async function reservationDispatchPaymentProofRoutes(fastify: FastifyInst
           adminIdentity: (request as any).adminIdentity,
           action: 'UNREJECT_PURCHASE_OUTLIER',
           targetId: id,
+          tenantId,
           payload: { previous_status: 'ignored_outlier', new_status: 'pending' },
           ipAddress: request.ip,
         });

@@ -57,6 +57,9 @@ fi
 echo "--> Recreate App Container Safely (WAHA untouched)..."
 docker compose up -d --no-deps app
 
+echo "--> Reload Caddy Reverse Proxy (apply Caddyfile changes)..."
+docker compose exec -T caddy caddy reload || docker compose restart caddy
+
 echo "--> Run Database Migrations..."
 docker compose exec -T app npx prisma migrate deploy
 

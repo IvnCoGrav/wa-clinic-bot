@@ -204,6 +204,11 @@ export function fetchManualCapiHistory<T = any>(): Promise<T> {
   return apiRequest('/api/admin/debug/meta-manual-history');
 }
 
+/** Cek status kesehatan Meta Pixel & CSP Landing (GET /api/admin/debug/meta-pixel-health). */
+export function fetchMetaPixelHealth<T = any>(): Promise<T> {
+  return apiRequest('/api/admin/debug/meta-pixel-health');
+}
+
 interface CacheEntry<T = any> {
   data: T;
   timestamp: number;

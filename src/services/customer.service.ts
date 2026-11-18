@@ -2255,11 +2255,14 @@ export class CustomerService {
               adminIdentity: 'System (MQL Automation)',
               action: 'MQL_LEAD_EVENT_SENT',
               targetId: customerId,
+              tenantId,
               payload: {
-                phone: updatedCustomer.phone,
                 mql_bubble_count: newCount,
                 mql_threshold: mqlThreshold,
-                fbtrace_id: capiResult.fbtrace_id,
+                event_id: capiResult.sentEventId,
+                events_received: capiResult.eventsReceived ?? capiResult.events_received ?? 0,
+                delivery_confirmed: capiResult.deliveryConfirmed ?? false,
+                fbtrace_id: capiResult.fbtrace_id || null,
                 hasAdClick: !!(updatedCustomer as any)?.adClick,
               },
             });

@@ -29,11 +29,7 @@ describe('Audit service — ketahanan & tenant (Cfg-009)', () => {
     expect(errSpy).toHaveBeenCalled();
   });
 
-  it('memberi warning bila tenantId tidak diberikan dan memakai default', async () => {
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    const create = vi.spyOn(prisma.auditLog, 'create').mockResolvedValue({ id: 'a' } as any);
-    await auditService.logAdminAction({ ...base });
-    expect(warn).toHaveBeenCalledWith(expect.stringContaining('tenantId tidak diberikan'));
-    expect((create.mock.calls[0][0] as any).data.tenant_id).toBe('default-tenant');
+  it('menolak (throw error) bila tenantId tidak diberikan untuk mencegah kebocoran antar-tenant', async () => {
+    await expect(auditService.logAdminAction({ ...base })).rejects.toThrow(/tenantId wajib diberikan/i);
   });
 });

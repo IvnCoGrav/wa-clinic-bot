@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback, Suspense } from 'react';
 import { Link } from 'react-router-dom';
-import { apiRequest, fetchMetaClicks, fetchMetaSummary, testCapiEvent, sendManualCapiEvent, fetchManualCapiHistory } from '../../services/api';
+import { apiRequest, fetchMetaClicks, fetchMetaSummary, testCapiEvent, sendManualCapiEvent, fetchManualCapiHistory, fetchMetaPixelHealth } from '../../services/api';
 import { useUiFeedback } from '../../components/common/UiFeedback';
 import { formatWib } from '../../utils/dateWib';
 import { Pagination } from '../../components/common/Pagination';
@@ -267,6 +267,12 @@ export const MetaClickCatcher: React.FC = () => {
   const [manualHistory, setManualHistory] = useState<ManualHistoryItem[]>([]);
   const [loadingHistory, setLoadingHistory] = useState(true);
 
+  // Pixel & CSP Health State (Task 1.8)
+  const [pixelHealth, setPixelHealth] = useState<{
+    status: 'ok' | 'degraded';
+    checks?: { cspValid: boolean; xfoDeny: boolean; fbqInit: boolean; addToCart: boolean };
+  } | null>(null);
+
   // Detail modal inspector
   const [selectedItem, setSelectedItem] = useState<any>(null);
   const [showRawJson, setShowRawJson] = useState(false);
@@ -350,6 +356,14 @@ export const MetaClickCatcher: React.FC = () => {
   useEffect(() => {
     loadManualHistory();
   }, [loadManualHistory]);
+
+  useEffect(() => {
+    if (activeTab === 'observability') {
+      fetchMetaPixelHealth()
+        .then((res: any) => setPixelHealth(res))
+        .catch(() => setPixelHealth({ status: 'degraded' }));
+    }
+  }, [activeTab]);
 
   const handleSendManualEvent = async () => {
     if (!manualPhone.trim()) {
@@ -577,6 +591,39 @@ export const MetaClickCatcher: React.FC = () => {
           sub={`Contact ${summary?.matchedChats ?? 0} + Purchase ${summary?.purchaseEvents ?? 0}`}
         />
       </section>
+
+      {/* ---------------- 1a. Meta Pixel & Edge CSP Health (Fase 1) ---------------- */}
+      {pixelHealth && (
+        <div
+          className={`flex flex-wrap items-center justify-between gap-2 text-xs rounded-xl px-3.5 py-2.5 border ${
+            pixelHealth.status === 'ok'
+              ? 'bg-success-soft text-success border-success-line'
+              : 'bg-warning-soft text-warning border-warning-line'
+          }`}
+        >
+          <div className="flex items-center gap-2">
+            {pixelHealth.status === 'ok' ? (
+              <CheckCircle2 size={15} className="text-success shrink-0" />
+            ) : (
+              <AlertTriangle size={15} className="text-warning shrink-0" />
+            )}
+            <span className="font-medium">
+              Meta Pixel & Edge CSP Health:{' '}
+              {pixelHealth.status === 'ok'
+                ? 'Healthy (connect.facebook.net aktif & XFO DENY)'
+                : 'Perlu Perhatian'}
+            </span>
+          </div>
+          {pixelHealth.checks && (
+            <div className="flex items-center gap-3 text-[11px] opacity-90">
+              <span>CSP Host: {pixelHealth.checks.cspValid ? '✓' : '✗'}</span>
+              <span>XFO DENY: {pixelHealth.checks.xfoDeny ? '✓' : '✗'}</span>
+              <span>fbq Init: {pixelHealth.checks.fbqInit ? '✓' : '✗'}</span>
+              <span>AddToCart: {pixelHealth.checks.addToCart ? '✓' : '✗'}</span>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* ---------------- 1b. Dual-kolom Web-side vs Server-side (Fase 5b) ---------------- */}
       {summary?.pageViewsBySource && (
@@ -1046,7 +1093,7 @@ export const MetaClickCatcher: React.FC = () => {
             </div>
           </div>
           <p className="text-[11px] text-ink-3 pt-1">
-            * Riwayat audit pengiriman event konversi langsung ke Pixel Meta: 1465457801784141.
+            * Riwayat audit pengiriman event konversi langsung ke Pixel Meta.
           </p>
         </div>
       </section>

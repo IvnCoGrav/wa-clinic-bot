@@ -9,15 +9,18 @@
 
     header {
         Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
-        X-Frame-Options "SAMEORIGIN"
         X-Content-Type-Options "nosniff"
         Referrer-Policy "strict-origin-when-cross-origin"
-        # S-011: script-src tanpa 'unsafe-eval' dan tanpa https: bebas.
-        # 'unsafe-inline' dipertahankan karena index.html dashboard memuat skrip
-        # anti-flicker tema inline (area dashboard milik pengguna).
-        Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https: blob:; font-src 'self' data: https:; connect-src 'self' https: wss: ws:; media-src 'self' blob: https:; frame-ancestors 'self'; base-uri 'self'; form-action 'self'; object-src 'none';"
         Permissions-Policy "camera=(), microphone=(), geolocation=(self)"
         -Server
+    }
+
+    # S-011 / A-001: Isolasi CSP dashboard ke area @ui (/admin*), agar tidak menimpa
+    # CSP landing /cta /pricelist yang memerlukan connect.facebook.net untuk Meta Pixel AddToCart.
+    @ui path /admin*
+    header @ui {
+        X-Frame-Options "SAMEORIGIN"
+        Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https: blob:; font-src 'self' data: https:; connect-src 'self' https: wss: ws:; media-src 'self' blob: https:; frame-ancestors 'self'; base-uri 'self'; form-action 'self'; object-src 'none';"
     }
 
     # AI Copilot: stream SSE panjang (budget 5 menit). lb_try_duration 0s penting

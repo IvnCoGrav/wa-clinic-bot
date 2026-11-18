@@ -478,6 +478,7 @@ export async function trackingRoutes(fastify: FastifyInstance) {
               utmMedium: viewData.utmMedium,
               utmCampaign: viewData.utmCampaign,
             },
+            eventId: body.eventID,
             tenantId: tenant_id,
             customData: {
               traffic_source: viewData.fbclid ? 'paid' : 'organic',
