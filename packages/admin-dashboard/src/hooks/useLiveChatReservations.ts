@@ -14,6 +14,10 @@ import {
 } from '../utils/dateWib';
 import { fireAndForget } from '../services/errorPolicy';
 import { resolveEffectiveLocationSource } from '../utils/geoUtils';
+import {
+  pickOwnedActiveReservations,
+  filterOwnedReservations,
+} from '../utils/reservationOwnership';
 
 // Cache referensi wilayah (backend gazetteer) — diambil sekali per sesi invoice
 let cachedWilayahRef: WilayahReference | null = null;
@@ -52,6 +56,7 @@ export interface UseLiveChatReservationsProps {
     cancelText?: string;
     danger?: boolean;
   }) => Promise<boolean>;
+  refreshChatItem: (conversationId: string) => Promise<void>;
 }
 
 export function useLiveChatReservations({
@@ -62,6 +67,7 @@ export function useLiveChatReservations({
   messages,
   toast,
   confirm,
+  refreshChatItem,
 }: UseLiveChatReservationsProps) {
   const [customerDetailModalOpen, setCustomerDetailModalOpen] = useState(false);
   const [customerDetailEditMode, setCustomerDetailEditMode] = useState(false);
@@ -86,6 +92,17 @@ export function useLiveChatReservations({
       // Gagal memuat alamat = anggap belum punya alamat tersimpan.
       .catch(() => setSavedAddressCount(0));
   }, [customerDetailData?.id, selectedChat?.customerId]);
+
+  const customerDetailRequestRef = useRef(0);
+
+  // Invarian: detail customer HARUS milik chat terpilih. Berlaku untuk SEMUA jalur
+  // pindah chat (termasuk chip "Telat" yang tidak lewat handleSelect).
+  useEffect(() => {
+    customerDetailRequestRef.current += 1; // batalkan respons yang masih terbang
+    setCustomerDetailData((prev: any) =>
+      prev && selectedChat?.customerId && prev.id !== selectedChat.customerId ? null : prev
+    );
+  }, [selectedChat?.conversationId, selectedChat?.customerId]);
 
   const [refreshingLocation, setRefreshingLocation] = useState(false);
   // Reservation detail dari riwayat (klik card reservasi)
@@ -176,6 +193,7 @@ export function useLiveChatReservations({
     setCustomerDetailModalOpen(true);
     pushModalHistory('customer-detail');
     setCustomerDetailLoading(true);
+    const requestId = ++customerDetailRequestRef.current;
     // Instant preliminary data so modal never opens empty
     const initialLabels = (chat.customerLabels || []).map((l) => ({ label: l }));
     setCustomerDetailData({
@@ -189,19 +207,21 @@ export function useLiveChatReservations({
     });
     try {
       const res = await apiRequest(`/api/admin/customers/${chat.customerId}`);
-      if (res?.data) {
-        const fetchedLabels = (res.data.labels && res.data.labels.length > 0)
-          ? res.data.labels
-          : initialLabels;
-        setCustomerDetailData({
-          ...res.data,
-          labels: fetchedLabels,
-        });
-      }
+      if (requestId !== customerDetailRequestRef.current) return; // respons basi
+      if (!res?.data || res.data.id !== chat.customerId) return; // pemilik beda
+      const fetchedLabels = (res.data.labels && res.data.labels.length > 0)
+        ? res.data.labels
+        : initialLabels;
+      setCustomerDetailData({
+        ...res.data,
+        labels: fetchedLabels,
+      });
     } catch (err: any) {
       // Preliminary data already active
     } finally {
-      setCustomerDetailLoading(false);
+      if (requestId === customerDetailRequestRef.current) {
+        setCustomerDetailLoading(false);
+      }
     }
   };
 
@@ -303,49 +323,21 @@ export function useLiveChatReservations({
   };
 
   const handleReservationUpdate = async (deletedReservationId?: string) => {
-    const cid = customerDetailData?.id || selectedChat?.customerId;
-    if (cid) {
+    const targetChat = selectedChat;
+    const targetCustomerId = targetChat?.customerId || null;
+    if (targetCustomerId) {
       try {
-        const res = await apiRequest(`/api/admin/customers/${cid}`);
-        const reservations = res?.data?.reservations || [];
-        const isHoldValidLocal = (r: any) => {
-          if (!r || r.status !== 'hold') return false;
-          if (!r.booking_date) return false;
-          const bd = new Date(r.booking_date).getTime();
-          if (isNaN(bd) || bd < Date.now() - 2 * 60 * 60 * 1000) return false;
-          return true;
-        };
-        const activeHold = reservations.find((r: any) => isHoldValidLocal(r)) || null;
-        const startOfToday = new Date();
-        startOfToday.setHours(0, 0, 0, 0);
-        const activeConfirmed = reservations.find((r: any) => {
-          if (!r || (r.status !== 'confirmed' && r.status !== 'en_route') || !r.booking_date) return false;
-          const bd = new Date(r.booking_date).getTime();
-          return !isNaN(bd) && bd >= startOfToday.getTime();
-        }) || null;
-        const activePending = reservations.find((r: any) => r.status === 'pending') || null;
-        const hasActiveHold = Boolean(activeHold);
-        const hasUpcomingBooking = Boolean(activeConfirmed);
-        const hasPendingBooking = Boolean(activePending);
-        setCustomerDetailData((prev: any) => ({ ...prev, ...res.data, reservations }));
-        if (selectedChat) {
-          setChats((prev) => {
-            const updated = prev.map((c) => {
-              if (c.conversationId !== selectedChat?.conversationId) return c;
-              return {
-                ...c,
-                hasUpcomingBooking,
-                hasPendingBooking,
-                hasActiveHold,
-                activeHoldReservation: activeHold ? { ...activeHold } : null,
-                activeConfirmedReservation: activeConfirmed ? { ...activeConfirmed } : null,
-                activePendingReservation: activePending ? { ...activePending } : null,
-                purchaseCount: reservations.length,
-              };
-            });
-            chatsRef.current = updated;
-            return updated;
+        const res = await apiRequest(`/api/admin/customers/${targetCustomerId}`);
+        const data = res?.data;
+        if (data && data.id === targetCustomerId) {
+          const reservations = filterOwnedReservations(data.reservations, targetCustomerId);
+          setCustomerDetailData((prev: any) => {
+            if (prev && prev.id !== targetCustomerId) return prev;
+            return { ...(prev || {}), ...data, reservations };
           });
+          if (targetChat) {
+            await refreshChatItem(targetChat.conversationId);
+          }
         }
       } catch {
         // Kartu chat bisa menampilkan status booking lama bila ini gagal, jadi
@@ -361,7 +353,9 @@ export function useLiveChatReservations({
       try {
         const res = await apiRequest(`/api/admin/reservation/${selectedReservation.id}`);
         const data = res?.data || res;
-        if (data) setSelectedReservation(data);
+        if (data && (!targetCustomerId || data?.customer_id === targetCustomerId)) {
+          setSelectedReservation(data);
+        }
       } catch {
         // Detail lama tetap tampil; tindakan berikutnya akan memuat ulang.
       }
@@ -390,52 +384,31 @@ export function useLiveChatReservations({
     setShowQuickBookingModal(true);
   };
 
-  const isHoldValid = (r: any) => {
-    if (!r || r.status !== 'hold') return false;
-    if (!r.booking_date) return false;
-    const bd = new Date(r.booking_date).getTime();
-    if (isNaN(bd) || bd < Date.now() - 2 * 60 * 60 * 1000) return false;
-    return true;
-  };
-
-  const activeHoldReservation = useMemo(() => {
-    if (!selectedChat) return null;
-    if (customerDetailData && customerDetailData.id === selectedChat.customerId) {
-      return customerDetailData.reservations?.find((r: any) => isHoldValid(r)) || null;
+  const ownedActive = useMemo(() => {
+    if (!selectedChat) {
+      return {
+        activeHold: null,
+        activeConfirmed: null,
+        activePending: null,
+        hasActiveHold: false,
+        hasUpcomingBooking: false,
+        hasPendingBooking: false,
+      };
     }
-    const fromChat = (selectedChat as any).activeHoldReservation;
-    if (fromChat && isHoldValid(fromChat)) return fromChat;
-    return null;
+    const source =
+      customerDetailData && customerDetailData.id === selectedChat.customerId
+        ? customerDetailData.reservations
+        : [
+            (selectedChat as any).activeConfirmedReservation,
+            (selectedChat as any).activeHoldReservation,
+            (selectedChat as any).activePendingReservation,
+          ];
+    return pickOwnedActiveReservations(source, selectedChat.customerId);
   }, [selectedChat, customerDetailData]);
 
-  const activeConfirmedReservation = useMemo(() => {
-    if (!selectedChat) return null;
-    const isUpcomingConfirmed = (r: any) => {
-      if (!r || (r.status !== 'confirmed' && r.status !== 'en_route') || !r.booking_date) return false;
-      const bd = new Date(r.booking_date).getTime();
-      if (isNaN(bd)) return false;
-      // Jadwal aktif = hari ini atau ke depan (selaras endpoint active-reservations).
-      const startOfToday = new Date();
-      startOfToday.setHours(0, 0, 0, 0);
-      return bd >= startOfToday.getTime();
-    };
-    if (customerDetailData && customerDetailData.id === selectedChat.customerId) {
-      return customerDetailData.reservations?.find((r: any) => isUpcomingConfirmed(r)) || null;
-    }
-    const fromChat = (selectedChat as any).activeConfirmedReservation;
-    if (fromChat && isUpcomingConfirmed(fromChat)) return fromChat;
-    return null;
-  }, [selectedChat, customerDetailData]);
-
-  const activePendingReservation = useMemo(() => {
-    if (!selectedChat) return null;
-    if (customerDetailData && customerDetailData.id === selectedChat.customerId) {
-      return customerDetailData.reservations?.find((r: any) => r.status === 'pending') || null;
-    }
-    const fromChat = (selectedChat as any).activePendingReservation;
-    if (fromChat) return fromChat;
-    return null;
-  }, [selectedChat, customerDetailData]);
+  const activeHoldReservation = ownedActive.activeHold;
+  const activeConfirmedReservation = ownedActive.activeConfirmed;
+  const activePendingReservation = ownedActive.activePending;
 
   const handleOpenQuickReservation = async () => {
     if (!selectedChat) {
@@ -460,7 +433,9 @@ export function useLiveChatReservations({
     if (selectedChat.customerId && (!customerDetailData || customerDetailData.id !== selectedChat.customerId)) {
       try {
         const res = await apiRequest(`/api/admin/customers/${selectedChat.customerId}`);
-        if (res?.data) setCustomerDetailData(res.data);
+        if (res?.data && res.data.id === selectedChat.customerId && selectedIdRef.current === selectedChat.conversationId) {
+          setCustomerDetailData(res.data);
+        }
       } catch {
         // Data chat yang sudah ada tetap dipakai untuk pra-isi.
       }
@@ -541,7 +516,9 @@ export function useLiveChatReservations({
     if (selectedChat.customerId && (!customerDetailData || customerDetailData.id !== selectedChat.customerId)) {
       try {
         const res = await apiRequest(`/api/admin/customers/${selectedChat.customerId}`);
-        if (res?.data) setCustomerDetailData(res.data);
+        if (res?.data && res.data.id === selectedChat.customerId && selectedIdRef.current === selectedChat.conversationId) {
+          setCustomerDetailData(res.data);
+        }
       } catch {
         // Data chat yang sudah ada tetap dipakai untuk pra-isi.
       }

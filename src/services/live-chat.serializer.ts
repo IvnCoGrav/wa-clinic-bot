@@ -76,7 +76,7 @@ export function serializeLiveChatConversation(
       status: res.status || 'pending',
       treatment_category: res.treatment_category || 'BABY',
       treatment_detail: res.treatment_detail || null,
-      duration_minutes: (res as any).duration_minutes || 60,
+      duration_minutes: (res as any).duration_minutes ?? null,
       purchase_value: Number(res.purchase_value) || 0,
       payment_method: (res as any).payment_method || null,
       proof_url: (res as any).proof_url || null,

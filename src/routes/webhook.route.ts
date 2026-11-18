@@ -1398,7 +1398,7 @@ export async function webhookRoutes(fastify: FastifyInstance) {
             await tryCaptureReservationFormFromRaw({
               tenantId: resolvedTenantId,
               customerId: customer.id,
-              chatId,
+              chatId, conversationId: conversation?.id,
               raw,
               history: conversation?.history || [],
               source: 'WEBHOOK_HUMAN_GRACE_CAPTURE',
@@ -1436,7 +1436,7 @@ export async function webhookRoutes(fastify: FastifyInstance) {
             const result = await tryCaptureReservationFormFromRaw({
               tenantId: resolvedTenantId,
               customerId: customer.id,
-              chatId,
+              chatId, conversationId: conversation?.id,
               raw,
               history: conversation?.history || [],
               source: 'WEBHOOK_HOLD_DISABLED_CAPTURE',
@@ -1512,7 +1512,7 @@ export async function webhookRoutes(fastify: FastifyInstance) {
             await tryCaptureReservationFormFromRaw({
               tenantId: resolvedTenantId,
               customerId: customer.id,
-              chatId,
+              chatId, conversationId: conversation?.id,
               raw,
               history: conversation?.history || [],
               source: 'WEBHOOK_HUMAN_EXPLICIT_CAPTURE',

@@ -250,6 +250,7 @@ export const LiveChatMonitor: React.FC = () => {
     messages,
     toast,
     confirm,
+    refreshChatItem,
   });
 
   const {
