@@ -3,10 +3,26 @@
 Catatan temuan yang sengaja dipisah dari fitur aktif, supaya tidak hilang dan
 tidak disalahartikan sebagai bug dari perubahan terbaru.
 
-## 356. [Meta CAPI / Funnel] Audit Menyeluruh 17 Titik Kritis Meta Funnel & Silent Failure (2026-11-18, FASE 0 s.d. 7 IMPLEMENTED & VERIFIED)
+## 357. [Live Chat / Audit] HTTP 500 Pasca-Kirim WA akibat `AuditService.logAdminAction` Throw Tanpa `tenantId` (2026-11-18, RESOLVED — Tech Debt Observabilitas OPEN)
 
-- **Status:** IMPLEMENTED & VERIFIED (2026-11-18, FASE 0 s.d. 7 SELESAI). Referensi plan: `plan-remediasi-meta-capi.md`.
-- **Gejala & Ringkasan Audit (A-001 s.d. A-017):**
+- **Status:** RESOLVED (Hotfix P0-1, 2026-11-18). Sisa utang teknis observabilitas (A-008) dan flag kill-switch (A-010) tetap OPEN.
+- **Ditemukan:** 2026-11-18 17:35 WIB (setelah deploy `55d71359` / `1c185363`).
+- **Dampak Produksi (Tercatat):**
+  - **3× HTTP 500 live** pada `POST /api/admin/live-chat/conversations/:id/reply` (`15:52:51`, `15:53:08`, `17:34:55 WIB`), menampilkan toast *"Gagal mengirim balasan: An internal server error occurred — periksa dulu apakah pesan sudah masuk ke pasien sebelum mengirim ulang."* padahal seluruh pesan WA sudah terkirim dan tercatat di DB.
+  - **21 pesan ADMIN** dalam periode pasca-deploy kehilangan baris `audit_logs` (`LIVE_CHAT_ADMIN_REPLY`) karena exception terjadi sebelum `prisma.auditLog.create`.
+- **Akar Masalah:** Commit `55d71359` menambah runtime `throw new Error("[Audit Service] tenantId wajib diberikan...")` sementara tipe parameter `tenantId?: string` tetap opsional → lolos `tsc`, meninggalkan 58 call-site di 12 file tanpa `tenantId`. Selain itu, pipeline sanitasi/hash/catch di `AuditService.logAdminAction` belum terisolasi penuh dalam `try/catch` fail-soft.
+- **Perbaikan Fondasional (P0-1):**
+  - Mewajibkan `tenantId: string` di TypeScript + penjaga compile-time `_AssertAuditTenantRequired` di `src/services/audit.service.ts` dan mengisi `tenantId` eksplisit di seluruh 58 call-site (12 file).
+  - Fail-soft total pada seluruh badan `logAdminAction` (outer `try/catch`, koersi `apiKey` non-string, fallback `DEFAULT_TENANT_ID` dengan log `[AUDIT_FAILURE]`, penanganan `catch(null)`).
+  - Hardening `src/services/audit-payload-sanitizer.ts`: ancestor-stack `WeakSet` (shared object non-circular aman), konversi `BigInt` bersarang, `Date`, `Error` tanpa `message` PII, serta penghapusan double-encode JSON string top-level (A-011 CLOSED).
+- **Sisa Tech Debt (OPEN):**
+  - **A-008 (Observabilitas Kegagalan Audit):** Kegagalan audit / fallback `DEFAULT_TENANT_ID` saat ini baru tercatat ke `console.error` dengan prefix `[AUDIT_FAILURE]`; belum ada metrik/alert terpusat ke Telegram/monitoring untuk mendeteksi kehilangan audit secara proaktif.
+  - **A-010 (Flag Mati `AUDIT_PII_REDACTION`):** `isAuditPiiRedaction()` di `src/config/feature-flags.ts` belum tersambung sebagai kill-switch runtime di `audit.service.ts` (sanitasi selalu aktif).
+
+## 356. [Meta CAPI / Funnel] Audit Menyeluruh 17 Titik Kritis Meta Funnel & Silent Failure (2026-11-18, FASE 0 s.d. 7 IMPLEMENTED & VERIFIED — P0-1 Audit Fixed di #357)
+
+- **Status:** IMPLEMENTED & VERIFIED (2026-11-18, FASE 0 s.d. 7 SELESAI; regresi P0-1 Audit diperbaiki di #357). Referensi plan: `plan-remediasi-meta-capi.md`.
+- **Gejala & Ringkasan Audit Awal (A-001 s.d. A-017):**
   - **A-001 (Edge CSP Block):** CSP di Caddyfile (`Caddyfile:14-22`) membatasi `script-src` hanya `'self' 'unsafe-inline'`, menimpa CSP aplikasi di `/cta` dan `/pricelist`, sehingga file JS pixel `https://connect.facebook.net` diblokir dan browser client gagal memicu event `AddToCart`.
   - **A-002 (CAPI Silent Delivery Failure):** Response HTTP 200 dari Meta Graph API dengan payload `{"events_received": 0}` (atau respon error Graph API) dianggap sebagai keberhasilan pengiriman, langsung menandai `purchase_event_sent_at` di DB tanpa verifikasi `events_received > 0` dan tanpa mencatat `fbtrace_id`.
   - **A-003 (AdClick P2002 Constraint Violation):** Pelanggan lama yang mengklik tautan promo baru memicu error PostgreSQL Unique Constraint `P2002` pada `AdClick.customerId` di `src/services/ad-attribution.service.ts` saat menjalankan `updateMany`, mengakibatkan touchpoint atribusi gagal tertaut.

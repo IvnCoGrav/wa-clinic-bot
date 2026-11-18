@@ -93,6 +93,7 @@ export async function reservationSeriesRoutes(fastify: FastifyInstance) {
         await auditService.logAdminAction({
           apiKey: (request as any).adminKeyUsed,
           adminIdentity: (request as any).adminIdentity,
+          tenantId,
           action: 'CREATE_RESERVATION_SERIES',
           targetId: series.id,
           payload: { customerId, treatmentName, treatmentCategory, totalSessions, purchaseValue, deliveryFee, customerAddressId: customerAddressId || null, sessionCount: sessions.length },
@@ -214,6 +215,7 @@ export async function reservationSeriesRoutes(fastify: FastifyInstance) {
         await auditService.logAdminAction({
           apiKey: (request as any).adminKeyUsed,
           adminIdentity: (request as any).adminIdentity,
+          tenantId,
           action: 'PAUSE_RESERVATION_SERIES',
           targetId: request.params.id,
           payload: result,
@@ -240,6 +242,7 @@ export async function reservationSeriesRoutes(fastify: FastifyInstance) {
         await auditService.logAdminAction({
           apiKey: (request as any).adminKeyUsed,
           adminIdentity: (request as any).adminIdentity,
+          tenantId,
           action: 'RESUME_RESERVATION_SERIES',
           targetId: request.params.id,
           payload: result,
@@ -266,6 +269,7 @@ export async function reservationSeriesRoutes(fastify: FastifyInstance) {
         await auditService.logAdminAction({
           apiKey: (request as any).adminKeyUsed,
           adminIdentity: (request as any).adminIdentity,
+          tenantId,
           action: 'CANCEL_RESERVATION_SERIES',
           targetId: request.params.id,
           payload: result,

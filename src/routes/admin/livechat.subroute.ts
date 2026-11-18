@@ -248,6 +248,7 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
       await auditService.logAdminAction({
         apiKey: (request as any).adminKeyUsed,
         adminIdentity: (request as any).adminIdentity,
+        tenantId,
         action: 'LIVE_CHAT_SYNC_HISTORY',
         targetId: tenantId,
         payload: { limit, offset, messagesPerChat, syncedChats: result.syncedChats, syncedMessages: result.syncedMessages, totalChats: result.totalChats },
@@ -280,6 +281,7 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
       await auditService.logAdminAction({
         apiKey: (request as any).adminKeyUsed,
         adminIdentity: (request as any).adminIdentity,
+        tenantId,
         action: 'LIVE_CHAT_SYNC_FULL_START',
         targetId: tenantId,
         payload: { messagesPerChat, started: result.started },
@@ -505,6 +507,7 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
     ) => {
       const { id } = request.params;
       const { text, imageB64, mediaUrl, thumbB64, mimeType, fileName, adminName, acknowledgeOutsideWindow, replyToMessageId, isInternalNote, dispatchOrigin } = request.body || {};
+      const replyTenantId = resolveSessionTenantId(request);
 
       const result = await liveChatService.sendAdminReply({
         conversationId: id,
@@ -514,7 +517,7 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
         thumbB64,
         mimeType,
         fileName,
-        tenantId: resolveSessionTenantId(request),
+        tenantId: replyTenantId,
         adminName,
         acknowledgeOutsideWindow,
         replyToMessageId,
@@ -540,6 +543,7 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
         await auditService.logAdminAction({
           apiKey: (request as any).adminKeyUsed,
           adminIdentity: (request as any).adminIdentity,
+          tenantId: replyTenantId,
           action: 'INTERNAL_NOTE_CREATED',
           targetId: id,
           payload: { adminName, messageId: result.messageId },
@@ -551,6 +555,7 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
       await auditService.logAdminAction({
         apiKey: (request as any).adminKeyUsed,
         adminIdentity: (request as any).adminIdentity,
+        tenantId: replyTenantId,
         action: 'LIVE_CHAT_ADMIN_REPLY',
         targetId: id,
         payload: { adminName, messageId: result.messageId, provider: result.provider },
@@ -993,6 +998,7 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
         await auditService.logAdminAction({
           apiKey: (request as any).adminKeyUsed,
           adminIdentity: (request as any).adminIdentity,
+          tenantId,
           action: 'CONVERSATION_MANUAL_RELEASE',
           targetId: id,
           payload: { releasedAt: new Date(), restoredState },
@@ -1124,6 +1130,7 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
       await auditService.logAdminAction({
         apiKey: (request as any).adminKeyUsed,
         adminIdentity: (request as any).adminIdentity,
+        tenantId,
         action: 'CONVERSATION_MANUAL_TAKEOVER',
         targetId: id,
         payload: { takenOverAt: now, previousState: existing.current_state },

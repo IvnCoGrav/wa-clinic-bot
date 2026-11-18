@@ -180,6 +180,7 @@ export async function landingAdminRoutes(fastify: FastifyInstance) {
         await auditService.logAdminAction({
           apiKey: (request as any).adminKeyUsed,
           adminIdentity: (request as any).adminIdentity,
+          tenantId: id,
           action: 'TENANT_RAW_HTML_UPLOAD',
           targetId: id,
           payload: { sizeBytes: sizeInBytes, landingType: 'RAW_HTML' },
@@ -240,6 +241,7 @@ export async function landingAdminRoutes(fastify: FastifyInstance) {
         await auditService.logAdminAction({
           apiKey: (request as any).adminKeyUsed,
           adminIdentity: (request as any).adminIdentity,
+          tenantId: id,
           action: 'TENANT_RAW_HTML_RESET',
           targetId: id,
           payload: { landingType: 'STRUCTURED_JSON' },
@@ -381,6 +383,7 @@ export async function landingAdminRoutes(fastify: FastifyInstance) {
       await auditService.logAdminAction({
         apiKey: (request as any).adminKeyUsed,
         adminIdentity: (request as any).adminIdentity,
+        tenantId,
         action: 'LANDING_PAGE_CREATE',
         targetId: created.id,
         payload: { slug, title, landingType, events },
@@ -488,6 +491,7 @@ export async function landingAdminRoutes(fastify: FastifyInstance) {
         await auditService.logAdminAction({
           apiKey: (request as any).adminKeyUsed,
           adminIdentity: (request as any).adminIdentity,
+          tenantId: existing.tenant_id || resolveSessionTenantId(request),
           action: 'LANDING_PAGE_UPDATE',
           targetId: id,
           payload: { slug, title, landingType, events, isActive: updated.is_active },
@@ -572,6 +576,7 @@ export async function landingAdminRoutes(fastify: FastifyInstance) {
         await auditService.logAdminAction({
           apiKey: (request as any).adminKeyUsed,
           adminIdentity: (request as any).adminIdentity,
+          tenantId: existing.tenant_id || resolveSessionTenantId(request),
           action: 'LANDING_PAGE_DELETE',
           targetId: id,
           payload: { slug: existing.slug, title: existing.title },

@@ -69,6 +69,7 @@ export async function googleIntegrationAdminRoutes(fastify: FastifyInstance) {
         await auditService.logAdminAction({
           apiKey: (request as any).adminKeyUsed || 'OAUTH_CALLBACK',
           adminIdentity: (request as any).adminIdentity || 'google_oauth_callback',
+          tenantId,
           action: 'CONNECT_GOOGLE_CONTACTS',
           payload: { tenantId, email: tokens.email },
           ipAddress: request.ip,
@@ -145,6 +146,7 @@ export async function googleIntegrationAdminRoutes(fastify: FastifyInstance) {
         await auditService.logAdminAction({
           apiKey: (request as any).adminKeyUsed,
           adminIdentity: (request as any).adminIdentity,
+          tenantId,
           action: 'UPDATE_GOOGLE_CONTACTS_SETTINGS',
           payload: { tenantId, isEnabled, namingTemplate, contactLabel },
           ipAddress: request.ip,
@@ -189,6 +191,7 @@ export async function googleIntegrationAdminRoutes(fastify: FastifyInstance) {
         await auditService.logAdminAction({
           apiKey: (request as any).adminKeyUsed,
           adminIdentity: (request as any).adminIdentity,
+          tenantId,
           action: 'BATCH_SYNC_GOOGLE_CONTACTS',
           payload: { tenantId, result },
           ipAddress: request.ip,
@@ -233,6 +236,7 @@ export async function googleIntegrationAdminRoutes(fastify: FastifyInstance) {
         await auditService.logAdminAction({
           apiKey: (request as any).adminKeyUsed,
           adminIdentity: (request as any).adminIdentity,
+          tenantId,
           action: 'IMPORT_GOOGLE_CONTACTS',
           payload: { tenantId, result },
           ipAddress: request.ip,
@@ -269,6 +273,7 @@ export async function googleIntegrationAdminRoutes(fastify: FastifyInstance) {
         await auditService.logAdminAction({
           apiKey: (request as any).adminKeyUsed,
           adminIdentity: (request as any).adminIdentity,
+          tenantId,
           action: 'DISCONNECT_GOOGLE_CONTACTS',
           payload: { tenantId },
           ipAddress: request.ip,
@@ -345,6 +350,7 @@ export async function googleIntegrationAdminRoutes(fastify: FastifyInstance) {
         await auditService.logAdminAction({
           apiKey: (request as any).adminKeyUsed,
           adminIdentity: (request as any).adminIdentity,
+          tenantId,
           action: 'UPDATE_SHEETS_CONFIG',
           payload: { tenantId, isEnabled: body.isEnabled },
           ipAddress: request.ip,
@@ -371,6 +377,7 @@ export async function googleIntegrationAdminRoutes(fastify: FastifyInstance) {
         await auditService.logAdminAction({
           apiKey: (request as any).adminKeyUsed,
           adminIdentity: (request as any).adminIdentity,
+          tenantId,
           action: 'TEST_SHEETS_CONNECTION',
           payload: { tenantId, ...result },
           ipAddress: request.ip,
