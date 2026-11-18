@@ -6,7 +6,7 @@ vi.mock('../../src/services/role-scope.service', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../src/services/role-scope.service')>();
   return {
     ...actual,
-    isApiScopeAllowed: vi.fn().mockResolvedValue({ allowed: true, managed: false }),
+    isApiScopeAllowed: async () => ({ allowed: true, managed: false }),
   };
 });
 

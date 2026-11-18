@@ -23,6 +23,8 @@ import { extractWahaLocation } from '../utils/waha-location-parser';
 import { parseCanonicalInboundMessage } from '../utils/canonical-message-normalizer';
 import { extractWahaAdReferral } from '../integrations/whatsapp/waha-ctwa-referral';
 import { invalidateCachedLabels } from '../integrations/waha/label-cache';
+import { extractWahaEventMessageId, parseWahaRevokePayload } from '../integrations/waha/message-candidates';
+export { extractWahaEventMessageId };
 import { safeCompare } from '../utils/auth';
 import { isBypassLabelName } from '../utils/customer-bypass';
 import {
@@ -194,9 +196,10 @@ export async function webhookRoutes(fastify: FastifyInstance) {
       if (event.event === 'message.ack') {
         const ackPayload: any = event.payload;
         if (ackPayload) {
-          const rawId = typeof ackPayload.id === 'object'
-            ? ackPayload.id?._serialized || ackPayload.id?.id
-            : ackPayload.id || ackPayload.messageId || ackPayload.key?.id;
+          const rawId =
+            extractWahaEventMessageId(ackPayload.id) ||
+            extractWahaEventMessageId(ackPayload.messageId) ||
+            extractWahaEventMessageId(ackPayload.key?.id);
 
           if (rawId && ackPayload.ack !== undefined) {
             const ackNum = Number(ackPayload.ack);
@@ -234,40 +237,15 @@ export async function webhookRoutes(fastify: FastifyInstance) {
         ));
 
       if (isRevokeEvent) {
-        const revPayload: any = event.payload || {};
-        const targetMsgId =
-          revPayload.messageId ||
-          revPayload.id?._serialized ||
-          revPayload.id ||
-          revPayload.key?.id ||
-          revPayload.protocolMessage?.key?.id ||
-          revPayload.message?.protocolMessage?.key?.id;
-
+        const { ignoredNonDirect, targetMsgId, revokedBy } = parseWahaRevokePayload(event.payload);
+        if (ignoredNonDirect) {
+          return reply.status(200).send({ status: 'REVOKE_IGNORED_NON_DIRECT' });
+        }
         if (targetMsgId) {
           console.log(`[MESSAGE REVOKE WEBHOOK] Revoking message wa_message_id=${targetMsgId}`);
           try {
-            const { prisma } = await import('../db/client');
-            const cleanId = String(targetMsgId);
-            const shortId = extractShortMessageId(cleanId);
-
-            const updated = await prisma.message.updateMany({
-              where: {
-                // AUDIT FASE 3 (K-03): jangan revoke pesan tenant lain.
-                tenant_id: resolvedTenantId,
-                OR: [
-                  { wa_message_id: cleanId },
-                  { wa_message_id: { contains: targetMsgId } },
-                  { wa_message_id: shortId },
-                ],
-              },
-              data: {
-                content: '🚫 Pesan ini telah ditarik',
-                is_revoked: true,
-                revoked_at: new Date(),
-                revoked_by: revPayload.fromMe ? 'ADMIN' : 'CUSTOMER',
-              },
-            });
-            console.log(`[MESSAGE REVOKED] Updated ${updated.count} message records for ${targetMsgId}`);
+            const updated = await messageService.markMessageDeleted(targetMsgId, resolvedTenantId, revokedBy);
+            console.log(`[MESSAGE REVOKED] Seam markMessageDeleted=${updated} for ${targetMsgId}`);
           } catch (revErr: any) {
             console.error('[MESSAGE REVOKE ERROR]', revErr.message);
           }

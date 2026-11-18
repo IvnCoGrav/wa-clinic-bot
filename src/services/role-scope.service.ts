@@ -19,6 +19,44 @@ export function normalizeRoleKey(staffRole?: string | null): string {
   return r === 'THERAPIST' ? 'therapist' : r.toLowerCase();
 }
 
+/**
+ * Pencocokan path terhadap `api_prefix` dari tabel `role_api_scopes`:
+ * - Prefix polos (`/api/admin/live-chat`): cocok persis atau sub-path (`/...`).
+ * - Prefix berparameter segmen (`/api/admin/customers/:id/addresses`): setiap
+ *   segmen `:param` cocok tepat SATU segmen non-kosong (`[^/]+`), lalu sub-path
+ *   di bawahnya ikut diizinkan. Mencegah eskalasi ke parent path (mis. DELETE
+ *   `/api/admin/customers/:id` tetap ditolak — KNOWN #358 CD-03).
+ */
+export function matchApiScopePrefix(urlPath: string, apiPrefix: string): boolean {
+  const normalizedUrl = String(urlPath || '').split('?')[0];
+  const normalizedPrefix = String(apiPrefix || '').replace(/\/+$/, '');
+  if (!normalizedPrefix) return false;
+
+  if (!normalizedPrefix.includes('/:')) {
+    return (
+      normalizedUrl === normalizedPrefix ||
+      normalizedUrl.startsWith(`${normalizedPrefix}/`)
+    );
+  }
+
+  const urlClean = normalizedUrl.replace(/\/+$/, '');
+  const patSegs = normalizedPrefix.split('/').slice(1);
+  const urlSegs = urlClean.split('/').slice(1);
+
+  if (urlSegs.length < patSegs.length) return false;
+
+  for (let i = 0; i < patSegs.length; i++) {
+    const pat = patSegs[i];
+    const seg = urlSegs[i];
+    if (pat.startsWith(':')) {
+      if (!seg || seg.length === 0) return false;
+      continue;
+    }
+    if (seg !== pat) return false;
+  }
+  return true;
+}
+
 export interface ScopeDecision {
   /** true bila request cocok dengan salah satu scope role. */
   allowed: boolean;
@@ -75,8 +113,7 @@ export async function isApiScopeAllowed(
 
   const m = String(method || 'GET').toUpperCase();
   const allowed = rows.some((r) => {
-    const prefix = r.api_prefix;
-    const pathOk = urlPath === prefix || urlPath.startsWith(prefix.endsWith('/') ? prefix : `${prefix}/`);
+    const pathOk = matchApiScopePrefix(urlPath, r.api_prefix);
     if (!pathOk) return false;
     const methods = String(r.methods || '*')
       .split(',')
@@ -85,6 +122,29 @@ export async function isApiScopeAllowed(
     return methods.includes('*') || methods.includes(m);
   });
   return { allowed, managed: true };
+}
+
+/**
+ * Invalidasi cache scope produksi saat role/scope diperbarui (KNOWN #358 V-07).
+ * - tenantId + roleKey → hapus entri spesifik
+ * - hanya tenantId     → hapus seluruh role pada tenant tersebut
+ * - tanpa argumen      → bersihkan seluruh cache
+ */
+export function invalidateScopeCache(tenantId?: string, roleKey?: string): void {
+  if (!tenantId) {
+    scopeCache.clear();
+    return;
+  }
+  if (roleKey) {
+    scopeCache.delete(`${tenantId}::${normalizeRoleKey(roleKey)}`);
+    return;
+  }
+  const prefix = `${tenantId}::`;
+  for (const key of scopeCache.keys()) {
+    if (key.startsWith(prefix)) {
+      scopeCache.delete(key);
+    }
+  }
 }
 
 /** Test-only: reset cache antar-test. */

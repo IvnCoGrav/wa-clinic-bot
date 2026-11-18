@@ -2,6 +2,8 @@ import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { prisma } from '../../db/client';
 import { DEFAULT_TENANT_ID } from '../../config/tenant';
 import { auditService } from '../../services/audit.service';
+import { invalidateScopeCache } from '../../services/role-scope.service';
+import { deriveApiScopesForAllowedPaths } from '../../domain/role-module-scopes';
 import { resolveSessionTenantId } from './route-helpers';
 
 export interface CustomRolePayload {
@@ -141,29 +143,55 @@ export async function rolesAdminRoutes(fastify: FastifyInstance) {
       }
 
       try {
-        const roleRecord = await prisma.customRole.upsert({
-          where: {
-            tenant_id_key: {
+        const derivedScopes = deriveApiScopesForAllowedPaths(allowedPaths);
+
+        // KNOWN #358 (H-04 / CD-07 / V-07): Sinkronisasi transaksional `custom_roles`
+        // + `role_api_scopes` agar custom role baru tidak langsung terkunci HTTP 403 fail-closed.
+        const roleRecord = await prisma.$transaction(async (tx) => {
+          const saved = await tx.customRole.upsert({
+            where: {
+              tenant_id_key: {
+                tenant_id: tenantId,
+                key: cleanKey,
+              },
+            },
+            update: {
+              label: label.trim(),
+              description: description ? description.trim() : null,
+              allowed_paths: allowedPaths,
+              default_redirect: defaultRedirect,
+            },
+            create: {
               tenant_id: tenantId,
               key: cleanKey,
+              label: label.trim(),
+              description: description ? description.trim() : null,
+              allowed_paths: allowedPaths,
+              default_redirect: defaultRedirect,
+              is_system: false,
             },
-          },
-          update: {
-            label: label.trim(),
-            description: description ? description.trim() : null,
-            allowed_paths: allowedPaths,
-            default_redirect: defaultRedirect,
-          },
-          create: {
-            tenant_id: tenantId,
-            key: cleanKey,
-            label: label.trim(),
-            description: description ? description.trim() : null,
-            allowed_paths: allowedPaths,
-            default_redirect: defaultRedirect,
-            is_system: false,
-          },
+          });
+
+          await tx.roleApiScope.deleteMany({
+            where: { tenant_id: tenantId, role_key: cleanKey },
+          });
+
+          if (derivedScopes.length > 0) {
+            await tx.roleApiScope.createMany({
+              data: derivedScopes.map((scope) => ({
+                tenant_id: tenantId,
+                role_key: cleanKey,
+                api_prefix: scope.apiPrefix,
+                methods: scope.methods,
+              })),
+              skipDuplicates: true,
+            });
+          }
+
+          return saved;
         });
+
+        invalidateScopeCache(tenantId, cleanKey);
 
         getMemoryRoleMap(tenantId).set(cleanKey, {
           key: roleRecord.key,
@@ -179,7 +207,12 @@ export async function rolesAdminRoutes(fastify: FastifyInstance) {
           adminIdentity: (request as any).adminIdentity,
           action: 'UPSERT_CUSTOM_ROLE',
           targetId: roleRecord.id,
-          payload: { key: cleanKey, label, allowedPathsCount: allowedPaths.length },
+          payload: {
+            key: cleanKey,
+            label,
+            allowedPathsCount: allowedPaths.length,
+            syncedScopesCount: derivedScopes.length,
+          },
           ipAddress: request.ip,
           tenantId,
         });
@@ -193,6 +226,7 @@ export async function rolesAdminRoutes(fastify: FastifyInstance) {
             isSystem: roleRecord.is_system,
             allowedPaths: roleRecord.allowed_paths,
             defaultRedirect: roleRecord.default_redirect,
+            syncedScopesCount: derivedScopes.length,
           },
         });
       } catch (err: any) {
@@ -207,7 +241,7 @@ export async function rolesAdminRoutes(fastify: FastifyInstance) {
 
   /**
    * DELETE /api/admin/roles/:key
-   * Menghapus custom role dari database.
+   * Menghapus custom role beserta scope API-nya dari database secara transaksional.
    */
   fastify.delete(
     '/api/admin/roles/:key',
@@ -221,15 +255,36 @@ export async function rolesAdminRoutes(fastify: FastifyInstance) {
       const { key } = request.params;
       const cleanKey = key.trim().toLowerCase();
 
+      if (SYSTEM_ROLE_KEYS.has(cleanKey) || cleanKey === 'super_admin' || cleanKey === 'tenant_admin') {
+        return reply.status(409).send({
+          success: false,
+          code: 'SYSTEM_ROLE_IMMUTABLE',
+          error: `Role sistem '${cleanKey}' tidak dapat dihapus lewat API.`,
+        });
+      }
+
       try {
-        await prisma.customRole.deleteMany({
-          where: {
-            tenant_id: tenantId,
-            key: cleanKey,
-            is_system: false,
-          },
+        await prisma.$transaction(async (tx) => {
+          const deleted = await tx.customRole.deleteMany({
+            where: {
+              tenant_id: tenantId,
+              key: cleanKey,
+              is_system: false,
+            },
+          });
+
+          // Hanya hapus role_api_scopes bila custom role non-sistem benar-benar terhapus
+          if (deleted.count > 0) {
+            await tx.roleApiScope.deleteMany({
+              where: {
+                tenant_id: tenantId,
+                role_key: cleanKey,
+              },
+            });
+          }
         });
 
+        invalidateScopeCache(tenantId, cleanKey);
         memoryCustomRolesByTenant.get(tenantId)?.delete(cleanKey);
 
         await auditService.logAdminAction({

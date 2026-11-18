@@ -29,8 +29,12 @@ import { Card } from '../../components/ui/Card';
 import { KpiCard } from '../../components/ui/KpiCard';
 import { Button } from '../../components/ui/Button';
 import { PageHeader } from '../../components/ui/PageHeader';
+import { useAuth } from '../../contexts/AuthContext';
+import { canDo } from '../../config/actionPermissions';
 
 export const Overview: React.FC = () => {
+  const { user } = useAuth();
+  const canViewFinancialOverview = canDo(user?.role, 'view_financial_overview');
   const gridStroke = 'rgb(var(--c-divider))';
   const tooltipStyle = {
     background: 'rgb(var(--c-surface))',
@@ -63,7 +67,9 @@ export const Overview: React.FC = () => {
       const [health, resCount, analytics, chatList] = await Promise.all([
         refreshApi<any>('/api/admin/health'),
         refreshApi<any>(`/api/admin/reservations/count?date=${todayWib}&refresh=1`),
-        refreshApi<any>(`/api/admin/financial-analytics?year=${year}&month=${month}`),
+        canViewFinancialOverview
+          ? refreshApi<any>(`/api/admin/financial-analytics?year=${year}&month=${month}`)
+          : Promise.resolve(null),
         refreshApi<any>('/api/admin/live-chat/conversations?limit=1'),
       ]);
 
@@ -71,19 +77,21 @@ export const Overview: React.FC = () => {
       setReservationsToday(pickNumber(resCount?.count));
       setChats(pickNumber(chatList?.total));
 
-      const d = analytics?.data;
-      setRevenueMonth(pickNumber(d?.kpi?.totalRevenue));
-      setAovMonth(pickNumber(d?.kpi?.aov));
-      setChartLabel(d?.monthName ? `${d.monthName} ${d.year}` : '');
-      setChartData(
-        Array.isArray(d?.dailyTrend)
-          ? d.dailyTrend.map((x: any) => ({
-              name: String(x.day),
-              revenue: x.revenue || 0,
-              bookings: x.bookingsCount || 0,
-            }))
-          : []
-      );
+      if (canViewFinancialOverview && analytics) {
+        const d = analytics?.data;
+        setRevenueMonth(pickNumber(d?.kpi?.totalRevenue));
+        setAovMonth(pickNumber(d?.kpi?.aov));
+        setChartLabel(d?.monthName ? `${d.monthName} ${d.year}` : '');
+        setChartData(
+          Array.isArray(d?.dailyTrend)
+            ? d.dailyTrend.map((x: any) => ({
+                name: String(x.day),
+                revenue: x.revenue || 0,
+                bookings: x.bookingsCount || 0,
+              }))
+            : []
+        );
+      }
     } catch (err: any) {
       console.error('Failed to load dashboard overview metrics:', err);
       setError('Gagal memuat metrik. Angka tidak ditampilkan agar tidak menyesatkan.');
@@ -111,35 +119,37 @@ export const Overview: React.FC = () => {
       }
     }, 60000);
 
-    const analyticsInterval = setInterval(async () => {
-      try {
-        const now = new Date();
-        const year = now.getFullYear();
-        const month = now.getMonth() + 1;
-        const analytics = await refreshApi<any>(`/api/admin/financial-analytics?year=${year}&month=${month}`);
-        const d = analytics?.data;
-        setRevenueMonth(pickNumber(d?.kpi?.totalRevenue));
-        setAovMonth(pickNumber(d?.kpi?.aov));
-        setChartLabel(d?.monthName ? `${d.monthName} ${d.year}` : '');
-        setChartData(
-          Array.isArray(d?.dailyTrend)
-            ? d.dailyTrend.map((x: any) => ({
-                name: String(x.day),
-                revenue: x.revenue || 0,
-                bookings: x.bookingsCount || 0,
-              }))
-            : []
-        );
-      } catch (err) {
-        console.warn('Silent analytics refresh failed:', err);
-      }
-    }, 300000);
+    const analyticsInterval = canViewFinancialOverview
+      ? setInterval(async () => {
+          try {
+            const now = new Date();
+            const year = now.getFullYear();
+            const month = now.getMonth() + 1;
+            const analytics = await refreshApi<any>(`/api/admin/financial-analytics?year=${year}&month=${month}`);
+            const d = analytics?.data;
+            setRevenueMonth(pickNumber(d?.kpi?.totalRevenue));
+            setAovMonth(pickNumber(d?.kpi?.aov));
+            setChartLabel(d?.monthName ? `${d.monthName} ${d.year}` : '');
+            setChartData(
+              Array.isArray(d?.dailyTrend)
+                ? d.dailyTrend.map((x: any) => ({
+                    name: String(x.day),
+                    revenue: x.revenue || 0,
+                    bookings: x.bookingsCount || 0,
+                  }))
+                : []
+            );
+          } catch (err) {
+            console.warn('Silent analytics refresh failed:', err);
+          }
+        }, 300000)
+      : null;
 
     return () => {
       clearInterval(countInterval);
-      clearInterval(analyticsInterval);
+      if (analyticsInterval) clearInterval(analyticsInterval);
     };
-  }, []);
+  }, [canViewFinancialOverview]);
 
   return (
     <div className="space-y-6">
@@ -157,13 +167,15 @@ export const Overview: React.FC = () => {
         }
         actions={
           <>
-            <Link
-              to="/admin/financial-analytics"
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-accent hover:bg-accent-hover text-accent-ink rounded-xl text-xs font-bold shadow-xs transition duration-150 active:scale-[0.98]"
-            >
-              <TrendingUp size={14} aria-hidden="true" />
-              <span>Dashboard Transaksi & Omset</span>
-            </Link>
+            {canViewFinancialOverview && (
+              <Link
+                to="/admin/financial-analytics"
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-accent hover:bg-accent-hover text-accent-ink rounded-xl text-xs font-bold shadow-xs transition duration-150 active:scale-[0.98]"
+              >
+                <TrendingUp size={14} aria-hidden="true" />
+                <span>Dashboard Transaksi & Omset</span>
+              </Link>
+            )}
             <Button
               variant="neutral"
               size="sm"
@@ -189,7 +201,7 @@ export const Overview: React.FC = () => {
       )}
 
       {/* Stat Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5">
+      <div className={`grid grid-cols-1 md:grid-cols-2 ${canViewFinancialOverview ? 'lg:grid-cols-4' : 'lg:grid-cols-2'} gap-4 sm:gap-5`}>
         <Link to="/admin/live-chat" className="block group">
           <KpiCard
             label="Total Percakapan"
@@ -211,27 +223,32 @@ export const Overview: React.FC = () => {
           />
         </Link>
 
-        <Link to="/admin/financial-analytics" className="block group">
-          <KpiCard
-            label="Omset Bulan Ini"
-            value={formatRupiah(revenueMonth)}
-            hint={chartLabel ? `Bulan ${chartLabel}` : 'Bulan berjalan'}
-            icon={<DollarSign size={18} className="text-success" />}
-            hoverable
-          />
-        </Link>
+        {canViewFinancialOverview && (
+          <>
+            <Link to="/admin/financial-analytics" className="block group">
+              <KpiCard
+                label="Omset Bulan Ini"
+                value={formatRupiah(revenueMonth)}
+                hint={chartLabel ? `Bulan ${chartLabel}` : 'Bulan berjalan'}
+                icon={<DollarSign size={18} className="text-success" />}
+                hoverable
+              />
+            </Link>
 
-        <KpiCard
-          label="Rata-rata Nilai (AOV)"
-          value={formatRupiah(aovMonth)}
-          hint="Bulan berjalan (AOV)"
-          icon={<TrendingUp size={18} className="text-info" />}
-        />
+            <KpiCard
+              label="Rata-rata Nilai (AOV)"
+              value={formatRupiah(aovMonth)}
+              hint="Bulan berjalan (AOV)"
+              icon={<TrendingUp size={18} className="text-info" />}
+            />
+          </>
+        )}
       </div>
 
       {/* Analytics Chart Block */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Main Composed Chart */}
+      <div className={`grid grid-cols-1 ${canViewFinancialOverview ? 'lg:grid-cols-3' : 'lg:grid-cols-1'} gap-6`}>
+        {/* Main Composed Chart — hanya untuk role dengan izin omzet (KNOWN #358 K-1) */}
+        {canViewFinancialOverview && (
         <Card className="lg:col-span-2 p-5 space-y-4">
           <div className="flex justify-between items-start">
             <div>
@@ -280,6 +297,7 @@ export const Overview: React.FC = () => {
             )}
           </div>
         </Card>
+        )}
 
         {/* BullMQ & Queue System Monitor */}
         <Card className="p-5 flex flex-col justify-between">

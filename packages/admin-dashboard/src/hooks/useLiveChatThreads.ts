@@ -239,7 +239,7 @@ export function useLiveChatThreads({
   const handleTogglePin = useCallback(async (chat: LiveChatItem) => {
     const newPinned = !chat.isPinned;
     try {
-      await apiRequest(`/api/admin/conversations/${chat.conversationId}/pin`, {
+      await apiRequest(`/api/admin/live-chat/conversations/${chat.conversationId}/pin`, {
         method: 'PATCH',
         body: JSON.stringify({ isPinned: newPinned }),
       });
@@ -261,7 +261,7 @@ export function useLiveChatThreads({
     const isCurrentlyUnread = (chat.unreadCount || 0) > 0 || chat.isManualUnread;
     const targetEndpoint = isCurrentlyUnread ? 'read' : 'unread';
     try {
-      const res = await apiRequest(`/api/admin/conversations/${chat.conversationId}/${targetEndpoint}`, {
+      const res = await apiRequest(`/api/admin/live-chat/conversations/${chat.conversationId}/${targetEndpoint}`, {
         method: 'PATCH',
       });
       if ((res as any)?.degraded) {

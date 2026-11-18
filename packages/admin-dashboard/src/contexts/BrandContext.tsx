@@ -2,12 +2,13 @@ import React, { createContext, useContext, useEffect, useState } from 'react';
 import { apiRequest } from '../services/api';
 
 /**
- * Cfg-015: identitas brand dashboard TIDAK boleh hardcode (mis. "Kala Spa").
- * Sumber tunggal: `GET /api/admin/settings` → `brand.businessName` &
- * `brand.botDisplayName` (diisi dari `Tenant.settings.brand` / kolom tenant).
+ * Cfg-015 + KNOWN #358 (A-003 / K-2): identitas brand dashboard TIDAK boleh
+ * hardcode (mis. "Kala Spa"). Sumber tunggal non-rahasia: `GET /api/admin/auth/me`
+ * → `brand.businessName` & `brand.botDisplayName` sehingga THERAPIST maupun
+ * role lain mendapat brand asli tanpa memicu 403 pada `GET /api/admin/settings`.
  *
  * Fallback netral "Klinik"/"Admin" dipakai hanya sampai respons pertama tiba
- * atau saat DB offline — bukan nama bisnis tertentu.
+ * atau saat belum login / DB offline — bukan nama bisnis tertentu.
  */
 export interface BrandIdentity {
   businessName: string;
@@ -27,7 +28,7 @@ export const BrandProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   useEffect(() => {
     let cancelled = false;
     apiRequest<{ brand?: { businessName?: string; botDisplayName?: string } | null }>(
-      '/api/admin/settings'
+      '/api/admin/auth/me'
     )
       .then((res) => {
         if (cancelled) return;

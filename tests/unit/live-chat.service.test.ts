@@ -355,6 +355,7 @@ describe('LiveChatService — monitor & balas admin', () => {
     const customer = await customerService.getOrCreateCustomer(`628600${Date.now().toString().slice(-7)}`, 'Bunda Edit', DEFAULT_TENANT_ID);
     const conversation = await conversationService.getOrCreateConversation(customer.id, DEFAULT_TENANT_ID);
 
+    const waMsgId = 'true_628600123456@c.us_3EB0EDITTEST01';
     const loggedMsg = await messageService.logMessage({
       tenantId: DEFAULT_TENANT_ID,
       conversationId: conversation.id,
@@ -362,6 +363,7 @@ describe('LiveChatService — monitor & balas admin', () => {
       content: 'Teks awal sebelum diedit',
       senderType: 'ADMIN',
       senderName: 'Admin Klinik',
+      waMessageId: waMsgId,
     });
 
     const editRes = await liveChatService.editMessage({
@@ -374,7 +376,7 @@ describe('LiveChatService — monitor & balas admin', () => {
 
     expect(editRes.success).toBe(true);
     expect(fake.editMessage).toHaveBeenCalledTimes(1);
-    expect(fake.editMessage).toHaveBeenCalledWith(customer.phone, loggedMsg.id, 'Teks perbaikan setelah diedit');
+    expect(fake.editMessage).toHaveBeenCalledWith(customer.phone, waMsgId, 'Teks perbaikan setelah diedit');
 
     const messages = await liveChatService.getConversationMessages(conversation.id, DEFAULT_TENANT_ID);
     const target = messages.find((m) => m.id === loggedMsg.id);
