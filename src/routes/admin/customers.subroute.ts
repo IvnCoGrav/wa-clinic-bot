@@ -421,11 +421,14 @@ export async function customerAdminRoutes(fastify: FastifyInstance) {
           tenantId,
         });
 
-        return reply.status(200).send({
-          success: true,
+        const isDeliveredOrSkipped = capiResult.success === true || capiResult.skipped === true;
+        return reply.status(isDeliveredOrSkipped ? 200 : 502).send({
+          success: capiResult.success === true,
           message: capiResult.skipped
             ? `Event '${eventName}' tidak dikirim ke Meta CAPI: ${capiResult.message || 'Dikecualikan oleh kebijakan CAC repeat customer'}.`
-            : `Event '${eventName}' berhasil dikirim ke Meta CAPI untuk customer ${customer.phone}.`,
+            : capiResult.success
+            ? `Event '${eventName}' berhasil dikirim ke Meta CAPI untuk customer ${customer.phone}.`
+            : `Meta CAPI gagal/tidak mengonfirmasi pengiriman '${eventName}': ${capiResult.message || 'delivery unconfirmed'}.`,
           skipped: capiResult.skipped === true,
           data: capiResult,
         });

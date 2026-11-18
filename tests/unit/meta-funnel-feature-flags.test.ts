@@ -21,7 +21,7 @@ describe('Meta Funnel Feature Flags (Fase 0)', () => {
     process.env = origEnv;
   });
 
-  it('default semua flag adalah off / warn / false', () => {
+  it('default CAPI_STRICT_DELIVERY adalah true (fail-safe), flag lainnya off / warn / false', () => {
     delete process.env.CAPI_STRICT_DELIVERY;
     delete process.env.AUDIT_PII_REDACTION;
     delete process.env.AD_CLICK_DEDUP_MODE;
@@ -31,7 +31,7 @@ describe('Meta Funnel Feature Flags (Fase 0)', () => {
     delete process.env.CSP_REPORT_ENABLED;
     delete process.env.PIXEL_HEALTH_ENABLED;
 
-    expect(isCapiStrictDelivery()).toBe(false);
+    expect(isCapiStrictDelivery()).toBe(true);
     expect(isAuditPiiRedaction()).toBe(false);
     expect(getAdClickDedupMode()).toBe('off');
     expect(getPurchaseValueGuard()).toBe('warn');
@@ -39,6 +39,9 @@ describe('Meta Funnel Feature Flags (Fase 0)', () => {
     expect(isTrackingOriginEnforced()).toBe(false);
     expect(isCspReportEnabled()).toBe(false);
     expect(isPixelHealthEnabled()).toBe(false);
+
+    process.env.CAPI_STRICT_DELIVERY = 'false';
+    expect(isCapiStrictDelivery()).toBe(false);
   });
 
   it('membaca nilai true dari environment variable', () => {

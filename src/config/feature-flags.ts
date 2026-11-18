@@ -23,9 +23,9 @@ export function isToolMaskingEnforced(): boolean {
  * Meta Funnel Remediation & Guard Flags (Fase 0-6)
  */
 
-/** Konfirmasi penerimaan event CAPI ketat (200/0 tidak menandai sent) */
+/** Konfirmasi penerimaan event CAPI ketat (200/0 tidak menandai sent). Default: true. */
 export function isCapiStrictDelivery(): boolean {
-  return process.env.CAPI_STRICT_DELIVERY === 'true';
+  return process.env.CAPI_STRICT_DELIVERY !== 'false';
 }
 
 /** Redaksi PII aktif pada penulisan audit_logs */

@@ -204,11 +204,15 @@ export async function reservationDispatchPaymentProofRoutes(fastify: FastifyInst
             },
           });
 
-          if (!leadCapiResult.success) {
-            console.error(`[CAPI ERROR] Approved Lead send failed for ${id}: ${leadCapiResult.message}`);
+          const { isCapiStrictDelivery } = await import('../../config/feature-flags');
+          const strictDelivery = isCapiStrictDelivery();
+          const leadUnconfirmed = strictDelivery && leadCapiResult.deliveryConfirmed === false;
+
+          if (!leadCapiResult.success || leadUnconfirmed) {
+            console.error(`[CAPI ERROR] Approved Lead send failed/unconfirmed for ${id}: ${leadCapiResult.message || 'events_received=0'}`);
             return reply.status(502).send({
               success: false,
-              error: `Meta CAPI menolak Lead event: ${leadCapiResult.message || 'unknown error'}`,
+              error: `Meta CAPI menolak atau tidak mengonfirmasi Lead event: ${leadCapiResult.message || 'events_received=0'}`,
               metaResponse: leadCapiResult.metaResponse,
             });
           }
@@ -219,7 +223,13 @@ export async function reservationDispatchPaymentProofRoutes(fastify: FastifyInst
             action: 'MQL_LEAD_EVENT_SENT',
             targetId: customerId,
             tenantId,
-            payload: { mql_triggered_at: occurredAt.toISOString() },
+            payload: {
+              mql_triggered_at: occurredAt.toISOString(),
+              event_id: leadCapiResult.sentEventId || null,
+              events_received: leadCapiResult.eventsReceived ?? leadCapiResult.events_received ?? 0,
+              delivery_confirmed: leadCapiResult.deliveryConfirmed ?? false,
+              fbtrace_id: leadCapiResult.fbtrace_id || null,
+            },
             ipAddress: request.ip,
           });
 
@@ -389,22 +399,27 @@ export async function reservationDispatchPaymentProofRoutes(fastify: FastifyInst
         });
         capiSkipped = capiResult.skipped === true;
 
-        if (!capiResult.success) {
-          console.error(`[CAPI ERROR] Approved Purchase send failed for ${id}: ${capiResult.message}`);
+        // CAPI delivery evaluation (A-002 / P0-6):
+        // Jika CAPI_STRICT_DELIVERY aktif (default true), deliveryConfirmed === false (mis. HTTP 200 dengan events_received=0)
+        // dianggap gagal kirim (502) agar purchase_event_sent_at & audit tidak pernah distempel palsu.
+        const { isCapiStrictDelivery } = await import('../../config/feature-flags');
+        const strictDelivery = isCapiStrictDelivery();
+        const purchaseUnconfirmed = strictDelivery && !capiSkipped && capiResult.deliveryConfirmed === false;
+
+        if (!capiResult.success || purchaseUnconfirmed) {
+          console.error(`[CAPI ERROR] Approved Purchase send failed/unconfirmed for ${id}: ${capiResult.message || 'events_received=0'}`);
           return reply.status(502).send({
             success: false,
-            error: `Meta CAPI menolak event: ${capiResult.message || 'unknown error'}`,
+            error: `Meta CAPI menolak atau tidak mengonfirmasi event: ${capiResult.message || 'events_received=0'}`,
             metaResponse: capiResult.metaResponse,
           });
         }
 
-        // CAPI delivery evaluation (A-002):
-        // Jika CAPI_STRICT_DELIVERY aktif, purchase_event_sent_at hanya ditulis jika deliveryConfirmed === true
-        const { isCapiStrictDelivery } = await import('../../config/feature-flags');
-        const strictDelivery = isCapiStrictDelivery();
-        const shouldStampSentAt = strictDelivery
-          ? capiResult.deliveryConfirmed === true
-          : (capiResult.success && !capiResult.skipped);
+        const shouldStampSentAt = !capiSkipped && (
+          strictDelivery
+            ? capiResult.deliveryConfirmed === true
+            : capiResult.success
+        );
 
         const reservation = await prisma.reservation.update({
           where: { id },
