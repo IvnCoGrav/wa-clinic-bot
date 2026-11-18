@@ -655,6 +655,7 @@ export interface TryCaptureReservationParams {
   tenantId: string;
   customerId: string;
   chatId: string;
+  conversationId?: string;
   raw: string;
   history: Array<{ role: string; content: string }>;
   source: string;
@@ -749,25 +750,27 @@ export async function tryCaptureReservationFormFromRaw(params: TryCaptureReserva
   // Notifikasi realtime ke Live Chat Dashboard via SSE liveChatHubService
   try {
     const { liveChatHubService } = await import('./live-chat-hub.service');
-    const resObj = result.reservation;
-    await liveChatHubService.publish({
-      type: 'conversation.updated',
-      tenantId,
-      payload: {
-        conversationId: chatId,
-        activeConfirmedReservation: resObj
-          ? {
-              id: resObj.id,
-              booking_date: resObj.booking_date,
-              treatment_category: resObj.treatment_category,
-              treatment_detail: resObj.treatment_detail,
-              status: resObj.status,
-            }
-          : undefined,
-        isNew: result.isNew,
-        isUpdate: result.isUpdate,
-      },
-    });
+    const { buildReservationUpdatedPayload } = await import('../domain/livechat-reservation-event');
+    let conversationId = params.conversationId || '';
+    if (!conversationId) {
+      try {
+        const { conversationService } = await import('./conversation.service');
+        conversationId = (await conversationService.getOrCreateConversation(customerId, tenantId))?.id || '';
+      } catch {}
+    }
+    if (conversationId) {
+      await liveChatHubService.publish({
+        type: 'conversation.updated',
+        tenantId,
+        payload: buildReservationUpdatedPayload({
+          conversationId,
+          customerId,
+          reservation: result.reservation ?? null,
+          isNew: result.isNew,
+          isUpdate: result.isUpdate,
+        }),
+      });
+    }
   } catch (err: any) {
     console.warn('[RESERVATION LIFECYCLE] Failed to publish liveChatHub event:', err?.message);
   }

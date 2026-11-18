@@ -9,6 +9,7 @@ import { preloadChatImage } from '../components/common/MediaImage';
 import { saveConversationScroll, getConversationScroll } from './useLiveChatScroll';
 import { extractQuotedMessage, type LiveChatItem, type ChatMessage } from '../types/livechat';
 import { useUiFeedback } from '../components/common/UiFeedback';
+import { isReservationOwnedBy } from '../utils/reservationOwnership';
 
 export interface UseLiveChatSseParams {
   selectedIdRef: React.MutableRefObject<string | null>;
@@ -255,7 +256,12 @@ export function useLiveChatSse({
                   pinFromCustomerAt: payload.pinFromCustomerAt !== undefined ? payload.pinFromCustomerAt : c.pinFromCustomerAt,
                   pinFromStaffAt: payload.pinFromStaffAt !== undefined ? payload.pinFromStaffAt : c.pinFromStaffAt,
                   sharelocRequestedAt: payload.sharelocRequestedAt !== undefined ? payload.sharelocRequestedAt : c.sharelocRequestedAt,
-                  activeConfirmedReservation: payload.activeConfirmedReservation !== undefined ? payload.activeConfirmedReservation : (c as any).activeConfirmedReservation,
+                  activeConfirmedReservation: (() => {
+                    if (payload.activeConfirmedReservation === undefined) return (c as any).activeConfirmedReservation;
+                    return isReservationOwnedBy(payload.activeConfirmedReservation, c.customerId)
+                      ? payload.activeConfirmedReservation
+                      : null;
+                  })(),
                 }
               : c
           );
@@ -267,6 +273,7 @@ export function useLiveChatSse({
             if (payload.activeConfirmedReservation) {
               setCustomerDetailData((prev: any) => {
                 if (!prev) return prev;
+                if (!isReservationOwnedBy(payload.activeConfirmedReservation, prev.id)) return prev;
                 const existing = Array.isArray(prev.reservations) ? prev.reservations : [];
                 const foundIndex = existing.findIndex((r: any) => r.id === payload.activeConfirmedReservation.id);
                 let nextRes: any[];
