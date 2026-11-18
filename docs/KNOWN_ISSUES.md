@@ -8411,3 +8411,23 @@ px prisma db push + generate penuh (kill dev server dulu, EPERM DLL lock trap) �
 - **Bukti:** Chrome DevTools console pada `http://localhost:3000/admin/reservations`, 2026-11-12. Sumber: `src/services/notificationSound.ts`.
 - **Status:** RESOLVED 2026-11-12. `media-src` di `src/app.ts` kini mengizinkan `data:`. Diverifikasi di browser: console bersih setelah reload halaman Reservasi. Bukan regresi Plan 002 (ditemukan saat uji booking manual).
 - **Usulan perbaikan (fondasional):** sajikan file audio sebagai aset statis (`/assets/...`) dan rujuk URL tersebut, bukan data URI. Alternatif cepat: tambahkan `data:` ke direktif `media-src`, tetapi itu memperluas CSP dan tidak disarankan sebelum ada kebutuhan lain.
+
+## 313. [Lokasi/Kepercayaan] Hardening presisi & kepercayaan titik lokasi (Plan v2.2, F0–F7 lokal 2026-11-17; F8/F9 pending)
+
+- **Gejala/insiden:** "Minta Shareloc" palsu pada titik presisi/terverifikasi, insiden bidan nyasar, kasus Bunda Amaliah/Ririn (degradasi label, pin bidan disalahartikan konfirmasi customer, `field_verified` lemah, alamat pin menimpa rumah tanpa konfirmasi, UI/SSE/prompt tidak state-gated).
+- **Status:** **F0–F7 diimplementasikan di kode (lokal, uncommitted)** per `docs/plans/LOKASI_KEPERCAYAAN_PLAN_2026-11-17.md`. **F8** (healing data `--commit`, target Ririn `14e8b527-652b-4ae4-866b-89b2c980ede6`, butuh `pg_dump` + persetujuan terpisah) dan **F9** (deploy `app`, risiko WAHA → 2-step + WARNING) **belum**.
+- **Keputusan bisnis (tetap):** Quick Reply `kelurahan` **tetap meminta shareloc**; hanya ejaan boleh diperbaiki (tidak ada perubahan template DB di eksekusi ini).
+- **Temuan & status (A-001..A-018, cakupan F0–F7):**
+  - **A-001** (pin bidan ≠ konfirmasi customer): Diperbaiki fondasional — `customer-location-refresh` pisah `pin_from_customer_at`/`pin_from_staff_at`, `share_location_sent` hanya dari pin customer; guard baca di `location-adequacy`; serializer/SSE/UI dashboard tidak lagi menganggap pin staf sebagai konfirmasi.
+  - **A-002** (label presisi tidak boleh dari entitas tanpa koordinat): Diperbaiki — `resolveTaskLocationPrecedence` mengembalikan `coordOwner`, 3 situs kartu staf memakai pemilik koordinat.
+  - **A-003** (konflik titik >150m / timpa alamat diam-diam): Diperbaiki — `MOVE_CONFIRMATION_THRESHOLD_KM` 150m, `needs_move_confirmation`/audit/SSE/result, `last_used_at` kartu tidak diubah verifikasi, guard alamat pin (`location-ingest`) menolak tulis alamat jauh & simpan `address_candidate`, UI staf menampilkan "Perlu konfirmasi pindah rumah", prompt V3 state-gated.
+  - **A-004/A-011** (skrip healing): Diperbaiki — `heal-single-card-provenance` refactor (dry-run default, tenant default, payload JSON string, tx typed, tanpa tulis `last_used_at`/label permanen prefs, exitCode partial), tes unit.
+  - **A-005/A-006/A-007** (kontrak `field_verified` lemah / label permanen): Diperbaiki — `deriveFieldVerification` + `hasFieldVerifiedGpsHistory`, label sumber dihitung dinamis (`buildLocationSourceLabel`), stop tulis `location_source_label` prefs, `isFieldVerified` butuh bukti GPS lapangan nyata.
+  - **A-008** (prompt kontradiktif): Diperbaiki parsial (pruning state-gated `needs_move_confirmation` di `goal-tracker`).
+  - **A-009** (UI staf import/gaya): Dibersihkan pada `StaffUpcomingCard` (badge konfirmasi pindah rumah ditambahkan; label konsisten).
+  - **A-010/A-017** (siklus import & ukuran file): Diperbaiki — seam `location-source`/`location-trust`/`gps-tier`/`travel-duration`, pemisahan/delegasi dinamis, choke point `buildPinIncomingMessage`; baseline arsitektur di-ratchet naik eksplisit (`--allow-increase`) karena komposisi siklus lama berubah (6 siklus tetap).
+  - **A-014/A-016** (presisi/estimasi tak dikenal): Diperbaiki — label hanya dari entitas pemilik koordinat; sumber tak dikenal → netral `null` (bukan `estimated_area`).
+  - **A-015** (ambang divergensi seragam): Diperbaiki ke 150m.
+  - **A-018** (kontrak bukti tes): Diperbaiki — S-08 evidence/backlog & kontrak nested location webhook diperbarui.
+  - **A-012/A-013** (dipertahankan/ditangani sesuai plan): bukti data terkait dilindungi oleh F8 (belum dieksekusi) dan guard baru F0–F7.
+- **Catatan verifikasi (lokal):** `npm run typecheck`, `npm run build`, `packages/admin-dashboard npm run build`, gate arsitektur/reuse warn hijau, serta tes unit/integrasi relevan F0–F6 hijau (termasuk F6.4). Full `npm test` dan healing/deploy ditunda sesuai batas persetujuan.

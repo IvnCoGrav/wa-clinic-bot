@@ -56,6 +56,11 @@ export function getSharelocCardStatus(chat: any, now: Date = new Date()): Sharel
 
   // `manual_staff` = titik sudah diverifikasi staf di lapangan → setara presisi
   // untuk keperluan operasional. Jangan lagi dicap "butuh shareloc".
+  // A-001: pin dari bidan (pinFromStaffAt) bukan konfirmasi customer; hanya
+  // pinFromCustomerAt atau shareLocationSent legacy tanpa kontaminasi staf yang dihitung.
+  const sharelocConfirmedByCustomer = Boolean(
+    chat.pinFromCustomerAt || (chat.shareLocationSent && !chat.pinFromStaffAt)
+  );
   const isAlreadyPrecise =
     chat.sharelocNeeded === false ||
     chat.locationAdequacy === 'gps_pin' ||
@@ -63,7 +68,7 @@ export function getSharelocCardStatus(chat: any, now: Date = new Date()): Sharel
     chat.locationAdequacy === 'field_verified' ||
     isPreciseLocationSource(effectiveSource) ||
     effectiveSource === 'manual_staff' ||
-    Boolean(chat.shareLocationSent || chat.customer?.share_location_sent);
+    sharelocConfirmedByCustomer;
 
   if (isAlreadyPrecise) {
     return {

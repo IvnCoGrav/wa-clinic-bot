@@ -137,10 +137,7 @@ export const LiveChatCustomerModal: React.FC<LiveChatCustomerModalProps> = ({
                     <span>Alamat & Lokasi</span>
                   </h4>
                   {(() => {
-                    const badge = getLocationBadgeConfig(
-                      customerDetailData,
-                      customerDetailData?.preferences?.location_source_label
-                    );
+                    const badge = getLocationBadgeConfig(customerDetailData);
                     if (!badge.source) return null;
                     return (
                       <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-bold border ${badge.badgeClass}`}>

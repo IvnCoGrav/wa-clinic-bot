@@ -28,6 +28,8 @@ export interface StaffTaskAddress {
   locationSource?: 'gps_pin' | 'estimated_area' | 'manual_staff' | null;
   addressSource?: 'card' | 'profile' | null;
   addressUpdatedAt?: string | null;
+  isFieldVerified?: boolean;
+  needsMoveConfirmation?: boolean;
 }
 
 export interface StaffTaskPricing {

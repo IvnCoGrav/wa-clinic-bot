@@ -1,8 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import {
-  buildMapsUrls,
-  resolveLocationSource,
-} from '../../src/services/staff-reservation.service';
+import { buildMapsUrls } from '../../src/services/staff-reservation.service';
+import { resolveLocationSource } from '../../src/domain/location-source';
 import {
   getGoogleMapsDirectionUrl,
   needsNavigationPreflight,

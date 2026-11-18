@@ -1038,7 +1038,7 @@ export async function webhookRoutes(fastify: FastifyInstance) {
       // bukan console.warn yang hangus bersama log container saat recreate).
       if (hasRealLocation) {
         try {
-          const { locationIngestService } = await import('../services/location-ingest.service');
+          const { locationIngestService, buildPinIncomingMessage } = await import('../services/location-ingest.service');
           const ingestCustomer =
             existingCustomer ||
             (await customerService.getOrCreateCustomer(phone, contactName, resolvedTenantId, {
@@ -1046,7 +1046,7 @@ export async function webhookRoutes(fastify: FastifyInstance) {
             }));
           const gpsResult = await locationIngestService.ingestGpsPin({
             customer: ingestCustomer,
-            incomingMessage: { type: 'location', location: { latitude: rawLat, longitude: rawLng } },
+            incomingMessage: buildPinIncomingMessage({ latitude: rawLat, longitude: rawLng, address: canonical.location?.address, name: canonical.location?.name }),
             tenantId: resolvedTenantId,
           });
           if (gpsResult.status !== 'skipped') {

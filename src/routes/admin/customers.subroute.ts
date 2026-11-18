@@ -7,7 +7,7 @@ import { ConversationState, LocationSource } from '@prisma/client';
 import { AI_ELIGIBILITY_ESCALATION_REASON } from '../../services/ai-eligibility.service';
 import { responseCacheService } from '../../services/response-cache.service';
 import { tenantOf } from './route-helpers';
-import { resolveLocationSource } from '../../services/staff-reservation.service';
+import { resolveLocationSource } from '../../domain/location-source';
 import { resolveReservationPaymentEvaluation } from '../../services/reservation-core.service';
 import { normalizePhoneID } from '../../utils/phone-normalizer';
 import { staffOwnershipService } from '../../services/staff-ownership.service';

@@ -290,6 +290,13 @@ export const StaffTodayTaskCard: React.FC<StaffTodayTaskCardProps> = ({
         )}
       </div>
 
+      {(task.address as any).needsMoveConfirmation && (
+        <div className="mb-2 flex items-center gap-2 px-3 py-2 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-300 dark:border-amber-900/50 text-amber-900 dark:text-amber-200">
+          <MapPin size={14} className="text-warning flex-shrink-0" />
+          <p className="text-[11px] font-bold leading-snug">Perlu konfirmasi pindah rumah — titik baru berbeda jauh dari titik tersimpan.</p>
+        </div>
+      )}
+
       {/* Kotak Patokan Rumah (plan 2026-10-02): kontras tinggi agar
           Bidan langsung hafal ciri pagar/rumah sebelum mengetuk pintu. */}
       {(task.address.landmark || task.address.addressDetail) && (
@@ -460,14 +467,14 @@ export const StaffTodayTaskCard: React.FC<StaffTodayTaskCardProps> = ({
                   type="button"
                   onClick={(e) => onNavigate(task, e)}
                   className={`flex items-center justify-center space-x-1 min-h-[44px] py-2.5 px-2 sm:px-3 text-[11px] sm:text-xs font-bold rounded-xl transition active:scale-95 shadow-xs cursor-pointer ${
-                    needsNavigationPreflight(task.address?.locationSource)
+                    needsNavigationPreflight(task.address)
                       ? 'text-warning bg-warning-soft hover:bg-warning border border-warning-line'
                       : 'text-on-solid bg-accent hover:bg-accent-hover'
                   }`}
-                  title={needsNavigationPreflight(task.address?.locationSource) ? 'Titik estimasi: konfirmasi patokan dulu' : 'Buka ulang peta navigasi'}
+                  title={needsNavigationPreflight(task.address) ? 'Titik estimasi: konfirmasi patokan dulu' : 'Buka ulang peta navigasi'}
                 >
                   <Navigation size={15} />
-                  <span>{needsNavigationPreflight(task.address?.locationSource) ? 'Navigasi (Estimasi)' : 'Navigasi'}</span>
+                  <span>{needsNavigationPreflight(task.address) ? 'Navigasi (Estimasi)' : 'Navigasi'}</span>
                 </button>
               ) : (
                 <div className="text-[10px] text-ink-2 flex items-center justify-center min-h-[44px] py-2.5 rounded-xl bg-fill-1 border border-divider">
@@ -536,7 +543,7 @@ export const StaffTodayTaskCard: React.FC<StaffTodayTaskCardProps> = ({
                 disabled={isSendingOtw}
                 onClick={(e) => onNavigate(task, e)}
                 className={`flex items-center justify-center space-x-1.5 min-h-[44px] py-2.5 px-2 sm:px-3 text-[11px] sm:text-xs font-bold rounded-xl transition active:scale-95 shadow-xs ${
-                  navUrl && needsNavigationPreflight(task.address?.locationSource)
+                  navUrl && needsNavigationPreflight(task.address)
                     ? 'text-warning bg-warning-soft hover:bg-warning border border-warning-line'
                     : navUrl || isOtwAllowed(task)
                       ? 'text-on-solid bg-accent hover:bg-accent-hover'

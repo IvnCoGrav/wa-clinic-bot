@@ -1152,7 +1152,8 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
           const isSpv = isSupervisorRef.current;
           if (!isSpv && payload.staffId && payload.staffId !== staffId) return;
 
-          const { reservationId, lat, lng, distanceKm, ongkir, landmark, housePhotoUrl, diverged, diffKm } = payload;
+          const { reservationId, lat, lng, distanceKm, ongkir, landmark, housePhotoUrl, diverged, diffKm, needsMoveConfirmation } = payload;
+          const moveConfirm = Boolean(needsMoveConfirmation || diverged);
           const updateTaskLocation = (t: StaffTask): StaffTask => {
             if (t.reservationId !== reservationId) return t;
             return {
@@ -1165,7 +1166,10 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                 ...(ongkir != null && { ongkir }),
                 ...(landmark && { landmark }),
                 ...(housePhotoUrl && { housePhotoUrl }),
-                ...(diverged && diffKm != null && { landmark: `${t.address.landmark || ''} [GPS Lapangan +${diffKm}km]` }),
+                ...(moveConfirm && diffKm != null && !landmark
+                  ? { landmark: `${t.address.landmark || ''} [GPS Lapangan +${diffKm}km]`.trim() }
+                  : {}),
+                ...(moveConfirm ? { needsMoveConfirmation: true } : {}),
               },
             };
           };
@@ -1417,7 +1421,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
       e.stopPropagation();
     }
     const navUrl = task.navigationUrl || task.mapsUrl || '';
-    if (navUrl && needsNavigationPreflight(task.address?.locationSource)) {
+    if (navUrl && needsNavigationPreflight(task.address)) {
       setPreflightTask(task);
       return;
     }

@@ -22,6 +22,13 @@ import { ensureStaffSignature } from '../utils/staff-signature';
 import { computeCurrentAge } from '../utils/age-calculator';
 import { getBrandIdentityAsync } from '../config/brand';
 import { addressesMatch, isRegionCompatible } from '../domain/customer-address';
+import { resolveTaskLocationPrecedence } from '../domain/location-adequacy';
+import {
+  STAFF_VERIFIED_LOCATION_LABEL,
+  resolveLocationSource,
+  resolveEffectiveLocationSource,
+} from '../domain/location-source';
+import { estimateTravelDurationMinutes } from '../utils/travel-duration';
 
 export interface StaffTaskChild {
   name: string;
@@ -47,6 +54,8 @@ export interface StaffTaskAddress {
   addressDetail?: string | null;
   /** Akurasi koordinat: gps_pin (presisi) | estimated_area (estimasi) | manual_staff. */
   locationSource?: 'gps_pin' | 'estimated_area' | 'manual_staff' | null;
+  /** Status terverifikasi lapangan penuh (foto rumah + GPS presisi <= 50m). */
+  isFieldVerified?: boolean;
 }
 
 export interface StaffTaskPricing {
@@ -361,59 +370,7 @@ export function buildEffectiveTaskAddress(addr: any, cust: any): any {
   };
 }
 
-/**
- * Derivasi TUNGGAL sumber akurasi koordinat untuk kartu terapis (server-driven).
- *
- * Urutan (deterministik, berbasis state — bukan tebakan teks):
- *   1. Kolom `location_source` (kanonis).
- *   2. `preferences.location_source`/`preferences.source` (provenance jalur
- *      enrich/refresh) → dinormalkan ke makna yang sama.
- *   3. Penanda edit staf → manual_staff.
- *   4. `share_location_sent` + koordinat valid → gps_pin (data lama).
- *   5. Tidak diketahui → null (netral: DILARANG menampilkan badge "presisi"
- *      palsu; lebih baik tanpa badge daripada menyesatkan terapis).
- */
-export const STAFF_VERIFIED_LOCATION_LABEL = '📍 Terverifikasi Staf';
 
-/**
- * Resolver sumber lokasi tunggal (Single Source of Truth).
- * Urutan (deterministik, berbasis state — bukan tebakan teks):
- *   1. Kolom `location_source` (kanonis).
- *   2. `preferences.location_source`/`preferences.source` (provenance jalur
- *      enrich/refresh) → dinormalkan ke makna yang sama.
- *   3. Penanda edit staf → manual_staff.
- *   4. `share_location_sent` + koordinat valid → gps_pin (data lama).
- *   5. Tidak diketahui → null (netral: DILARANG menampilkan badge "presisi"
- *      palsu; lebih baik tanpa badge daripada menyesatkan terapis).
- */
-export function resolveLocationSource(
-  c: any
-): 'gps_pin' | 'estimated_area' | 'manual_staff' | null {
-  if (!c) return null;
-  const col = c.location_source;
-  if (col === 'gps_pin' || col === 'estimated_area' || col === 'manual_staff') return col;
-
-  const pref = (c.preferences as any) || {};
-  const src = pref.location_source || pref.source;
-  if (src === 'bidan_shareloc' || src === 'customer_shareloc' || src === 'url_coords') return 'gps_pin';
-  if (src === 'geocoding' || src === 'url_text_geocoded' || src === 'gazetteer') return 'estimated_area';
-  if (src === 'manual_staff' || src === 'FIELD_STAFF_GPS') return 'manual_staff';
-
-  if (pref.location_updated_by_staff_name || pref.location_updated_by_staff_id || pref.field_gps_lat) {
-    return 'manual_staff';
-  }
-  if (c.share_location_sent === true && c.lat != null && c.lng != null) return 'gps_pin';
-  return null;
-}
-
-/**
- * Menghitung estimasi durasi tempuh perjalanan sepeda motor (dalam menit).
- * Dikalibrasi dari benchmark rute nyata Google Maps: ~2.05 menit/km + buffer lampu merah/gang 2 menit.
- */
-export function estimateTravelDurationMinutes(distanceKm: number | null): number | null {
-  if (distanceKm == null || distanceKm <= 0) return null;
-  return Math.max(3, Math.round(distanceKm * 2.05 + 2));
-}
 
 function buildShareText(
   name: string | null,
@@ -770,14 +727,15 @@ export class StaffReservationService {
         // benar-benar menyuplai koordinat. Alamat reservasi bisa kosong
         // koordinat (manual_staff tanpa pin) — bila begitu, label wajib turun
         // dari data customer (gps_pin shareloc), bukan dari alamat kosong.
-        const addrHasCoords =
-          effectiveAddr?.lat != null && effectiveAddr?.lng != null;
-        const lat = (addrHasCoords ? effectiveAddr?.lat : undefined) ?? cust?.lat;
-        const lng = (addrHasCoords ? effectiveAddr?.lng : undefined) ?? cust?.lng;
+        const locPrec = resolveTaskLocationPrecedence({ effectiveAddr, customer: cust });
+        const locationSource = locPrec.locationSource;
+        const housePhotoUrl = locPrec.housePhotoUrl;
+        const isFieldVerified = locPrec.isFieldVerified;
+        const needsMoveConfirmation = Boolean((cust?.preferences as any)?.needs_move_confirmation);
+        const ownerAddr = locPrec.coordOwner === 'addr';
+        const lat = ownerAddr ? effectiveAddr?.lat : cust?.lat;
+        const lng = ownerAddr ? effectiveAddr?.lng : cust?.lng;
         const addressText = buildAddressText(effectiveAddr || {});
-        const locationSource = addrHasCoords
-          ? resolveLocationSource(effectiveAddr) || resolveLocationSource(cust)
-          : resolveLocationSource(cust) || resolveLocationSource(effectiveAddr);
         const { mapsUrl, navigationUrl } = buildMapsUrls(lat, lng, locationSource, addressText);
 
         const itinerary = itineraryById.get(r.id) || {
@@ -822,7 +780,9 @@ export class StaffReservationService {
             distanceSource,
             originName,
             fullText: addressText,
-            housePhotoUrl: (cust?.preferences as any)?.house_photo_url || null,
+            housePhotoUrl,
+            isFieldVerified,
+            needsMoveConfirmation,
             landmark: (effectiveAddr as any)?.landmark || (cust?.preferences as any)?.landmark || null,
             addressDetail: (effectiveAddr as any)?.address || (cust?.preferences as any)?.address || (cust?.preferences as any)?.full_address || null,
             locationSource,
@@ -1067,14 +1027,15 @@ export class StaffReservationService {
         // benar-benar menyuplai koordinat. Alamat reservasi bisa kosong
         // koordinat (manual_staff tanpa pin) — bila begitu, label wajib turun
         // dari data customer (gps_pin shareloc), bukan dari alamat kosong.
-        const addrHasCoords =
-          effectiveAddr?.lat != null && effectiveAddr?.lng != null;
-        const lat = (addrHasCoords ? effectiveAddr?.lat : undefined) ?? cust?.lat;
-        const lng = (addrHasCoords ? effectiveAddr?.lng : undefined) ?? cust?.lng;
+        const locPrec = resolveTaskLocationPrecedence({ effectiveAddr, customer: cust });
+        const locationSource = locPrec.locationSource;
+        const housePhotoUrl = locPrec.housePhotoUrl;
+        const isFieldVerified = locPrec.isFieldVerified;
+        const needsMoveConfirmation = Boolean((cust?.preferences as any)?.needs_move_confirmation);
+        const ownerAddr = locPrec.coordOwner === 'addr';
+        const lat = ownerAddr ? effectiveAddr?.lat : cust?.lat;
+        const lng = ownerAddr ? effectiveAddr?.lng : cust?.lng;
         const addressText = buildAddressText(effectiveAddr || {});
-        const locationSource = addrHasCoords
-          ? resolveLocationSource(effectiveAddr) || resolveLocationSource(cust)
-          : resolveLocationSource(cust) || resolveLocationSource(effectiveAddr);
         const { mapsUrl, navigationUrl } = buildMapsUrls(lat, lng, locationSource, addressText);
 
         const itinerary = itineraryById.get(r.id) || {
@@ -1116,7 +1077,9 @@ export class StaffReservationService {
             distanceSource,
             originName,
             fullText: addressText,
-            housePhotoUrl: (cust?.preferences as any)?.house_photo_url || null,
+            housePhotoUrl,
+            isFieldVerified,
+            needsMoveConfirmation,
             landmark: (effectiveAddr as any)?.landmark || (cust?.preferences as any)?.landmark || null,
             addressDetail: (effectiveAddr as any)?.address || (cust?.preferences as any)?.address || (cust?.preferences as any)?.full_address || null,
             locationSource,
@@ -1239,14 +1202,15 @@ export class StaffReservationService {
         // benar-benar menyuplai koordinat. Alamat reservasi bisa kosong
         // koordinat (manual_staff tanpa pin) — bila begitu, label wajib turun
         // dari data customer (gps_pin shareloc), bukan dari alamat kosong.
-        const addrHasCoords =
-          effectiveAddr?.lat != null && effectiveAddr?.lng != null;
-        const lat = (addrHasCoords ? effectiveAddr?.lat : undefined) ?? cust?.lat;
-        const lng = (addrHasCoords ? effectiveAddr?.lng : undefined) ?? cust?.lng;
+        const locPrec = resolveTaskLocationPrecedence({ effectiveAddr, customer: cust });
+        const locationSource = locPrec.locationSource;
+        const housePhotoUrl = locPrec.housePhotoUrl;
+        const isFieldVerified = locPrec.isFieldVerified;
+        const needsMoveConfirmation = Boolean((cust?.preferences as any)?.needs_move_confirmation);
+        const ownerAddr = locPrec.coordOwner === 'addr';
+        const lat = ownerAddr ? effectiveAddr?.lat : cust?.lat;
+        const lng = ownerAddr ? effectiveAddr?.lng : cust?.lng;
         const addressText = buildAddressText(effectiveAddr || {});
-        const locationSource = addrHasCoords
-          ? resolveLocationSource(effectiveAddr) || resolveLocationSource(cust)
-          : resolveLocationSource(cust) || resolveLocationSource(effectiveAddr);
         const { mapsUrl, navigationUrl } = buildMapsUrls(lat, lng, locationSource, addressText);
 
         const distanceKm = effectiveAddr?.distance_km ?? cust?.distance_km ?? null;
@@ -1285,7 +1249,9 @@ export class StaffReservationService {
             distanceSource: 'CLINIC',
             originName: 'Klinik',
             fullText: addressText,
-            housePhotoUrl: (cust?.preferences as any)?.house_photo_url || null,
+            housePhotoUrl,
+            isFieldVerified,
+            needsMoveConfirmation,
             landmark: (effectiveAddr as any)?.landmark || (cust?.preferences as any)?.landmark || null,
             addressDetail: (effectiveAddr as any)?.address || (cust?.preferences as any)?.address || (cust?.preferences as any)?.full_address || null,
             locationSource,
@@ -2194,7 +2160,7 @@ export class StaffReservationService {
   /**
    * Memperbarui titik koordinat lokasi GPS, foto tampak depan rumah, dan catatan patokan
    * milik customer dari lapangan oleh terapis.
-   * Otomatis mengompresi foto (max 800px) dan menghitung ulang jarak dari klinik.
+   * Didelegasikan ke StaffLocationService (kontrak kanonis tunggal).
    */
   static async updateCustomerLocation(params: {
     reservationId: string;
@@ -2208,321 +2174,8 @@ export class StaffReservationService {
     landmark?: string | null;
     isSupervisor?: boolean;
   }): Promise<{ success: boolean; data?: any; error?: string }> {
-    const {
-      reservationId,
-      staffId,
-      staffName,
-      tenantId = DEFAULT_TENANT_ID,
-      lat,
-      lng,
-      accuracyM,
-      housePhotoB64,
-      landmark,
-      isSupervisor = false,
-    } = params;
-
-    if (!reservationId || !staffId) {
-      return { success: false, error: 'reservationId dan staffId wajib disertakan.' };
-    }
-
-    if (lat != null && lng != null && typeof accuracyM === 'number' && accuracyM > 50) {
-      return {
-        success: false,
-        error: `Akurasi sinyal GPS perangkat kurang presisi (±${Math.round(accuracyM)}m, melebihi batas toleransi maksimal 50m). Mohon aktifkan GPS akurasi tinggi atau tunggu beberapa saat di area terbuka sebelum mengunci titik lokasi.`,
-      };
-    }
-
-    const hasNewPhoto = !!housePhotoB64 && housePhotoB64.startsWith('data:image/');
-    if (hasNewPhoto && (lat == null || lng == null)) {
-      return { success: false, error: 'Foto rumah wajib disertai titik GPS (lat & lng). Kunci GPS dulu sebelum menyimpan foto.' };
-    }
-
-    try {
-      const reservation = await prisma.reservation.findUnique({
-        where: { id: reservationId },
-        include: {
-          customer: true,
-        },
-      });
-
-      if (!reservation) {
-        return { success: false, error: 'Reservasi tidak ditemukan.' };
-      }
-
-      if (reservation.tenant_id !== tenantId) {
-        return { success: false, error: 'Reservasi tidak ditemukan untuk klinik ini.' };
-      }
-
-      if (!isSupervisor && (!reservation.assigned_staff_id || reservation.assigned_staff_id !== staffId)) {
-        return { success: false, error: 'Anda tidak memiliki hak akses untuk reservasi ini.' };
-      }
-
-      const customer = reservation.customer;
-      if (!customer) {
-        return { success: false, error: 'Data customer tidak ditemukan.' };
-      }
-
-      // Hitung ulang jarak dari klinik jika koordinat baru diberikan
-      let distanceKm = customer.distance_km;
-      const targetLat = lat ?? customer.lat;
-      const targetLng = lng ?? customer.lng;
-
-      let newOngkir: number | null = null;
-      if (targetLat != null && targetLng != null) {
-        // Validasi range koordinat Indonesia
-        if (targetLat < -12 || targetLat > 7 || targetLng < 94 || targetLng > 142) {
-          return { success: false, error: 'Koordinat GPS di luar wilayah Indonesia atau tidak valid.' };
-        }
-
-        // S-08: titik & batas jangkauan klinik mengikuti tenant (bukan env global/45 km hardcode).
-        const clinicLoc = await getClinicLocationAsync(tenantId);
-        const clinicCoords = { lat: clinicLoc.lat, lng: clinicLoc.lng };
-        const { deliveryService } = await import('./delivery.service');
-        const deliveryResult = await deliveryService.calculateDelivery(
-          { lat: targetLat, lng: targetLng },
-          clinicCoords,
-          tenantId
-        );
-        distanceKm = deliveryResult.distanceKm;
-        newOngkir = deliveryResult.promoPrice;
-
-        // Skema kroscek 1: Tolak jika jarak dari klinik melampaui jangkauan tenant.
-        const MAX_ALLOWED_DISTANCE_KM =
-          Number.isFinite(clinicLoc.maxCoverageKm) && clinicLoc.maxCoverageKm > 0
-            ? clinicLoc.maxCoverageKm
-            : 45;
-        if (distanceKm > MAX_ALLOWED_DISTANCE_KM) {
-          return {
-            success: false,
-            error: `Titik GPS terdeteksi berjarak ${distanceKm.toFixed(1)} km dari klinik (melenceng jauh di luar area jangkauan maksimal ${MAX_ALLOWED_DISTANCE_KM} km). Pastikan Anda sedang berada di lokasi rumah pasien.`,
-          };
-        }
-
-        // Skema kroscek 2: Tolak jika pergeseran titik melenceng > 25 km dari data kelurahan/wilayah customer sebelumnya
-        if (customer.distance_km && Math.abs(distanceKm - customer.distance_km) > 25) {
-          return {
-            success: false,
-            error: `Titik GPS melenceng terlalu jauh (${Math.abs(distanceKm - customer.distance_km).toFixed(1)} km selisih) dari estimasi area ${customer.kelurahan || 'pasien'}. Pembaruan lokasi ditolak untuk mencegah salah alamat.`,
-          };
-        }
-      }
-
-      // Cek apakah koordinat baru berselisih > 1 km dari koordinat utama customer yang sudah ada
-      let shouldUpdatePrimaryCoords = true;
-      let diffFromOriginalKm: number | null = null;
-      const baseLandmark = landmark !== undefined ? (landmark?.trim() || null) : ((customer.preferences as any)?.landmark || null);
-      let finalLandmark = baseLandmark;
-
-      if (lat != null && lng != null) {
-        if (customer.lat != null && customer.lng != null) {
-          diffFromOriginalKm = calculateHaversineDistance(
-            { lat: customer.lat, lng: customer.lng },
-            { lat, lng }
-          );
-
-          const isPreviousCoordEstimated =
-            (customer as any).location_source === 'estimated_area' ||
-            (customer.preferences as any)?.location_source === 'geocoding' ||
-            (customer as any).share_location_sent === false;
-          if (diffFromOriginalKm > 1.0 && !isPreviousCoordEstimated) {
-            // Selisih > 1km & koordinat lama presisi: JANGAN ubah koordinat utama
-            shouldUpdatePrimaryCoords = false;
-            const gpsTag = `[📍 GPS Lapangan: ${lat.toFixed(6)}, ${lng.toFixed(6)} (+${diffFromOriginalKm.toFixed(1)}km)]`;
-            finalLandmark = baseLandmark ? `${baseLandmark} ${gpsTag}` : gpsTag;
-          } else {
-            // Estimasi lama atau selisih <=1km: perbarui koordinat utama dengan GPS presisi
-            shouldUpdatePrimaryCoords = true;
-          }
-        } else {
-          // Belum punya koordinat sebelumnya: simpan sebagai koordinat utama
-          shouldUpdatePrimaryCoords = true;
-        }
-      }
-
-      let housePhotoUrl: string | null = (customer.preferences as any)?.house_photo_url || null;
-
-      // Kompres, beri watermark GPS tenant-aware, dan simpan foto jika ada.
-      // - brand/honorific dari DB tenant (bukan hardcode).
-      // - Watermark memakai patokan mentah (baseLandmark) agar tag GPS internal
-      //   [📍 GPS Lapangan: ...] yang disimpan di DB tidak menduplikasi baris patokan.
-      // - Simpan HD 800px ber-watermark sebagai housePhotoUrl agar teks tajam;
-      //   lifecycle retensi/prune (media.service) yang menurunkan ke thumb setelah 30 hari.
-      if (housePhotoB64 && housePhotoB64.startsWith('data:image/')) {
-        const { mediaService } = await import('./media.service');
-        const { getBrandIdentityAsync } = await import('../config/brand');
-        const matches = housePhotoB64.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
-        const rawB64 = matches ? matches[2] : housePhotoB64;
-        const resized = await mediaService.resizeImageToMax(Buffer.from(rawB64, 'base64'), 800);
-        const brand = await getBrandIdentityAsync(tenantId);
-        const watermarked = await mediaService.overlayGpsBadge(resized, {
-          lat: targetLat,
-          lng: targetLng,
-          customerName: customer.name || undefined,
-          customerHonorific: brand.addressTermForCustomer,
-          kelurahan: customer.kelurahan,
-          kecamatan: customer.kecamatan,
-          landmark: baseLandmark,
-          staffName: staffName || undefined,
-          takerName: staffName || undefined,
-          brandName: brand.businessName,
-        });
-        const saved = await mediaService.saveOutboundMedia({
-          tenantId,
-          imageB64: watermarked.toString('base64'),
-          mimeType: 'image/jpeg',
-          fileName: `house-${customer.id}.jpg`,
-        });
-        housePhotoUrl = saved.hdUrl;
-      }
-
-      const currentPrefs = (customer.preferences as any) || {};
-      const existingHistory: any[] = Array.isArray(currentPrefs.location_history) ? currentPrefs.location_history : [];
-      const isPrimaryUpdated = shouldUpdatePrimaryCoords && lat != null && lng != null;
-      const newHistoryEntry = (targetLat != null && targetLng != null && distanceKm != null)
-        ? {
-            source: isPrimaryUpdated ? 'manual_staff' : 'FIELD_STAFF_GPS',
-            raw_source: 'FIELD_STAFF_GPS',
-            sourceLabel: isPrimaryUpdated ? STAFF_VERIFIED_LOCATION_LABEL : '📍 GPS Lapangan (Diverged)',
-            lat: targetLat,
-            lng: targetLng,
-            staffName: staffName || 'Staff',
-            distanceKm: typeof distanceKm === 'number' ? Number(distanceKm.toFixed(2)) : null,
-            ongkir: newOngkir,
-            ...(typeof accuracyM === 'number' ? { accuracyM: Math.round(accuracyM) } : {}),
-            updatedAt: new Date().toISOString(),
-          }
-        : null;
-      const updatedPrefs = {
-        ...currentPrefs,
-        ...(housePhotoUrl ? { house_photo_url: housePhotoUrl } : {}),
-        landmark: finalLandmark,
-        ...(diffFromOriginalKm != null && diffFromOriginalKm > 1.0
-          ? {
-              field_gps_lat: lat,
-              field_gps_lng: lng,
-              field_gps_diff_km: Number(diffFromOriginalKm.toFixed(2)),
-              field_gps_diverged: true,
-            }
-          : {}),
-        ...(typeof accuracyM === 'number' ? { location_accuracy_m: accuracyM } : {}),
-        ...(isPrimaryUpdated
-          ? {
-              location_source: 'manual_staff',
-              location_source_label: STAFF_VERIFIED_LOCATION_LABEL,
-            }
-          : {}),
-        location_updated_at: new Date().toISOString(),
-        location_updated_by_staff_id: staffId,
-        location_updated_by_staff_name: staffName,
-        ...(newHistoryEntry ? { location_history: [...existingHistory.slice(-9), newHistoryEntry] } : {}),
-      };
-
-      const updatedCustomer = await prisma.customer.update({
-        where: { id: customer.id },
-        data: {
-          ...(shouldUpdatePrimaryCoords && lat != null ? { lat } : {}),
-          ...(shouldUpdatePrimaryCoords && lng != null ? { lng } : {}),
-          ...(shouldUpdatePrimaryCoords && distanceKm != null ? { distance_km: distanceKm } : {}),
-          ...(shouldUpdatePrimaryCoords && newOngkir != null ? { ongkir: newOngkir } : {}),
-          ...(shouldUpdatePrimaryCoords && lat != null && lng != null
-            ? { location_source: 'manual_staff' as const }
-            : {}),
-          preferences: updatedPrefs,
-        },
-      });
-
-      // Audit log
-      const { auditService } = await import('./audit.service');
-      await auditService.logAdminAction({
-        apiKey: 'STAFF_SESSION',
-        adminIdentity: staffName,
-        action: diffFromOriginalKm != null && diffFromOriginalKm > 1.0 ? 'STAFF_UPDATE_CUSTOMER_LOCATION_DIVERGED' : 'STAFF_UPDATE_CUSTOMER_LOCATION',
-        targetId: customer.id,
-        payload: {
-          reservationId,
-          submittedLat: lat,
-          submittedLng: lng,
-          primaryLat: updatedCustomer.lat,
-          primaryLng: updatedCustomer.lng,
-          distanceKm: updatedCustomer.distance_km,
-          diffFromOriginalKm,
-          diverged: diffFromOriginalKm != null && diffFromOriginalKm > 1.0,
-          housePhotoUrl,
-          landmark: finalLandmark,
-        },
-        tenantId,
-      });
-
-      const coordsUpdated = shouldUpdatePrimaryCoords && lat != null && lng != null;
-
-      // Auto-sync Google Contacts (fire-and-forget)
-      try {
-        const { googleContactsService } = await import('./google-contacts.service');
-        googleContactsService.syncCustomer(tenantId, customer.id, { trigger: 'chat' }).catch(() => {});
-      } catch {}
-
-      // Real-time SSE Broadcast ke Admin Dashboard & Rekan Staf
-      try {
-        const { getLiveChatHub } = await import('./live-chat-hub.service');
-        getLiveChatHub().publish({
-          type: 'customer.location_updated',
-          tenantId,
-          payload: {
-            customerId: updatedCustomer.id,
-            reservationId,
-            staffId,
-            staffName,
-            lat: updatedCustomer.lat,
-            lng: updatedCustomer.lng,
-            submittedLat: lat,
-            submittedLng: lng,
-            coordsUpdated,
-            diverged: diffFromOriginalKm != null && diffFromOriginalKm > 1.0,
-            diffKm: diffFromOriginalKm != null ? Number(diffFromOriginalKm.toFixed(2)) : null,
-            distanceKm: updatedCustomer.distance_km,
-            ongkir: updatedCustomer.ongkir,
-            landmark: finalLandmark,
-            housePhotoUrl,
-            updatedAt: new Date().toISOString(),
-          },
-        }).catch(() => {});
-      } catch {}
-
-      // Seam kanonis: selaraskan seluruh jadwal aktif ke alamat terbaru
-      // (anti ghost-address lintas rezim penulis lokasi). Best-effort.
-      try {
-        const { syncActiveReservationsForCustomer } = await import('./reservation-address-sync.service');
-        await syncActiveReservationsForCustomer({ tenantId, customerId: customer.id });
-      } catch (syncErr: any) {
-        console.warn('[STAFF RESERVATION] active reservation sync skipped (best-effort):', syncErr?.message);
-      }
-
-      return {
-        success: true,
-        data: {
-          customerId: updatedCustomer.id,
-          lat: updatedCustomer.lat,
-          lng: updatedCustomer.lng,
-          distanceKm: updatedCustomer.distance_km,
-          estimatedMinutes: estimateTravelDurationMinutes(updatedCustomer.distance_km),
-          housePhotoUrl,
-          landmark: finalLandmark,
-          coordsUpdated,
-          diverged: diffFromOriginalKm != null && diffFromOriginalKm > 1.0,
-          diffKm: diffFromOriginalKm != null ? Number(diffFromOriginalKm.toFixed(2)) : null,
-          message: (() => {
-            if (diffFromOriginalKm != null && diffFromOriginalKm > 1.0) {
-              return `Titik GPS lapangan berselisih ${diffFromOriginalKm.toFixed(1)} km (> 1 km). Koordinat utama customer dipertahankan, koordinat lapangan dicatat pada panduan ancer-ancer.`;
-            }
-            if (coordsUpdated) return 'Titik lokasi berhasil diperbarui.';
-            return 'Catatan lokasi tersimpan (tanpa perubahan titik GPS).';
-          })(),
-        },
-      };
-    } catch (err: any) {
-      console.error('[STAFF RESERVATION] Error updating customer location:', err.message);
-      return { success: false, error: `Gagal memperbarui lokasi: ${err.message}` };
-    }
+    const { StaffLocationService } = await import('./staff-location.service');
+    return StaffLocationService.updateCustomerLocation(params);
   }
 
   /**

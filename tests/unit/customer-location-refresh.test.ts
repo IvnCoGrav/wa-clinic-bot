@@ -164,4 +164,37 @@ describe('Customer Location Refresh — Hierarchy of Truth', () => {
     expect(res.data?.ongkir).toBe(15000);
     expect(res.data?.isOutOfCoverage).toBe(false);
   });
+
+  it('A-001: pin dari BIDAN tidak boleh menandai customer sudah kirim shareloc', async () => {
+    vi.mocked(prisma.customer.findUnique).mockResolvedValue({ ...baseCustomer, share_location_sent: false });
+    vi.mocked(prisma.conversation.findMany).mockResolvedValue([{ id: 'conv1' }]);
+    vi.mocked(prisma.customer.update).mockResolvedValue({ ...baseCustomer, share_location_sent: false });
+    vi.mocked(prisma.message.findMany).mockResolvedValue([
+      makeMsg({ direction: 'OUTBOUND', content: '[LOCATION SHARE: Lat -7.3456, Lng 112.7890]', sender_type: 'STAFF', sender_name: 'Bidan Yusi', created_at: new Date('2026-09-06T10:00:00Z') }),
+    ]);
+
+    const res = await customerService.refreshCustomerLocationAndOngkir('cust-refresh-1', 'default-tenant');
+    expect(res.success).toBe(true);
+    expect(res.data?.source).toBe('bidan_shareloc');
+    const updateData = repoUpdateSpy.mock.calls[repoUpdateSpy.mock.calls.length - 1][1];
+    expect(updateData.share_location_sent).toBe(false);
+    expect(updateData.preferences.pin_from_staff_at).toBeTruthy();
+    expect(updateData.preferences.pin_from_customer_at).toBeUndefined();
+  });
+
+  it('A-001: pin dari CUSTOMER (inbound) menandai konfirmasi customer', async () => {
+    vi.mocked(prisma.customer.findUnique).mockResolvedValue({ ...baseCustomer, share_location_sent: false });
+    vi.mocked(prisma.conversation.findMany).mockResolvedValue([{ id: 'conv1' }]);
+    vi.mocked(prisma.customer.update).mockResolvedValue({ ...baseCustomer });
+    vi.mocked(prisma.message.findMany).mockResolvedValue([
+      makeMsg({ direction: 'INBOUND', content: 'https://maps.app.goo.gl/test', sender_type: 'CUSTOMER', payload_raw: { location: { latitude: -7.35, longitude: 112.75 } } }),
+    ]);
+
+    const res = await customerService.refreshCustomerLocationAndOngkir('cust-refresh-1', 'default-tenant');
+    expect(res.success).toBe(true);
+    expect(res.data?.source).toBe('customer_shareloc');
+    const updateData = repoUpdateSpy.mock.calls[repoUpdateSpy.mock.calls.length - 1][1];
+    expect(updateData.share_location_sent).toBe(true);
+    expect(updateData.preferences.pin_from_customer_at).toBeTruthy();
+  });
 });

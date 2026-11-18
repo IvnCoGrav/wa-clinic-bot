@@ -289,7 +289,7 @@ export async function wabaWebhookRoutes(fastify: FastifyInstance) {
       // LOCATION_INGEST_FAILED saat kegagalan tulis).
       if (msg.location) {
         try {
-          const { locationIngestService } = await import('../services/location-ingest.service');
+          const { locationIngestService, buildPinIncomingMessage } = await import('../services/location-ingest.service');
           const ingestCustomer =
             existingCustomer ||
             (await customerService.getOrCreateCustomer(msg.fromNumber, msg.contactName, tenantId, {
@@ -297,10 +297,7 @@ export async function wabaWebhookRoutes(fastify: FastifyInstance) {
             }));
           const gpsResult = await locationIngestService.ingestGpsPin({
             customer: ingestCustomer,
-            incomingMessage: {
-              type: 'location',
-              location: { latitude: msg.location.latitude, longitude: msg.location.longitude },
-            },
+            incomingMessage: buildPinIncomingMessage({ latitude: msg.location.latitude, longitude: msg.location.longitude, address: msg.location.address, name: msg.location.name }),
             tenantId,
           });
           if (gpsResult.status !== 'skipped') {

@@ -159,6 +159,16 @@ export function minutesUntilBooking(bookingDateIso: string | Date | null | undef
   return Math.round((t - nowMs) / 60000);
 }
 
+export type LocationSourceKindUi = 'gps_pin' | 'manual_staff' | 'estimated_area' | null;
+
+export function buildLocationSourceLabel(source: LocationSourceKindUi | string | null | undefined, fieldVerified = false): string | null {
+  if (fieldVerified) return '📍 Terverifikasi Lapangan';
+  if (source === 'gps_pin') return '📍 Titik Presisi';
+  if (source === 'manual_staff') return '📍 Terverifikasi Staf';
+  if (source === 'estimated_area') return '🟡 Estimasi';
+  return null;
+}
+
 /**
  * True bila booking berada dalam jendela pre-warm GPS (<= GPS_WARMUP_MINUTES
  * ke depan, s/d 120 menit lewat). Murni (tanpa I/O) agar mudah diuji.
@@ -268,20 +278,38 @@ export interface LocationBadgeConfig {
 /**
  * Single source of truth pemetaan badge lokasi untuk seluruh dashboard
  * (LiveChat, CustomerDatabase, StaffToday, MapTab).
+ * Label dihitung dinamis (tidak percaya label permanen di preferences).
  */
 export function getLocationBadgeConfig(
   customerOrSource?: any,
-  explicitLabel?: string | null
+  _explicitLabel?: string | null
 ): LocationBadgeConfig {
   const source = resolveEffectiveLocationSource(customerOrSource);
   const rawPref = typeof customerOrSource === 'object' && customerOrSource !== null
     ? (customerOrSource.preferences?.location_source || customerOrSource.preferences?.source || customerOrSource.source)
     : null;
+  const isFieldVerified = Boolean(
+    typeof customerOrSource === 'object' && customerOrSource !== null &&
+    (customerOrSource.isFieldVerified ||
+      customerOrSource.is_field_verified ||
+      customerOrSource.preferences?.field_verified ||
+      customerOrSource.locationAdequacy === 'field_verified')
+  );
+  const computed = buildLocationSourceLabel(source as LocationSourceKindUi, isFieldVerified);
+
+  if (isFieldVerified) {
+    return {
+      source: source || 'manual_staff',
+      label: '📍 Terverifikasi Lapangan',
+      badgeClass: 'bg-success-soft text-success border-success-line',
+      dotColor: 'rgb(var(--c-accent))',
+    };
+  }
 
   if (source === 'manual_staff') {
     return {
       source: 'manual_staff',
-      label: explicitLabel || '📍 Terverifikasi Staf',
+      label: computed || '📍 Terverifikasi Staf',
       badgeClass: 'bg-success-soft text-success border-success-line',
       dotColor: 'rgb(var(--c-accent))',
     };
@@ -291,7 +319,7 @@ export function getLocationBadgeConfig(
     const isCustomerShareloc = rawPref === 'customer_shareloc';
     return {
       source: 'gps_pin',
-      label: explicitLabel || (isCustomerShareloc ? '🔵 Shareloc Customer' : '📍 Titik Presisi'),
+      label: computed || (isCustomerShareloc ? '🔵 Shareloc Customer' : '📍 Titik Presisi'),
       badgeClass: isCustomerShareloc
         ? 'bg-info-soft text-info border-info-line'
         : 'bg-bubble-out text-accent border-accent/30',
@@ -303,8 +331,7 @@ export function getLocationBadgeConfig(
     const isDbCoords = rawPref === 'db_coords';
     return {
       source: 'estimated_area',
-      // REVISI-1 Tahap 4.1: label jujur — titik DB bukan pin GPS rumah.
-      label: explicitLabel || (isDbCoords ? '🟡 Estimasi (Titik DB)' : '⚪ Estimasi Wilayah'),
+      label: computed || (isDbCoords ? '🟡 Estimasi (Titik DB)' : '⚪ Estimasi Wilayah'),
       badgeClass: isDbCoords
         ? 'bg-warning-soft text-warning border-warning-line'
         : 'bg-surface-2 text-ink border-divider',
@@ -314,7 +341,7 @@ export function getLocationBadgeConfig(
 
   return {
     source: null,
-    label: explicitLabel || '⚪ Estimasi Wilayah',
+    label: computed || '⚪ Estimasi Wilayah',
     badgeClass: 'bg-surface-2 text-ink border-divider',
     dotColor: 'rgb(var(--c-ink-2))',
   };
@@ -323,11 +350,23 @@ export function getLocationBadgeConfig(
 /**
  * Insiden Bidan tersasar (2026-09-30): titik NON-presisi (`manual_staff`/
  * `estimated_area`/belum diketahui) DILARANG membuka Google Maps langsung —
- * WAJIB lewat gerbang konfirmasi pra-navigasi. Hanya `gps_pin` yang presisi.
- * Murni & deterministik (berbasis state provenance, bukan tebakan teks).
+ * WAJIB lewat gerbang konfirmasi pra-navigasi.
+ *
+ * Pengecualian aman (Plan v2.1 Opsi 6.3):
+ * 1. `gps_pin` (presisi pin customer/chat)
+ * 2. `field_verified` (titik terverifikasi staf di lapangan lengkap dengan foto rumah & GPS)
  */
-export function needsNavigationPreflight(source?: string | null): boolean {
-  return source !== 'gps_pin';
+export function needsNavigationPreflight(
+  sourceOrAddr?: string | { locationSource?: string | null; isFieldVerified?: boolean } | null,
+  isFieldVerifiedParam?: boolean
+): boolean {
+  if (!sourceOrAddr) return true;
+  if (typeof sourceOrAddr === 'object') {
+    if (sourceOrAddr.isFieldVerified) return false;
+    return sourceOrAddr.locationSource !== 'gps_pin';
+  }
+  if (isFieldVerifiedParam) return false;
+  return sourceOrAddr !== 'gps_pin';
 }
 
 /**

@@ -252,6 +252,8 @@ export function useLiveChatSse({
                   sharelocNeeded:
                     payload.sharelocNeeded !== undefined ? payload.sharelocNeeded : c.sharelocNeeded,
                   shareLocationSent: payload.shareLocationSent !== undefined ? payload.shareLocationSent : c.shareLocationSent,
+                  pinFromCustomerAt: payload.pinFromCustomerAt !== undefined ? payload.pinFromCustomerAt : c.pinFromCustomerAt,
+                  pinFromStaffAt: payload.pinFromStaffAt !== undefined ? payload.pinFromStaffAt : c.pinFromStaffAt,
                   sharelocRequestedAt: payload.sharelocRequestedAt !== undefined ? payload.sharelocRequestedAt : c.sharelocRequestedAt,
                   activeConfirmedReservation: payload.activeConfirmedReservation !== undefined ? payload.activeConfirmedReservation : (c as any).activeConfirmedReservation,
                 }

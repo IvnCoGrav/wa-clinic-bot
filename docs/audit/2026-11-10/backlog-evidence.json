@@ -2300,8 +2300,8 @@
         },
         {
           "type": "file",
-          "path": "src/services/staff-reservation.service.ts",
-          "line": 2267,
+          "path": "src/services/staff-location.service.ts",
+          "line": 119,
           "contains": "clinicLoc.maxCoverageKm"
         },
         {

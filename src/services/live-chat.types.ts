@@ -64,6 +64,10 @@ export interface LiveChatConversationItem {
   /** True bila pelanggan masih benar-benar perlu diminta shareloc. */
   sharelocNeeded?: boolean;
   shareLocationSent?: boolean;
+  /** Waktu konfirmasi pin dari customer (A-001). */
+  pinFromCustomerAt?: string | Date | null;
+  /** Waktu pin dikirim bidan/staf (bukan konfirmasi customer). */
+  pinFromStaffAt?: string | Date | null;
   sharelocRequestedAt?: string | Date | null;
   /** Pemilik retensi first-touch + bidan terakhir (read-only). */
   staffOwnership?: StaffOwnershipView | null;
