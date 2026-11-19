@@ -41,6 +41,7 @@ export interface FollowUpHolidayConfig {
   windowStartMinWib: number;     // default 540 (09:00)
   windowEndMinWib: number;       // default 990 (16:30)
   manualActivatedAt: string | null; // ISO string
+  lastActivatedAt: string | null; // ISO string — bukti pernah diaktifkan admin
   lastRescheduledAt: string | null; // YYYY-MM-DD WIB
   lastRescheduleSummary: FollowUpHolidayRescheduleSummary | null;
 }
@@ -103,6 +104,11 @@ export function parseFollowUpHolidayConfig(raw: unknown): FollowUpHolidayConfig 
     const parsed = new Date(obj.manualActivatedAt);
     return isNaN(parsed.getTime()) ? null : obj.manualActivatedAt;
   })();
+  const lastActivatedAt = (() => {
+    if (typeof obj.lastActivatedAt !== 'string') return null;
+    const parsed = new Date(obj.lastActivatedAt);
+    return isNaN(parsed.getTime()) ? null : obj.lastActivatedAt;
+  })();
   const lastRescheduledAt = typeof obj.lastRescheduledAt === 'string' && isValidIsoDateOnly(obj.lastRescheduledAt) ? obj.lastRescheduledAt : null;
   const lastRescheduleSummary =
     obj.lastRescheduleSummary && typeof obj.lastRescheduleSummary === 'object' && !Array.isArray(obj.lastRescheduleSummary)
@@ -119,6 +125,7 @@ export function parseFollowUpHolidayConfig(raw: unknown): FollowUpHolidayConfig 
     windowStartMinWib,
     windowEndMinWib,
     manualActivatedAt,
+    lastActivatedAt,
     lastRescheduledAt,
     lastRescheduleSummary,
   };
@@ -260,8 +267,9 @@ export function resolveFollowUpHolidayState(cfg: FollowUpHolidayConfig, now: Dat
     return { status: 'active', mode: 'manual' };
   }
 
-  // Jika enabled: false namun endDate baru lewat dan autoRescheduleOnExit belum tereksekusi
-  if (cfg.endDate && cfg.autoRescheduleOnExit && cfg.lastRescheduledAt !== cfg.endDate && todayWib > cfg.endDate) {
+  // Cleanup pasca-libur HANYA jika admin pernah mengaktifkan mode libur.
+  // Tanpa `lastActivatedAt`, mengisi tanggal saja tidak boleh memicu aksi apa pun.
+  if (cfg.lastActivatedAt && cfg.endDate && cfg.autoRescheduleOnExit && cfg.lastRescheduledAt !== cfg.endDate && todayWib > cfg.endDate) {
     return { status: 'exit_pending', exitEndDate: cfg.endDate };
   }
 

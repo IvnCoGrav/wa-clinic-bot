@@ -80,6 +80,7 @@ export class FollowUpHolidayService {
       : Boolean(current.startDate);
 
     if (safePatch.enabled === true) {
+      safePatch.lastActivatedAt = new Date().toISOString();
       if (hasExplicitRange) {
         safePatch.manualActivatedAt = null;
       } else if (!current.manualActivatedAt || current.startDate) {

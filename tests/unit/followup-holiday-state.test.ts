@@ -161,6 +161,41 @@ describe('Follow-Up Holiday State & Scheduling Pure Contract Tests', () => {
     expect(resolveFollowUpHolidayState(cfg, day31)).toEqual({ status: 'manual_expired' });
   });
 
+  it('8. Opt-in: tanpa aktivasi admin, tanggal libur saja TIDAK mengaktifkan mode libur', () => {
+    const neverActivated = parseFollowUpHolidayConfig({
+      enabled: false,
+      startDate: '2026-12-24',
+      endDate: '2026-12-26',
+    });
+
+    expect(resolveFollowUpHolidayState(neverActivated, new Date('2026-12-25T10:00:00+07:00'))).toEqual({
+      status: 'inactive',
+    });
+    expect(resolveFollowUpHolidayState(neverActivated, new Date('2026-12-27T10:00:00+07:00'))).toEqual({
+      status: 'inactive',
+    });
+
+    const activated = parseFollowUpHolidayConfig({
+      enabled: true,
+      startDate: '2026-12-24',
+      endDate: '2026-12-26',
+      lastActivatedAt: '2026-12-23T10:00:00+07:00',
+    });
+    expect(resolveFollowUpHolidayState(activated, new Date('2026-12-25T10:00:00+07:00'))).toEqual({
+      status: 'active',
+      mode: 'range',
+    });
+
+    const disabledAfterActivation = parseFollowUpHolidayConfig({
+      ...activated,
+      enabled: false,
+    });
+    expect(resolveFollowUpHolidayState(disabledAfterActivation, new Date('2026-12-27T10:00:00+07:00'))).toEqual({
+      status: 'exit_pending',
+      exitEndDate: '2026-12-26',
+    });
+  });
+
   it('7. clampScheduledAtToPostHoliday: menggeser jadwal yang jatuh di masa libur ke hari pertama buka', () => {
     const cfg = parseFollowUpHolidayConfig({
       enabled: true,
