@@ -177,7 +177,8 @@ export const FollowUpHolidayModal: React.FC<FollowUpHolidayModalProps> = ({
                   Aktifkan Mode Libur
                 </label>
                 <p className="text-xs text-ink-3 mt-0.5">
-                  Nyalakan saat klinik tutup/cuti bersama agar bot tidak menghubungi customer.
+                  Nyalakan saat klinik tutup/cuti bersama. Mengisi tanggal saja <strong>TIDAK</strong> mengaktifkan
+                  libur — toggle ini harus ON lalu klik Simpan.
                 </p>
               </div>
               <input
