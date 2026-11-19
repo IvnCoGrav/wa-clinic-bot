@@ -61,7 +61,7 @@ echo "--> Recreate App Container Safely (WAHA untouched)..."
 docker compose up -d --no-deps app
 
 CADDY_CHANGED=$(git diff --name-only "$PREV_HEAD" HEAD -- Caddyfile || true)
-if [ -n "$CADDY_CHANGED" ] || [ "${FORCE_RECREATE_CADDY:-0}" = "1" ]; then
+if [ -n "$CADDY_CHANGED" ] || [ "\${FORCE_RECREATE_CADDY:-0}" = "1" ]; then
   echo "--> Validate Caddyfile (fail-fast before touching running Caddy)..."
   docker compose run -T --rm --no-deps --entrypoint caddy caddy validate --config /etc/caddy/Caddyfile </dev/null
   echo "--> Recreate Caddy Reverse Proxy Safely (Caddyfile changed / forced, WAHA untouched)..."
