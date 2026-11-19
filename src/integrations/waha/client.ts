@@ -9,6 +9,11 @@ import {
   getCachedLidPhone,
   setCachedLidPhone,
 } from './label-cache';
+import {
+  buildWahaMessageCandidates as buildCandidatesHelper,
+  tryWahaMessageEndpoint,
+  type WahaMessageCandidateOptions,
+} from './message-candidates';
 dotenv.config();
 
 export interface WahaChat {
@@ -1454,62 +1459,17 @@ export class WahaClient implements IWahaClient {
    * Helper untuk mengekstrak dan membangun variasi chatId & messageId
    * (e.g. jika messageId formatnya true_79770444427299@lid_3A5B... atau short key 3A5B...).
    */
-  private buildWahaMessageCandidates(chatId: string, messageId: string): { chatIds: string[]; msgIds: string[] } {
-    const chatCandidates = new Set<string>();
-    const msgCandidates = new Set<string>();
-
-    const cleanNum = chatId.replace(/@(c\.us|s\.whatsapp\.net|lid|g\.us)$/, '');
-
-    if (chatId.includes('@g.us')) {
-      chatCandidates.add(chatId);
-    } else if (chatId.includes('@lid')) {
-      chatCandidates.add(chatId);
-      chatCandidates.add(`${cleanNum}@c.us`);
-      chatCandidates.add(`${cleanNum}@s.whatsapp.net`);
-    } else {
-      chatCandidates.add(`${cleanNum}@c.us`);
-      chatCandidates.add(`${cleanNum}@s.whatsapp.net`);
-      chatCandidates.add(cleanNum);
-    }
-
-    // Cek jika messageId adalah serialized format: (true|false)_(JID)_(KEY)
-    const match = messageId.match(/^(?:true|false)_(.+?)_([A-Za-z0-9]+)$/);
-    if (match) {
-      const embeddedChat = match[1];
-      const keyId = match[2];
-      const embeddedClean = embeddedChat.replace(/@(c\.us|s\.whatsapp\.net|lid|g\.us)$/, '');
-
-      chatCandidates.add(embeddedChat);
-      chatCandidates.add(`${embeddedClean}@c.us`);
-      chatCandidates.add(`${embeddedClean}@s.whatsapp.net`);
-
-      // Serialized candidates FIRST!
-      msgCandidates.add(messageId);
-      msgCandidates.add(`true_${embeddedClean}@c.us_${keyId}`);
-      msgCandidates.add(`true_${embeddedClean}@s.whatsapp.net_${keyId}`);
-      msgCandidates.add(`true_${cleanNum}@c.us_${keyId}`);
-      msgCandidates.add(`true_${cleanNum}@s.whatsapp.net_${keyId}`);
-      msgCandidates.add(`false_${embeddedClean}@c.us_${keyId}`);
-      msgCandidates.add(`false_${embeddedClean}@s.whatsapp.net_${keyId}`);
-      msgCandidates.add(keyId);
-    } else {
-      // messageId adalah raw key (e.g. 3EB09F...) -> Serialized candidates FIRST!
-      msgCandidates.add(`true_${cleanNum}@c.us_${messageId}`);
-      msgCandidates.add(`true_${cleanNum}@s.whatsapp.net_${messageId}`);
-      msgCandidates.add(`false_${cleanNum}@c.us_${messageId}`);
-      msgCandidates.add(`false_${cleanNum}@s.whatsapp.net_${messageId}`);
-      msgCandidates.add(messageId);
-    }
-
-    return {
-      chatIds: Array.from(chatCandidates),
-      msgIds: Array.from(msgCandidates),
-    };
+  private buildWahaMessageCandidates(
+    chatId: string,
+    messageId: string,
+    options?: WahaMessageCandidateOptions
+  ): { chatIds: string[]; msgIds: string[] } {
+    return buildCandidatesHelper(chatId, messageId, options);
   }
 
   /**
    * Menghapus / menarik pesan WhatsApp (Delete for Everyone / Revoke).
-   * Mendukung parameter everyone=true untuk menarik pesan dari perangkat customer.
+   * KNOWN #358 (A-005 & A-011): total deadline budget 12s + outboundOnly + safe fallback.
    */
   public async deleteMessage(chatId: string, messageId: string, everyone = true): Promise<boolean> {
     if (this.shouldMock) {
@@ -1517,65 +1477,48 @@ export class WahaClient implements IWahaClient {
       return true;
     }
 
-    const { chatIds, msgIds } = this.buildWahaMessageCandidates(chatId, messageId);
+    const { chatIds, msgIds } = this.buildWahaMessageCandidates(chatId, messageId, { outboundOnly: true });
     const sessionName = this.session;
-    let lastErr: any = null;
+    const deadline = Date.now() + 12_000;
 
-    // 1. Coba kombinasi DELETE /api/{session}/chats/{chatId}/messages/{messageId}
-    for (const cId of chatIds) {
-      for (const mId of msgIds) {
-        try {
-          const response = await this.runSerialized(() =>
-            this.withRetry('deleteMessage', () =>
-              axios.delete(
-                `${this.baseUrl}/api/${sessionName}/chats/${encodeURIComponent(cId)}/messages/${encodeURIComponent(mId)}`,
-                {
-                  params: { everyone },
-                  headers: this.headers,
-                  timeout: this.timeoutMs,
-                }
-              )
+    // 1. Primary: DELETE /api/{session}/chats/{chatId}/messages/{messageId}
+    const primary = await tryWahaMessageEndpoint({
+      chatIds,
+      msgIds,
+      deadline,
+      baseTimeoutMs: this.timeoutMs,
+      attempt: (cId, mId, timeout) =>
+        this.runSerialized(() =>
+          this.withRetry('deleteMessage', () =>
+            axios.delete(
+              `${this.baseUrl}/api/${sessionName}/chats/${encodeURIComponent(cId)}/messages/${encodeURIComponent(mId)}`,
+              { params: { everyone }, headers: this.headers, timeout }
             )
-          );
-          if (response.status >= 200 && response.status < 300) {
-            return true;
-          }
-        } catch (err: any) {
-          lastErr = err;
-        }
-      }
-    }
+          )
+        ),
+    });
+    if (primary.ok) return true;
 
-    // 2. Fallback ke POST /api/messages/delete jika endpoint DELETE berbeda versi
-    for (const cId of chatIds) {
-      for (const mId of msgIds) {
-        try {
-          const response = await this.runSerialized(() =>
-            this.withRetry('deleteMessageFallback', () =>
-              axios.post(
-                `${this.baseUrl}/api/messages/delete`,
-                {
-                  session: sessionName,
-                  chatId: cId,
-                  messageId: mId,
-                  everyone,
-                },
-                {
-                  headers: this.headers,
-                  timeout: this.timeoutMs,
-                }
-              )
+    // 2. Fallback: POST /api/messages/delete
+    const fallback = await tryWahaMessageEndpoint({
+      chatIds,
+      msgIds,
+      deadline,
+      baseTimeoutMs: this.timeoutMs,
+      attempt: (cId, mId, timeout) =>
+        this.runSerialized(() =>
+          this.withRetry('deleteMessageFallback', () =>
+            axios.post(
+              `${this.baseUrl}/api/messages/delete`,
+              { session: sessionName, chatId: cId, messageId: mId, everyone },
+              { headers: this.headers, timeout }
             )
-          );
-          if (response.status >= 200 && response.status < 300) {
-            return true;
-          }
-        } catch (postErr: any) {
-          lastErr = postErr;
-        }
-      }
-    }
+          )
+        ),
+    });
+    if (fallback.ok) return true;
 
+    const lastErr = fallback.lastErr || primary.lastErr;
     console.error(`[WAHA API ERROR] deleteMessage failed for chat=${chatId}, msg=${messageId}:`, lastErr?.response?.data || lastErr?.message);
     if (lastErr?.response?.status === 404 || lastErr?.response?.status === 500) {
       throw new Error('Pesan tidak ditemukan di server WhatsApp (kemungkinan sudah ditarik atau tersinkron dari sesi lama).');
@@ -1585,7 +1528,7 @@ export class WahaClient implements IWahaClient {
 
   /**
    * Mengedit teks pesan WhatsApp yang sudah terkirim (hanya outbound <= 15 menit).
-   * Endpoint WAHA: PUT /api/{session}/chats/{chatId}/messages/{messageId}
+   * KNOWN #358 (A-005 & A-011): total deadline budget 12s + outboundOnly + safe fallback.
    */
   public async editMessage(chatId: string, messageId: string, newText: string): Promise<boolean> {
     const normalizedText = normalizeWhatsAppFormat(newText);
@@ -1595,65 +1538,49 @@ export class WahaClient implements IWahaClient {
       return true;
     }
 
-    const { chatIds, msgIds } = this.buildWahaMessageCandidates(chatId, messageId);
+    const { chatIds, msgIds } = this.buildWahaMessageCandidates(chatId, messageId, { outboundOnly: true });
     const sessionName = this.session;
-    let lastErr: any = null;
+    const deadline = Date.now() + 12_000;
 
-    // 1. Coba kombinasi PUT /api/{session}/chats/{chatId}/messages/{messageId}
-    for (const cId of chatIds) {
-      for (const mId of msgIds) {
-        try {
-          const response = await this.runSerialized(() =>
-            this.withRetry('editMessage', () =>
-              axios.put(
-                `${this.baseUrl}/api/${sessionName}/chats/${encodeURIComponent(cId)}/messages/${encodeURIComponent(mId)}`,
-                { text: normalizedText },
-                {
-                  headers: this.headers,
-                  timeout: this.timeoutMs,
-                }
-              )
+    // 1. Primary: PUT /api/{session}/chats/{chatId}/messages/{messageId}
+    const primary = await tryWahaMessageEndpoint({
+      chatIds,
+      msgIds,
+      deadline,
+      baseTimeoutMs: this.timeoutMs,
+      attempt: (cId, mId, timeout) =>
+        this.runSerialized(() =>
+          this.withRetry('editMessage', () =>
+            axios.put(
+              `${this.baseUrl}/api/${sessionName}/chats/${encodeURIComponent(cId)}/messages/${encodeURIComponent(mId)}`,
+              { text: normalizedText },
+              { headers: this.headers, timeout }
             )
-          );
-          if (response.status >= 200 && response.status < 300) {
-            return true;
-          }
-        } catch (err: any) {
-          lastErr = err;
-        }
-      }
-    }
+          )
+        ),
+    });
+    if (primary.ok) return true;
 
-    // 2. Fallback ke POST /api/messages/edit jika endpoint berbeda versi
-    for (const cId of chatIds) {
-      for (const mId of msgIds) {
-        try {
-          const response = await this.runSerialized(() =>
-            this.withRetry('editMessageFallback', () =>
-              axios.post(
-                `${this.baseUrl}/api/messages/edit`,
-                {
-                  session: sessionName,
-                  chatId: cId,
-                  messageId: mId,
-                  text: normalizedText,
-                },
-                {
-                  headers: this.headers,
-                  timeout: this.timeoutMs,
-                }
-              )
+    // 2. Fallback: POST /api/messages/edit
+    const fallback = await tryWahaMessageEndpoint({
+      chatIds,
+      msgIds,
+      deadline,
+      baseTimeoutMs: this.timeoutMs,
+      attempt: (cId, mId, timeout) =>
+        this.runSerialized(() =>
+          this.withRetry('editMessageFallback', () =>
+            axios.post(
+              `${this.baseUrl}/api/messages/edit`,
+              { session: sessionName, chatId: cId, messageId: mId, text: normalizedText },
+              { headers: this.headers, timeout }
             )
-          );
-          if (response.status >= 200 && response.status < 300) {
-            return true;
-          }
-        } catch (postErr: any) {
-          lastErr = postErr;
-        }
-      }
-    }
+          )
+        ),
+    });
+    if (fallback.ok) return true;
 
+    const lastErr = fallback.lastErr || primary.lastErr;
     console.error(`[WAHA API ERROR] editMessage failed for chat=${chatId}, msg=${messageId}:`, lastErr?.response?.data || lastErr?.message);
     if (lastErr?.response?.status === 404 || lastErr?.response?.status === 500) {
       throw new Error('Pesan tidak ditemukan di server WhatsApp atau sudah melewati batas waktu pengeditan (15 menit).');

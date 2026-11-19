@@ -56,7 +56,6 @@ export async function completeReservationById(opts: {
       targetId: opts.id,
       payload: {
         reservationId: opts.id,
-        tenantId: opts.tenantId,
         bookingDate: existing.booking_date,
         reason: 'Penyelesaian kunjungan tanpa bidan diizinkan lewat bypass allowUnassignedStaff',
       },

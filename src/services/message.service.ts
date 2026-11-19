@@ -1062,13 +1062,34 @@ export class MessageService {
 
   /**
    * Menandai pesan telah ditarik / dihapus untuk semua orang.
-   * Memperbarui konten pesan menjadi teks penanda ditarik, membersihkan status pin bila sedang disematkan,
-   * dan mem-broadcast update via SSE.
+   * Seam tunggal kanonis (dipakai API Live Chat & webhook WAHA message.revoked):
+   * - Lookup dual-ID + short key (`extractShortMessageId` + `endsWith`).
+   * - Dual-write: kolom DB (`is_revoked`, `revoked_at`, `revoked_by`) DAN `payload_raw.is_revoked`.
+   * - Early-return `false` jika pesan tidak ditemukan SEBELUM invalidasi cache & SSE (CD-04).
    */
-  public async markMessageDeleted(messageId: string, tenantId: string): Promise<boolean> {
+  public async markMessageDeleted(
+    messageId: string,
+    tenantId: string,
+    revokedBy: string = 'ADMIN'
+  ): Promise<boolean> {
     const revokedContent = '🚫 Pesan ini telah ditarik';
+    const now = new Date();
+    const nowIso = now.toISOString();
     let conversationId: string | null = null;
     let wasPinned = false;
+    let found = false;
+
+    const cleanId = extractShortMessageId(messageId);
+    const orConds: any[] = [
+      { id: messageId, tenant_id: tenantId },
+      { wa_message_id: messageId, tenant_id: tenantId },
+    ];
+    if (cleanId) {
+      if (cleanId !== messageId) {
+        orConds.push({ wa_message_id: cleanId, tenant_id: tenantId });
+      }
+      orConds.push({ wa_message_id: { endsWith: `_${cleanId}` }, tenant_id: tenantId });
+    }
 
     // ID kanonik untuk SSE (lihat updateMessageContent): frontend match via id internal.
     let resolvedMessageId = messageId;
@@ -1076,37 +1097,11 @@ export class MessageService {
 
     try {
       const msg = await prisma.message.findFirst({
-        where: {
-          id: messageId,
-          tenant_id: tenantId,
-        },
+        where: { OR: orConds },
       });
 
-      if (!msg) {
-        // Cek via wa_message_id
-        const msgWa = await prisma.message.findFirst({
-          where: { wa_message_id: messageId, tenant_id: tenantId },
-        });
-        if (msgWa) {
-          conversationId = msgWa.conversation_id;
-          resolvedMessageId = msgWa.id;
-          resolvedWaMessageId = msgWa.wa_message_id ?? null;
-          wasPinned = !!(msgWa.payload_raw as any)?.is_pinned;
-          const updatedPayload = {
-            ...(typeof msgWa.payload_raw === 'object' && msgWa.payload_raw ? (msgWa.payload_raw as any) : {}),
-            is_revoked: true,
-            revoked_at: new Date().toISOString(),
-            is_pinned: false,
-          };
-          delete updatedPayload.pinned_by;
-          delete updatedPayload.pinned_at;
-
-          await updateScopedMessage(msgWa.id, tenantId, {
-            content: revokedContent,
-            payload_raw: updatedPayload,
-          });
-        }
-      } else {
+      if (msg) {
+        found = true;
         conversationId = msg.conversation_id;
         resolvedMessageId = msg.id;
         resolvedWaMessageId = msg.wa_message_id ?? null;
@@ -1114,7 +1109,7 @@ export class MessageService {
         const updatedPayload = {
           ...(typeof msg.payload_raw === 'object' && msg.payload_raw ? (msg.payload_raw as any) : {}),
           is_revoked: true,
-          revoked_at: new Date().toISOString(),
+          revoked_at: nowIso,
           is_pinned: false,
         };
         delete updatedPayload.pinned_by;
@@ -1122,12 +1117,15 @@ export class MessageService {
 
         await updateScopedMessage(msg.id, tenantId, {
           content: revokedContent,
+          is_revoked: true,
+          revoked_at: now,
+          revoked_by: revokedBy,
           payload_raw: updatedPayload,
         });
       }
 
       // Bersihkan pointer session_data.pinned_message_id bila merujuk ke pesan ini atau pesan sedang di-pin
-      if (conversationId) {
+      if (found && conversationId) {
         try {
           const conv = await prisma.conversation.findFirst({
             where: { id: conversationId, tenant_id: tenantId },
@@ -1144,14 +1142,23 @@ export class MessageService {
       console.warn('DB markMessageDeleted error (using memory fallback):', (error as Error).message);
       // Fallback in-memory
       const inMem = memoryMessages.find(
-        (m) => (m.id === messageId || m.wa_message_id === messageId) && m.tenant_id === tenantId
+        (m) =>
+          (m.id === messageId ||
+            m.wa_message_id === messageId ||
+            (cleanId && (m.wa_message_id === cleanId || (m.wa_message_id && m.wa_message_id.endsWith(`_${cleanId}`))))) &&
+          m.tenant_id === tenantId
       );
       if (inMem) {
+        found = true;
         if (inMem.payload_raw?.is_pinned) wasPinned = true;
         inMem.content = revokedContent;
+        inMem.is_revoked = true;
+        inMem.revoked_at = now;
+        inMem.revoked_by = revokedBy;
         inMem.payload_raw = {
           ...inMem.payload_raw,
           is_revoked: true,
+          revoked_at: nowIso,
           is_pinned: false,
         };
         delete inMem.payload_raw.pinned_by;
@@ -1176,6 +1183,11 @@ export class MessageService {
           } catch (_) {}
         }
       }
+    }
+
+    // CD-04: jangan wipe cache atau siarkan SSE hantu bila pesan tidak ada di DB/memory
+    if (!found) {
+      return false;
     }
 
     // Invalidate response cache
@@ -1274,6 +1286,7 @@ export class MessageService {
     // event tidak terbuang (sebelumnya payload memakai raw key → tidak match).
     let resolvedMessageId = messageId;
     let resolvedWaMessageId: string | null = null;
+    let found = false;
 
     try {
       const msg = await prisma.message.findFirst({
@@ -1281,6 +1294,7 @@ export class MessageService {
       });
 
       if (msg) {
+        found = true;
         conversationId = msg.conversation_id;
         resolvedMessageId = msg.id;
         resolvedWaMessageId = msg.wa_message_id ?? null;
@@ -1299,6 +1313,7 @@ export class MessageService {
         (m) => (m.id === messageId || m.wa_message_id === messageId || (cleanId && m.wa_message_id && m.wa_message_id.endsWith(`_${cleanId}`))) && m.tenant_id === tenantId
       );
       if (inMem) {
+        found = true;
         inMem.content = newContent;
         inMem.payload_raw = { ...inMem.payload_raw, is_edited: true, edited_at: new Date().toISOString() };
         conversationId = inMem.conversation_id;
@@ -1306,6 +1321,15 @@ export class MessageService {
         resolvedWaMessageId = inMem.wa_message_id ?? null;
       }
     }
+
+    if (!found) {
+      return true;
+    }
+
+    // V-06: invalidate cache list livechat agar preview sidebar segar
+    try {
+      await responseCacheService.invalidatePrefix('livechat:');
+    } catch (_) {}
 
     // Broadcast update via LiveChatHub
     try {

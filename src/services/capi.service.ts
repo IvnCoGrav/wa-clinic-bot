@@ -924,12 +924,32 @@ export class CapiService {
         // PageView: pertahankan eventID browser murni untuk deduplikasi Pixel ↔ CAPI
         eventData.event_id = effectiveAdClick?.trackingCode || `pv_${customer.id}_${Math.floor(Date.now() / 1000)}`;
       } else if (effectiveAdClick?.trackingCode) {
-        const suffix = `_${eventName.toLowerCase()}`;
-        eventData.event_id = effectiveAdClick.trackingCode.endsWith(suffix)
-          ? effectiveAdClick.trackingCode
-          : `${effectiveAdClick.trackingCode}${suffix}`;
+        // P0-3 (A-004): Meta deduplikasi memakai pasangan (event_name, event_id).
+        // Event yang memiliki browser Pixel counterpart di landing (/cta, go.html) WAJIB memakai
+        // trackingCode murni agar browser↔server terdedup (tidak terhitung ganda).
+        // Suffix hanya untuk event server-only tanpa counterpart browser.
+        const BROWSER_DEDUP_EVENTS = new Set([
+          'AddToCart',
+          'Lead',
+          'InitiateCheckout',
+          'Contact',
+          'ViewContent',
+          'CompleteRegistration',
+          'Search',
+          'StartTrial',
+          'Subscribe',
+          'CustomizeProduct',
+        ]);
+        if (BROWSER_DEDUP_EVENTS.has(eventName)) {
+          eventData.event_id = effectiveAdClick.trackingCode;
+        } else {
+          const suffix = `_${eventName.toLowerCase()}`;
+          eventData.event_id = effectiveAdClick.trackingCode.endsWith(suffix)
+            ? effectiveAdClick.trackingCode
+            : `${effectiveAdClick.trackingCode}${suffix}`;
+        }
       } else if (effectiveAdClick?.ctwa_clid) {
-        // ID stabil satu perjalanan untuk CTWA native tanpa promo code
+        // ID stabil satu perjalanan untuk CTWA native tanpa promo code (server-only, tanpa browser pixel)
         const suffix = `_${eventName.toLowerCase()}`;
         eventData.event_id = `ctwa_${effectiveAdClick.ctwa_clid.slice(0, 20)}_${customer.id}${suffix}`;
       } else {
@@ -1060,8 +1080,9 @@ export class CapiService {
         }
       }
 
-      // Mandat payload bersih (A-011): flag internal & telemetri bot TIDAK boleh bocor ke Graph API Meta
-      const effectiveTestCode = testEventCode || customData?.test_event_code;
+      // Mandat payload bersih (A-011) + P0-7 (A-006): baca testEventCode dari param, snake_case, maupun camelCase
+      const rawTestCode = testEventCode || customData?.test_event_code || customData?.testEventCode;
+      const effectiveTestCode = typeof rawTestCode === 'string' ? rawTestCode.trim() || undefined : undefined;
       const internalFieldsToStrip = [
         'force_send_repeat_purchase',
         'allowZero',
@@ -1122,10 +1143,17 @@ export class CapiService {
       }
 
       if (response && response.status === 200) {
-        const eventsReceived = response.data?.events_received ?? 0;
+        const eventsReceived = Number(response.data?.events_received ?? 0);
         const deliveryConfirmed = response.status === 200 && eventsReceived > 0;
+        const { isCapiStrictDelivery } = await import('../config/feature-flags');
+        const strictDelivery = isCapiStrictDelivery();
+        const effectiveSuccess = strictDelivery ? deliveryConfirmed : true;
 
-        console.log(`[CAPI SUCCESS] Successfully sent event ${eventName} to Meta CAPI.`);
+        if (deliveryConfirmed) {
+          console.log(`[CAPI SUCCESS] Successfully sent event ${eventName} to Meta CAPI.`);
+        } else {
+          console.warn(`[CAPI UNCONFIRMED] Meta responded HTTP 200 with events_received=${eventsReceived} for ${eventName} (strictDelivery=${strictDelivery}).`);
+        }
         console.log(formatStructuredCapiEventLog({
           event: eventData.event_name || eventName,
           event_id: eventData.event_id || 'unknown',
@@ -1135,10 +1163,12 @@ export class CapiService {
           fbtrace_id: response.data?.fbtrace_id ?? null,
           source: eventData.custom_data?.source || 'unknown',
           skipped: false,
-          degraded: false,
+          degraded: !deliveryConfirmed,
+          ...(!deliveryConfirmed ? { reason: `events_received=${eventsReceived}` } : {}),
         }));
         return {
-          success: true,
+          success: effectiveSuccess,
+          ...(!effectiveSuccess ? { message: `Meta CAPI mengembalikan HTTP 200 tetapi events_received=${eventsReceived} (delivery unconfirmed)` } : {}),
           status: response.status,
           fbtrace_id: response.data?.fbtrace_id,
           events_received: eventsReceived,
@@ -1283,11 +1313,11 @@ export class CapiService {
       eventData.custom_data.value = Number(params.value);
       eventData.custom_data.currency = params.currency || 'IDR';
     }
-    if (params.testEventCode && params.testEventCode.trim()) {
-      eventData.test_event_code = params.testEventCode.trim();
-    }
-
-    const payload = { data: [eventData] };
+    const trimmedTestCode = params.testEventCode?.trim() || undefined;
+    const payload: any = {
+      data: [eventData],
+      ...(trimmedTestCode ? { test_event_code: trimmedTestCode } : {}),
+    };
     const url = `${GRAPH_API_BASE_URL}/${GRAPH_API_VERSION}/${pixelId}/events?access_token=${accessToken}`;
 
     console.log(`[CAPI TEST] Sending test ${eventName} event to Meta (pixel ${pixelId})...`);

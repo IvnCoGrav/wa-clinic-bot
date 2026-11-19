@@ -246,9 +246,9 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
       }
 
       await auditService.logAdminAction({
-        tenantId,
         apiKey: (request as any).adminKeyUsed,
         adminIdentity: (request as any).adminIdentity,
+        tenantId,
         action: 'LIVE_CHAT_SYNC_HISTORY',
         targetId: tenantId,
         payload: { limit, offset, messagesPerChat, syncedChats: result.syncedChats, syncedMessages: result.syncedMessages, totalChats: result.totalChats },
@@ -279,9 +279,9 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
       const result = await wahaHistorySyncService.startBackgroundFullSync(messagesPerChat, tenantId);
 
       await auditService.logAdminAction({
-        tenantId,
         apiKey: (request as any).adminKeyUsed,
         adminIdentity: (request as any).adminIdentity,
+        tenantId,
         action: 'LIVE_CHAT_SYNC_FULL_START',
         targetId: tenantId,
         payload: { messagesPerChat, started: result.started },
@@ -507,6 +507,7 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
     ) => {
       const { id } = request.params;
       const { text, imageB64, mediaUrl, thumbB64, mimeType, fileName, adminName, acknowledgeOutsideWindow, replyToMessageId, isInternalNote, dispatchOrigin } = request.body || {};
+      const replyTenantId = resolveSessionTenantId(request);
 
       const result = await liveChatService.sendAdminReply({
         conversationId: id,
@@ -516,7 +517,7 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
         thumbB64,
         mimeType,
         fileName,
-        tenantId: resolveSessionTenantId(request),
+        tenantId: replyTenantId,
         adminName,
         acknowledgeOutsideWindow,
         replyToMessageId,
@@ -540,9 +541,9 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
       // Catatan internal tidak dicatat sebagai balasan ke WhatsApp (audit terpisah).
       if (result.isInternal) {
         await auditService.logAdminAction({
-          tenantId: resolveSessionTenantId(request),
           apiKey: (request as any).adminKeyUsed,
           adminIdentity: (request as any).adminIdentity,
+          tenantId: replyTenantId,
           action: 'INTERNAL_NOTE_CREATED',
           targetId: id,
           payload: { adminName, messageId: result.messageId },
@@ -552,9 +553,9 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
       }
 
       await auditService.logAdminAction({
-        tenantId: resolveSessionTenantId(request),
         apiKey: (request as any).adminKeyUsed,
         adminIdentity: (request as any).adminIdentity,
+        tenantId: replyTenantId,
         action: 'LIVE_CHAT_ADMIN_REPLY',
         targetId: id,
         payload: { adminName, messageId: result.messageId, provider: result.provider },
@@ -656,73 +657,75 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
   });
 
   /**
-   * DELETE /api/admin/conversations/:id/messages/:messageId
+   * DELETE /api/admin/live-chat/conversations/:id/messages/:messageId
+   * Alias backward-compat: DELETE /api/admin/conversations/:id/messages/:messageId
    * Menarik / menghapus pesan WhatsApp untuk semua orang (Delete for Everyone / Revoke).
    */
-  fastify.delete(
-    '/api/admin/conversations/:id/messages/:messageId',
-    async (
-      request: FastifyRequest<{
-        Params: { id: string; messageId: string };
-      }>,
-      reply: FastifyReply
-    ) => {
-      const { id, messageId } = request.params;
-      const tenantId = resolveSessionTenantId(request);
-      const adminName = (request as any).adminIdentity || 'Admin';
+  const revokeMessageHandler = async (
+    request: FastifyRequest<{
+      Params: { id: string; messageId: string };
+    }>,
+    reply: FastifyReply
+  ) => {
+    const { id, messageId } = request.params;
+    const tenantId = resolveSessionTenantId(request);
+    const adminName = (request as any).adminIdentity || 'Admin';
 
-      const result = await liveChatService.revokeMessage({
-        conversationId: id,
-        messageId,
-        tenantId,
-        adminName,
-      });
+    const result = await liveChatService.revokeMessage({
+      conversationId: id,
+      messageId,
+      tenantId,
+      adminName,
+    });
 
-      if (!result.success) {
-        return reply.status(400).send({ success: false, error: result.error });
-      }
-
-      return reply.status(200).send({ success: true, message: 'Pesan berhasil ditarik dari WhatsApp.' });
+    if (!result.success) {
+      return reply.status(400).send({ success: false, error: result.error });
     }
-  );
+
+    return reply.status(200).send({ success: true, message: 'Pesan berhasil ditarik dari WhatsApp.' });
+  };
+
+  fastify.delete('/api/admin/live-chat/conversations/:id/messages/:messageId', revokeMessageHandler);
+  fastify.delete('/api/admin/conversations/:id/messages/:messageId', revokeMessageHandler);
 
   /**
-   * PUT /api/admin/conversations/:id/messages/:messageId/edit
+   * PUT /api/admin/live-chat/conversations/:id/messages/:messageId/edit
+   * Alias backward-compat: PUT /api/admin/conversations/:id/messages/:messageId/edit
    * Mengedit teks pesan WhatsApp yang sudah terkirim (maksimal 15 menit).
    */
-  fastify.put(
-    '/api/admin/conversations/:id/messages/:messageId/edit',
-    async (
-      request: FastifyRequest<{
-        Params: { id: string; messageId: string };
-        Body: { text: string };
-      }>,
-      reply: FastifyReply
-    ) => {
-      const { id, messageId } = request.params;
-      const { text } = request.body || {};
-      const tenantId = resolveSessionTenantId(request);
-      const adminName = (request as any).adminIdentity || 'Admin';
+  const editMessageHandler = async (
+    request: FastifyRequest<{
+      Params: { id: string; messageId: string };
+      Body: { text: string };
+    }>,
+    reply: FastifyReply
+  ) => {
+    const { id, messageId } = request.params;
+    const { text } = request.body || {};
+    const tenantId = resolveSessionTenantId(request);
+    const adminName = (request as any).adminIdentity || 'Admin';
 
-      if (!text || !text.trim()) {
-        return reply.status(400).send({ success: false, error: 'Teks pesan baru tidak boleh kosong.' });
-      }
-
-      const result = await liveChatService.editMessage({
-        conversationId: id,
-        messageId,
-        newContent: text.trim(),
-        tenantId,
-        adminName,
-      });
-
-      if (!result.success) {
-        return reply.status(400).send({ success: false, error: result.error });
-      }
-
-      return reply.status(200).send({ success: true, message: 'Pesan berhasil diperbarui di WhatsApp.' });
+    if (!text || !text.trim()) {
+      return reply.status(400).send({ success: false, error: 'Teks pesan baru tidak boleh kosong.' });
     }
-  );
+
+    const result = await liveChatService.editMessage({
+      conversationId: id,
+      messageId,
+      newContent: text.trim(),
+      tenantId,
+      adminName,
+    });
+
+    if (!result.success) {
+      return reply.status(400).send({ success: false, error: result.error });
+    }
+
+    return reply.status(200).send({ success: true, message: 'Pesan berhasil diperbarui di WhatsApp.' });
+  };
+
+  fastify.put('/api/admin/live-chat/conversations/:id/messages/:messageId/edit', editMessageHandler);
+  fastify.put('/api/admin/conversations/:id/messages/:messageId/edit', editMessageHandler);
 
   /**
    * POST /api/admin/live-chat/conversations/:id/messages/:messageId/reaction & POST /api/admin/conversations/:id/messages/:messageId/reaction
@@ -950,118 +953,120 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
   });
 
   /**
-   * PATCH /api/admin/conversation/:id/release
+   * PATCH /api/admin/live-chat/conversations/:id/release
+   * Alias backward-compat: PATCH /api/admin/conversation/:id/release
    * Endpoint manual release untuk mengembalikan thread dari HUMAN_HANDLING ke state aktif bot.
    */
-  fastify.patch(
-    '/api/admin/conversation/:id/release',
-    async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
-      const { id } = request.params;
-      const tenantId = resolveSessionTenantId(request);
-      let restoredState = 'INITIAL';
+  const handleReleaseRoute = async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
+    const { id } = request.params;
+    const tenantId = resolveSessionTenantId(request);
+    let restoredState = 'INITIAL';
+    try {
+      let existing: any = null;
       try {
-        let existing: any = null;
-        try {
-          // SEC-AUDIT-07: scope tenant pada lookup (anti IDOR lintas-tenant).
-          existing = await prisma.conversation.findFirst({ where: { id, tenant_id: tenantId } });
-        } catch {
-          existing = null;
-        }
-        if (!existing) {
-          existing = await conversationService.getConversationById(id, tenantId);
-        }
-        if (!existing) {
-          return reply.status(404).send({ success: false, error: 'Conversation tidak ditemukan.' });
-        }
-        if (!existing.is_human_handling) {
-          return reply
-            .status(409)
-            .send({ success: false, error: 'Conversation sedang ditangani bot — tidak perlu di-release.' });
-        }
-        restoredState = existing.previous_state || 'INITIAL';
-
-        // AUDIT FASE 3: tenant-scoped write (bukan hanya pre-check findFirst).
-        const releaseRes = await prisma.conversation.updateMany({
-          where: { id, tenant_id: tenantId },
-          data: {
-            is_human_handling: false,
-            human_handling_since: null,
-            escalation_reason: null,
-            current_state: restoredState as any,
-          },
-        });
-        if (releaseRes.count === 0) throw new Error('Conversation not found for tenant');
-        const updated = await prisma.conversation.findFirst({ where: { id, tenant_id: tenantId } });
-        if (!updated) throw new Error('Conversation not found for tenant');
-
-        await auditService.logAdminAction({
-          apiKey: (request as any).adminKeyUsed,
-          adminIdentity: (request as any).adminIdentity,
-          action: 'CONVERSATION_MANUAL_RELEASE',
-          targetId: id,
-          payload: { releasedAt: new Date(), restoredState },
-          ipAddress: request.ip,
-        });
-
-        // Auto cleanup Hold label and flag in database
-        try {
-          const customer = await prisma.customer.findUnique({ where: { id: updated.customer_id } });
-          if (customer) {
-            await prisma.customer.update({
-              where: { id: customer.id },
-              data: { is_hold_labeled: false },
-            });
-            const holdLabel = await prisma.label.findFirst({
-              where: { tenant_id: tenantId, name: { equals: 'Hold', mode: 'insensitive' } },
-            });
-            if (holdLabel) {
-              await prisma.customerLabel.deleteMany({
-                where: { customer_id: customer.id, label_id: holdLabel.id },
-              });
-            }
-          }
-        } catch (err: any) {
-          console.warn(`[LABEL ERROR] Failed to auto-clear hold label during manual admin release:`, err.message);
-        }
-
-        // Mandat Anti-Label WAHA: hold release via DB internal (is_human_handling), zero WAHA label
-        console.log(`[LABEL SKIP] Manual release: DB-only hold clearance, zero WAHA label mutation.`);
-
-        getLiveChatHub()
-          .publish({
-            type: 'conversation.updated',
-            tenantId,
-            payload: buildConversationUpdatedPayload(updated),
-          })
-          .catch(() => {});
-
-        return reply.status(200).send({
-          success: true,
-          message: `Percakapan berhasil di-release kembali ke bot (Restored state: ${restoredState}).`,
-          data: updated,
-        });
-      } catch (err: any) {
-        try {
-          await conversationService.updateConversationState(
-            id,
-            {
-              currentState: restoredState as ConversationState,
-              isHumanHandling: false,
-              humanHandlingSince: null,
-              escalationReason: null,
-            },
-            tenantId
-          );
-        } catch (memErr: any) {
-          console.warn('[ADMIN RELEASE] Failed to update in-memory conversation:', memErr.message);
-        }
-        return reply.status(200).send({
-          success: true,
-          message: `Percakapan berhasil di-release (Fallback Mode - Restored state: ${restoredState}).`,
-        });
+        // SEC-AUDIT-07: scope tenant pada lookup (anti IDOR lintas-tenant).
+        existing = await prisma.conversation.findFirst({ where: { id, tenant_id: tenantId } });
+      } catch {
+        existing = null;
       }
+      if (!existing) {
+        existing = await conversationService.getConversationById(id, tenantId);
+      }
+      if (!existing) {
+        return reply.status(404).send({ success: false, error: 'Conversation tidak ditemukan.' });
+      }
+      if (!existing.is_human_handling) {
+        return reply
+          .status(409)
+          .send({ success: false, error: 'Conversation sedang ditangani bot — tidak perlu di-release.' });
+      }
+      restoredState = existing.previous_state || 'INITIAL';
+
+      // AUDIT FASE 3: tenant-scoped write (bukan hanya pre-check findFirst).
+      const releaseRes = await prisma.conversation.updateMany({
+        where: { id, tenant_id: tenantId },
+        data: {
+          is_human_handling: false,
+          human_handling_since: null,
+          escalation_reason: null,
+          current_state: restoredState as any,
+        },
+      });
+      if (releaseRes.count === 0) throw new Error('Conversation not found for tenant');
+      const updated = await prisma.conversation.findFirst({ where: { id, tenant_id: tenantId } });
+      if (!updated) throw new Error('Conversation not found for tenant');
+
+      await auditService.logAdminAction({
+        apiKey: (request as any).adminKeyUsed,
+        adminIdentity: (request as any).adminIdentity,
+        tenantId,
+        action: 'CONVERSATION_MANUAL_RELEASE',
+        targetId: id,
+        payload: { releasedAt: new Date(), restoredState },
+        ipAddress: request.ip,
+      });
+
+      // Auto cleanup Hold label and flag in database
+      try {
+        const customer = await prisma.customer.findUnique({ where: { id: updated.customer_id } });
+        if (customer) {
+          await prisma.customer.update({
+            where: { id: customer.id },
+            data: { is_hold_labeled: false },
+          });
+          const holdLabel = await prisma.label.findFirst({
+            where: { tenant_id: tenantId, name: { equals: 'Hold', mode: 'insensitive' } },
+          });
+          if (holdLabel) {
+            await prisma.customerLabel.deleteMany({
+              where: { customer_id: customer.id, label_id: holdLabel.id },
+            });
+          }
+        }
+      } catch (err: any) {
+        console.warn(`[LABEL ERROR] Failed to auto-clear hold label during manual admin release:`, err.message);
+      }
+
+      // Mandat Anti-Label WAHA: hold release via DB internal (is_human_handling), zero WAHA label
+      console.log(`[LABEL SKIP] Manual release: DB-only hold clearance, zero WAHA label mutation.`);
+
+      getLiveChatHub()
+        .publish({
+          type: 'conversation.updated',
+          tenantId,
+          payload: buildConversationUpdatedPayload(updated),
+        })
+        .catch(() => {});
+
+      return reply.status(200).send({
+        success: true,
+        message: `Percakapan berhasil di-release kembali ke bot (Restored state: ${restoredState}).`,
+        data: updated,
+      });
+    } catch (err: any) {
+      try {
+        await conversationService.updateConversationState(
+          id,
+          {
+            currentState: restoredState as ConversationState,
+            isHumanHandling: false,
+            humanHandlingSince: null,
+            escalationReason: null,
+          },
+          tenantId
+        );
+      } catch (memErr: any) {
+        console.warn('[ADMIN RELEASE] Failed to update in-memory conversation:', memErr.message);
+      }
+      return reply.status(200).send({
+        success: true,
+        message: `Percakapan berhasil di-release (Fallback Mode - Restored state: ${restoredState}).`,
+      });
     }
-  );
+  };
+
+  fastify.patch('/api/admin/live-chat/conversations/:id/release', handleReleaseRoute);
+  fastify.patch('/api/admin/conversation/:id/release', handleReleaseRoute);
 
   /**
    * PATCH /api/admin/conversation/:id/takeover
@@ -1126,9 +1131,9 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
       }
 
       await auditService.logAdminAction({
-        tenantId,
         apiKey: (request as any).adminKeyUsed,
         adminIdentity: (request as any).adminIdentity,
+        tenantId,
         action: 'CONVERSATION_MANUAL_TAKEOVER',
         targetId: id,
         payload: { takenOverAt: now, previousState: existing.current_state },
@@ -1171,8 +1176,9 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
     }
   };
 
-  fastify.patch('/api/admin/conversation/:id/takeover', handleTakeoverRoute);
+  fastify.patch('/api/admin/live-chat/conversations/:id/takeover', handleTakeoverRoute);
   fastify.post('/api/admin/live-chat/conversations/:id/takeover', handleTakeoverRoute);
+  fastify.patch('/api/admin/conversation/:id/takeover', handleTakeoverRoute);
 
   /**
    * POST /api/admin/live-chat/customers/:id/refresh-profile-picture
@@ -1286,137 +1292,146 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
   });
 
   /**
-   * PATCH /api/admin/conversations/:id/read
+   * PATCH /api/admin/live-chat/conversations/:id/read
+   * Alias backward-compat: PATCH /api/admin/conversations/:id/read
    * Menandai semua pesan inbound pada percakapan sebagai telah dibaca.
    */
-  fastify.patch(
-    '/api/admin/conversations/:id/read',
-    async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
-      const { id } = request.params;
-      const tenantId = resolveSessionTenantId(request);
-      try {
-        await messageService.markConversationMessagesAsRead(id, tenantId);
+  const markConversationReadHandler = async (
+    request: FastifyRequest<{ Params: { id: string } }>,
+    reply: FastifyReply
+  ) => {
+    const { id } = request.params;
+    const tenantId = resolveSessionTenantId(request);
+    try {
+      await messageService.markConversationMessagesAsRead(id, tenantId);
 
-        // GERBANG (T-01): hanya siarkan unread=0 jika DB benar-benar sudah tersinkron.
-        const persisted = await isConversationReadStatePersisted(id, tenantId, false);
-        if (!persisted) {
-          return reply.status(200).send({
-            success: true,
-            degraded: true,
-            message: 'Percakapan ditandai dibaca secara lokal, tetapi database belum tersinkron. Muat ulang setelah koneksi pulih.',
-          });
-        }
-        const conv = await conversationService.getConversationById(id, tenantId);
-
-        // Broadcast update via LiveChatHub
-        try {
-          const hub = getLiveChatHub();
-          await hub.publish({
-            type: 'conversation.updated',
-            tenantId,
-            payload: {
-              conversationId: id,
-              unreadCount: 0,
-              isManualUnread: false,
-              ...(conv ? buildConversationUpdatedPayload(conv) : {}),
-            },
-          });
-        } catch {}
-
-        return reply.status(200).send({ success: true, message: 'Percakapan ditandai telah dibaca.' });
-      } catch (err: any) {
-        return reply.status(500).send({ success: false, error: err.message || 'Gagal menandai telah dibaca' });
-      }
-    }
-  );
-
-  /**
-   * PATCH /api/admin/conversations/:id/unread
-   * Menandai percakapan sebagai belum dibaca (Manual Mark as Unread — Hijau Tua).
-   */
-  fastify.patch(
-    '/api/admin/conversations/:id/unread',
-    async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
-      const { id } = request.params;
-      const tenantId = resolveSessionTenantId(request);
-      try {
-        await messageService.markConversationAsUnread(id, tenantId);
-
-        // GERBANG (T-01): paritas — jangan siarkan "belum dibaca" bila DB gagal.
-        const persisted = await isConversationReadStatePersisted(id, tenantId, true);
-        if (!persisted) {
-          return reply.status(200).send({
-            success: true,
-            degraded: true,
-            message: 'Status belum dibaca disimpan lokal, tetapi database belum tersinkron.',
-          });
-        }
-        const conv = await conversationService.getConversationById(id, tenantId);
-
-        // Broadcast update via LiveChatHub
-        try {
-          const hub = getLiveChatHub();
-          await hub.publish({
-            type: 'conversation.updated',
-            tenantId,
-            payload: {
-              conversationId: id,
-              unreadCount: 1,
-              isManualUnread: true,
-              ...(conv ? buildConversationUpdatedPayload(conv) : {}),
-            },
-          });
-        } catch {}
-
-        return reply.status(200).send({ success: true, message: 'Percakapan ditandai belum dibaca.' });
-      } catch (err: any) {
-        return reply.status(500).send({ success: false, error: err.message || 'Gagal menandai belum dibaca' });
-      }
-    }
-  );
-
-  /**
-   * PATCH /api/admin/conversations/:id/pin
-   * Menyematkan / melepas sematan percakapan (Pin/Unpin).
-   */
-  fastify.patch(
-    '/api/admin/conversations/:id/pin',
-    async (
-      request: FastifyRequest<{
-        Params: { id: string };
-        Body: { isPinned?: boolean };
-      }>,
-      reply: FastifyReply
-    ) => {
-      const { id } = request.params;
-      const { isPinned } = request.body || {};
-      const tenantId = resolveSessionTenantId(request);
-      try {
-        const updated = await conversationService.togglePinConversation(id, tenantId, isPinned);
-        if (!updated) {
-          return reply.status(404).send({ success: false, error: 'Percakapan tidak ditemukan.' });
-        }
-
-        // Broadcast update via LiveChatHub
-        try {
-          const hub = getLiveChatHub();
-          await hub.publish({
-            type: 'conversation.updated',
-            tenantId,
-            payload: buildConversationUpdatedPayload(updated),
-          });
-        } catch {}
-
+      // GERBANG (T-01): hanya siarkan unread=0 jika DB benar-benar sudah tersinkron.
+      const persisted = await isConversationReadStatePersisted(id, tenantId, false);
+      if (!persisted) {
         return reply.status(200).send({
           success: true,
-          isPinned: updated.is_pinned,
-          message: updated.is_pinned ? 'Percakapan berhasil disematkan.' : 'Sematan percakapan dilepas.',
+          degraded: true,
+          message: 'Percakapan ditandai dibaca secara lokal, tetapi database belum tersinkron. Muat ulang setelah koneksi pulih.',
         });
-      } catch (err: any) {
-        return reply.status(500).send({ success: false, error: err.message || 'Gagal mengubah status sematan' });
       }
+      const conv = await conversationService.getConversationById(id, tenantId);
+
+      // Broadcast update via LiveChatHub
+      try {
+        const hub = getLiveChatHub();
+        await hub.publish({
+          type: 'conversation.updated',
+          tenantId,
+          payload: {
+            conversationId: id,
+            unreadCount: 0,
+            isManualUnread: false,
+            ...(conv ? buildConversationUpdatedPayload(conv) : {}),
+          },
+        });
+      } catch {}
+
+      return reply.status(200).send({ success: true, message: 'Percakapan ditandai telah dibaca.' });
+    } catch (err: any) {
+      return reply.status(500).send({ success: false, error: err.message || 'Gagal menandai telah dibaca' });
     }
-  );
+  };
+
+  fastify.patch('/api/admin/live-chat/conversations/:id/read', markConversationReadHandler);
+  fastify.patch('/api/admin/conversations/:id/read', markConversationReadHandler);
+
+  /**
+   * PATCH /api/admin/live-chat/conversations/:id/unread
+   * Alias backward-compat: PATCH /api/admin/conversations/:id/unread
+   * Menandai percakapan sebagai belum dibaca (Manual Mark as Unread — Hijau Tua).
+   */
+  const markConversationUnreadHandler = async (
+    request: FastifyRequest<{ Params: { id: string } }>,
+    reply: FastifyReply
+  ) => {
+    const { id } = request.params;
+    const tenantId = resolveSessionTenantId(request);
+    try {
+      await messageService.markConversationAsUnread(id, tenantId);
+
+      // GERBANG (T-01): paritas — jangan siarkan "belum dibaca" bila DB gagal.
+      const persisted = await isConversationReadStatePersisted(id, tenantId, true);
+      if (!persisted) {
+        return reply.status(200).send({
+          success: true,
+          degraded: true,
+          message: 'Status belum dibaca disimpan lokal, tetapi database belum tersinkron.',
+        });
+      }
+      const conv = await conversationService.getConversationById(id, tenantId);
+
+      // Broadcast update via LiveChatHub
+      try {
+        const hub = getLiveChatHub();
+        await hub.publish({
+          type: 'conversation.updated',
+          tenantId,
+          payload: {
+            conversationId: id,
+            unreadCount: 1,
+            isManualUnread: true,
+            ...(conv ? buildConversationUpdatedPayload(conv) : {}),
+          },
+        });
+      } catch {}
+
+      return reply.status(200).send({ success: true, message: 'Percakapan ditandai belum dibaca.' });
+    } catch (err: any) {
+      return reply.status(500).send({ success: false, error: err.message || 'Gagal menandai belum dibaca' });
+    }
+  };
+
+  fastify.patch('/api/admin/live-chat/conversations/:id/unread', markConversationUnreadHandler);
+  fastify.patch('/api/admin/conversations/:id/unread', markConversationUnreadHandler);
+
+  /**
+   * PATCH /api/admin/live-chat/conversations/:id/pin
+   * Alias backward-compat: PATCH /api/admin/conversations/:id/pin
+   * Menyematkan / melepas sematan percakapan (Pin/Unpin).
+   */
+  const togglePinConversationHandler = async (
+    request: FastifyRequest<{
+      Params: { id: string };
+      Body: { isPinned?: boolean };
+    }>,
+    reply: FastifyReply
+  ) => {
+    const { id } = request.params;
+    const { isPinned } = request.body || {};
+    const tenantId = resolveSessionTenantId(request);
+    try {
+      const updated = await conversationService.togglePinConversation(id, tenantId, isPinned);
+      if (!updated) {
+        return reply.status(404).send({ success: false, error: 'Percakapan tidak ditemukan.' });
+      }
+
+      // Broadcast update via LiveChatHub
+      try {
+        const hub = getLiveChatHub();
+        await hub.publish({
+          type: 'conversation.updated',
+          tenantId,
+          payload: buildConversationUpdatedPayload(updated),
+        });
+      } catch {}
+
+      return reply.status(200).send({
+        success: true,
+        isPinned: updated.is_pinned,
+        message: updated.is_pinned ? 'Percakapan berhasil disematkan.' : 'Sematan percakapan dilepas.',
+      });
+    } catch (err: any) {
+      return reply.status(500).send({ success: false, error: err.message || 'Gagal mengubah status sematan' });
+    }
+  };
+
+  fastify.patch('/api/admin/live-chat/conversations/:id/pin', togglePinConversationHandler);
+  fastify.patch('/api/admin/conversations/:id/pin', togglePinConversationHandler);
 
   /**
    * PATCH /api/admin/live-chat/conversations/:id/dismiss-frustration

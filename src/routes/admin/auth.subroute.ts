@@ -7,6 +7,7 @@ import { verifyPassword } from '../../utils/bcrypt';
 import { prisma } from '../../db/client';
 import { DEFAULT_TENANT_ID } from '../../config/tenant';
 import { isCopilotTenantAllowed } from '../../config/copilot-tenant';
+import { getBrandIdentityAsync } from '../../config/brand';
 import { resolveSessionTenantId } from './route-helpers';
 import { checkStateChangingCsrf } from '../../utils/csrf-guard';
 
@@ -373,7 +374,17 @@ export async function authAdminRoutes(fastify: FastifyInstance) {
   /**
    * GET /api/admin/auth/me
    * Mengembalikan info profil session aktif (Super Admin atau Staff RBAC)
+   * beserta identitas brand non-rahasia tenant (KNOWN #358 A-003 / K-2).
    */
+  const resolveAuthBrand = async (tenantId: string): Promise<{ businessName: string; botDisplayName: string }> => {
+    try {
+      const b = await getBrandIdentityAsync(tenantId);
+      return { businessName: b.businessName, botDisplayName: b.botDisplayName };
+    } catch {
+      return { businessName: 'Klinik', botDisplayName: 'Admin' };
+    }
+  };
+
   fastify.get('/api/admin/auth/me', async (request, reply) => {
     const cookieHeader = request.headers['cookie'] || '';
     const adminSessionCookie = cookieHeader.match(/admin_session=([^;]+)/)?.[1];
@@ -383,34 +394,40 @@ export async function authAdminRoutes(fastify: FastifyInstance) {
     // 1a. Cek header X-API-KEY
     if (clientKey && adminKey && safeCompare(clientKey, adminKey)) {
       const identity = (request.headers['x-admin-identity'] || 'API Key Client') as string;
+      const tenantId = resolveSessionTenantId(request);
+      const brand = await resolveAuthBrand(tenantId);
       return reply.status(200).send({
         success: true,
         authenticated: true,
         adminIdentity: identity,
+        brand,
         user: {
           id: 'admin-key',
           email: getAdminEmail(),
           name: identity,
           role: 'super_admin',
-          tenantId: resolveSessionTenantId(request),
-          copilotEnabled: isCopilotTenantAllowed(resolveSessionTenantId(request)),
+          tenantId,
+          copilotEnabled: isCopilotTenantAllowed(tenantId),
         },
       });
     }
 
     // 1b. Cek adminIdentity jika sudah dipasang oleh hook
     if ((request as any).adminIdentity) {
+      const tenantId = resolveSessionTenantId(request);
+      const brand = await resolveAuthBrand(tenantId);
       return reply.status(200).send({
         success: true,
         authenticated: true,
         adminIdentity: (request as any).adminIdentity,
+        brand,
         user: {
           id: 'admin-session',
           email: getAdminEmail(),
           name: (request as any).adminIdentity || 'Super Admin',
           role: 'super_admin',
-          tenantId: resolveSessionTenantId(request),
-          copilotEnabled: isCopilotTenantAllowed(resolveSessionTenantId(request)),
+          tenantId,
+          copilotEnabled: isCopilotTenantAllowed(tenantId),
         },
       });
     }
@@ -421,17 +438,20 @@ export async function authAdminRoutes(fastify: FastifyInstance) {
       if (outcome.status === 'unavailable') return sendSessionUnavailable(reply);
       if (outcome.status === 'valid') {
         const session = outcome.session;
+        const tenantId = resolveSessionTenantId(request);
+        const brand = await resolveAuthBrand(tenantId);
         return reply.status(200).send({
           success: true,
           authenticated: true,
           adminIdentity: session.adminIdentity,
+          brand,
           user: {
             id: session.id,
             email: getAdminEmail(),
             name: session.adminIdentity,
             role: 'super_admin',
-            tenantId: resolveSessionTenantId(request),
-            copilotEnabled: isCopilotTenantAllowed(resolveSessionTenantId(request)),
+            tenantId,
+            copilotEnabled: isCopilotTenantAllowed(tenantId),
           },
         });
       }
@@ -451,17 +471,20 @@ export async function authAdminRoutes(fastify: FastifyInstance) {
         const staffRole = session.staff.role;
         const role =
           staffRole === 'THERAPIST' ? 'therapist' : staffRole.toLowerCase();
+        const tenantId = session.staff.tenant_id || resolveSessionTenantId(request);
+        const brand = await resolveAuthBrand(tenantId);
         return reply.status(200).send({
           success: true,
           authenticated: true,
           adminIdentity: session.staff.name,
+          brand,
           user: {
             id: session.staff.id,
             name: session.staff.name,
             phone: session.staff.phone,
             role,
-            tenantId: resolveSessionTenantId(request),
-            copilotEnabled: isCopilotTenantAllowed(resolveSessionTenantId(request)),
+            tenantId,
+            copilotEnabled: isCopilotTenantAllowed(tenantId),
           },
         });
       }

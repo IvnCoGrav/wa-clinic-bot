@@ -7,7 +7,7 @@
 
 ## 1. Daftar Kapabilitas Kanonis Aktif
 
-Total kapabilitas terdaftar: **28 modul**.
+Total kapabilitas terdaftar: **29 modul**.
 
 | ID Kapabilitas | Judul & Deskripsi | Modul Kanonis | Ekspor Resmi | Test File |
 |---|---|---|---|---|
@@ -29,6 +29,7 @@ Total kapabilitas terdaftar: **28 modul**.
 | `migration.staging` | **Akses data staging migrasi & FAQ**<br>Query tenant-scoped untuk antrean staging migrasi legacy, LTV customer, serta staging FAQ medis/umum (termasuk batch chunk anti N+1). | [`src/services/migration-staging.service.ts`](../src/services/migration-staging.service.ts) | `listLegacyStaging`, `listLegacyStagingByStatus`, `updateLegacyStagingStatus`, `bulkApproveStagingPurchases`, `countTenantConversations`, `clearPendingFaqStaging`, `deleteAllFaqStaging`, `listFaqStaging`, `reviewMedicalFaqStaging`, `reviewGeneralFaqStaging` | [`migration-staging.test.ts`](../tests/unit/migration-staging.test.ts) |
 | `phone.normalize` | **Normalisasi nomor telepon Indonesia**<br>Normalisasi nomor HP format Indonesia (08x, +628x, 628x) ke format 628x standar atau E164. | [`src/utils/phone-normalizer.ts`](../src/utils/phone-normalizer.ts) | `normalizePhoneID`, `normalizePhoneToE164` | [`security-and-parsing-helpers.test.ts`](../tests/unit/security-and-parsing-helpers.test.ts) |
 | `pii.mask_phone` | **Masking nomor telepon (PII)**<br>Menyensor nomor HP untuk log internal, audit trail, dan tampilan staf. | [`src/utils/pii-masker.ts`](../src/utils/pii-masker.ts) | `maskPhoneNumber`, `maskPhoneInText`, `maskPhoneWithTenantSuffix` | [`staff-chat-pii-masker.test.ts`](../tests/unit/staff-chat-pii-masker.test.ts) |
+| `rbac.role_module_scopes` | **Kebijakan Layer 1 RBAC & derivasi scope custom role**<br>Sumber kebenaran tunggal daftar batas keamanan Layer 1 RBAC (Super Admin only/write-only/restricted sub-paths) dan pemetaan deterministik modul UI ke role_api_scopes tanpa I/O. | [`src/domain/role-module-scopes.ts`](../src/domain/role-module-scopes.ts) | `SUPER_ADMIN_ONLY_PREFIXES`, `SETTINGS_READ_ALLOWLIST`, `SUPER_ADMIN_WRITE_PREFIXES`, `SUPER_ADMIN_RESTRICTED_SUBPATHS`, `SUPER_ADMIN_ONLY_MODULE_PATHS`, `BASELINE_STAFF_API_SCOPES`, `MODULE_PATH_TO_API_SCOPES`, `isScopeFullyBlockedByLayer1`, `deriveApiScopesForAllowedPaths` | [`rbac-route-contract-matrix.test.ts`](../tests/unit/rbac-route-contract-matrix.test.ts) |
 | `regex.escape` | **Escape string untuk ekspresi reguler**<br>Meng-escape karakter khusus regex (.*+?^${}()|[\]) agar aman digunakan di RegExp dinamis. | [`src/utils/regex-escape.ts`](../src/utils/regex-escape.ts) | `escapeRegex` | [`regex-escape.test.ts`](../tests/unit/regex-escape.test.ts) |
 | `reservation.payment_evaluation` | **Evaluasi status pembayaran reservasi**<br>Menentukan status evaluasi pembayaran dan snapshot ongkir reservasi secara kanonis (murni, tanpa I/O). | [`src/domain/payment-expected.ts`](../src/domain/payment-expected.ts) | `resolveReservationPaymentEvaluation`, `resolveDeliveryFeeSnapshot` | *Belum ada (Fase lanjutan)* |
 | `reservation.payment_response` | **Response wrapper evaluasi pembayaran reservasi**<br>Menyematkan hasil kalkulasi paymentEvaluation ke dalam payload respons reservasi admin. | [`src/routes/admin/shared/reservation-response.ts`](../src/routes/admin/shared/reservation-response.ts) | `withPaymentEvaluation` | [`reservation-payment-response.test.ts`](../tests/unit/reservation-payment-response.test.ts) |
@@ -203,6 +204,15 @@ Total kapabilitas terdaftar: **28 modul**.
 - **Simbol Terlarang di Luar Kanonis:** `maskPhone`, `maskPhoneNumber`, `maskPhoneInText`, `maskPhoneWithTenantSuffix`
 - **File yang Diizinkan:** `src/utils/pii-masker.ts`
 - **File Test:** [`tests/unit/staff-chat-pii-masker.test.ts`](../tests/unit/staff-chat-pii-masker.test.ts)
+
+### `rbac.role_module_scopes` — Kebijakan Layer 1 RBAC & derivasi scope custom role
+
+- **Deskripsi:** Sumber kebenaran tunggal daftar batas keamanan Layer 1 RBAC (Super Admin only/write-only/restricted sub-paths) dan pemetaan deterministik modul UI ke role_api_scopes tanpa I/O.
+- **File Kanonis:** [`src/domain/role-module-scopes.ts`](../src/domain/role-module-scopes.ts)
+- **Ekspor Kanonis:** `SUPER_ADMIN_ONLY_PREFIXES`, `SETTINGS_READ_ALLOWLIST`, `SUPER_ADMIN_WRITE_PREFIXES`, `SUPER_ADMIN_RESTRICTED_SUBPATHS`, `SUPER_ADMIN_ONLY_MODULE_PATHS`, `BASELINE_STAFF_API_SCOPES`, `MODULE_PATH_TO_API_SCOPES`, `isScopeFullyBlockedByLayer1`, `deriveApiScopesForAllowedPaths`
+- **Simbol Terlarang di Luar Kanonis:** `deriveApiScopesForAllowedPaths`, `isScopeFullyBlockedByLayer1`
+- **File yang Diizinkan:** `src/domain/role-module-scopes.ts`
+- **File Test:** [`tests/unit/rbac-route-contract-matrix.test.ts`](../tests/unit/rbac-route-contract-matrix.test.ts)
 
 ### `regex.escape` — Escape string untuk ekspresi reguler
 

@@ -91,9 +91,9 @@ export async function reservationSeriesRoutes(fastify: FastifyInstance) {
         );
 
         await auditService.logAdminAction({
-          tenantId: tenantId,
           apiKey: (request as any).adminKeyUsed,
           adminIdentity: (request as any).adminIdentity,
+          tenantId,
           action: 'CREATE_RESERVATION_SERIES',
           targetId: series.id,
           payload: { customerId, treatmentName, treatmentCategory, totalSessions, purchaseValue, deliveryFee, customerAddressId: customerAddressId || null, sessionCount: sessions.length },
@@ -213,9 +213,9 @@ export async function reservationSeriesRoutes(fastify: FastifyInstance) {
         const { reservationSeriesService } = await import('../../services/reservation-series.service');
         const result = await reservationSeriesService.pauseSeries(request.params.id, tenantId);
         await auditService.logAdminAction({
-          tenantId: tenantId,
           apiKey: (request as any).adminKeyUsed,
           adminIdentity: (request as any).adminIdentity,
+          tenantId,
           action: 'PAUSE_RESERVATION_SERIES',
           targetId: request.params.id,
           payload: result,
@@ -240,9 +240,9 @@ export async function reservationSeriesRoutes(fastify: FastifyInstance) {
         const { reservationSeriesService } = await import('../../services/reservation-series.service');
         const result = await reservationSeriesService.resumeSeries(request.params.id, tenantId);
         await auditService.logAdminAction({
-          tenantId: tenantId,
           apiKey: (request as any).adminKeyUsed,
           adminIdentity: (request as any).adminIdentity,
+          tenantId,
           action: 'RESUME_RESERVATION_SERIES',
           targetId: request.params.id,
           payload: result,
@@ -267,9 +267,9 @@ export async function reservationSeriesRoutes(fastify: FastifyInstance) {
         const { reservationSeriesService } = await import('../../services/reservation-series.service');
         const result = await reservationSeriesService.cancelSeries(request.params.id, tenantId);
         await auditService.logAdminAction({
-          tenantId: tenantId,
           apiKey: (request as any).adminKeyUsed,
           adminIdentity: (request as any).adminIdentity,
+          tenantId,
           action: 'CANCEL_RESERVATION_SERIES',
           targetId: request.params.id,
           payload: result,

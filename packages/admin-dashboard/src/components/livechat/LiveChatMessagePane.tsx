@@ -135,6 +135,7 @@ export interface LiveChatMessagePaneProps {
   setDispatchDrawerOpen: (open: boolean) => void;
   // Bot & Chat state
   chatBotActive: boolean;
+  canToggleGlobalBot?: boolean;
   handleToggleGlobalBot: (active: boolean) => Promise<void>;
   releasingId: string | null;
   handleRelease: (chat: LiveChatItem) => Promise<void>;
@@ -245,6 +246,7 @@ export const LiveChatMessagePane: React.FC<LiveChatMessagePaneProps> = ({
   dispatchTrip,
   setDispatchDrawerOpen,
   chatBotActive,
+  canToggleGlobalBot = false,
   handleToggleGlobalBot,
   releasingId,
   handleRelease,
@@ -1154,9 +1156,9 @@ export const LiveChatMessagePane: React.FC<LiveChatMessagePaneProps> = ({
                       const isInternalNote = senderTypeUpper === 'INTERNAL_NOTE';
                       const isRevoked = msg.content === '🚫 Pesan ini telah ditarik' || (msg as any).is_revoked || (msg as any).payload_raw?.is_revoked;
                       const isEdited = !!(msg as any).is_edited || !!(msg as any).payload_raw?.is_edited;
-                      const canRevoke = !isCustomer && !isRevoked && !!gatewayCapability?.supportsRevoke;
+                      const canRevoke = !isCustomer && !isRevoked && !isInternalNote && !!gatewayCapability?.supportsRevoke;
                       const isWithin15Mins = msg.created_at ? (Date.now() - new Date(msg.created_at).getTime() <= 15 * 60 * 1000) : false;
-                      const canEdit = !isCustomer && !isRevoked && isWithin15Mins && !msg.media && (gatewayCapability?.supportsEdit ?? true);
+                      const canEdit = !isCustomer && !isRevoked && !isInternalNote && isWithin15Mins && !msg.media && (gatewayCapability?.supportsEdit ?? true);
                       const hasMedia = !!msg.media;
                       const quotedMsg = msg.quoted_message || extractQuotedMessage(msg);
                       const showDateSeparator = isDifferentDay(msg.created_at, messages[idx - 1]?.created_at);
@@ -1453,7 +1455,7 @@ export const LiveChatMessagePane: React.FC<LiveChatMessagePaneProps> = ({
                         hasActiveReservation={Boolean(activeConfirmedReservation || activePendingReservation)}
                         onRequestScrollToBottom={() => scrollToBottom(true, false)}
                         chatBotActive={chatBotActive}
-                        onToggleGlobalBot={() => handleToggleGlobalBot(!chatBotActive)}
+                        onToggleGlobalBot={canToggleGlobalBot ? () => handleToggleGlobalBot(!chatBotActive) : undefined}
                       />
                     )}
                   </>

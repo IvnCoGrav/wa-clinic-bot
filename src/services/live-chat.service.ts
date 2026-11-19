@@ -912,18 +912,36 @@ export class LiveChatService {
       return { success: false, error: 'Pesan tidak ditemukan.' };
     }
 
-    // Panggil gateway sendReactionMessage jika bukan sandbox test chat
-    const targetWaId = msg.wa_message_id || msg.id;
-    if (!customer.is_sandbox_test && targetWaId) {
+    if (String(msg.sender_type || '').toUpperCase() === 'INTERNAL_NOTE') {
+      return { success: false, error: 'Catatan internal tidak dapat diberi reaksi WhatsApp.' };
+    }
+
+    if (msg.is_revoked || (msg.payload_raw as any)?.is_revoked || msg.content === '🚫 Pesan ini telah ditarik') {
+      return { success: false, error: 'Pesan yang sudah ditarik tidak dapat diberi reaksi.' };
+    }
+
+    // Panggil gateway sendReactionMessage jika bukan sandbox test chat (V-05: jujur gagal bila WAHA gagal)
+    if (!customer.is_sandbox_test) {
+      if (!msg.wa_message_id) {
+        return { success: false, error: 'Pesan ini tidak memiliki ID WhatsApp sehingga reaksi tidak dapat dikirim.' };
+      }
       const gateway = await resolveGatewayForTenant(tenantId);
       if (typeof gateway.sendReactionMessage === 'function') {
         try {
-          const reactionRes = await gateway.sendReactionMessage(customer.phone, targetWaId, emoji);
+          const reactionRes = await gateway.sendReactionMessage(customer.phone, msg.wa_message_id, emoji);
           if (!reactionRes.success) {
             console.warn(`[REACTION WARNING] Failed to send reaction to WhatsApp:`, reactionRes.error?.message);
+            return {
+              success: false,
+              error: reactionRes.error?.message || 'Gagal mengirim reaksi ke WhatsApp.',
+            };
           }
         } catch (gwErr: any) {
           console.warn(`[REACTION ERROR] Gateway sendReaction error:`, gwErr.message);
+          return {
+            success: false,
+            error: gwErr?.message || 'Gagal mengirim reaksi ke WhatsApp.',
+          };
         }
       }
     }
@@ -1017,23 +1035,34 @@ export class LiveChatService {
       return { success: false, error: 'Pesan tidak ditemukan.' };
     }
 
+    if (String(msg.sender_type || '').toUpperCase() === 'INTERNAL_NOTE') {
+      return { success: false, error: 'Catatan internal tidak dapat ditarik ke WhatsApp.' };
+    }
+
     if (msg.direction !== Direction.OUTBOUND && msg.direction !== 'OUTBOUND') {
       return { success: false, error: 'Hanya pesan keluar (outbound) yang dapat ditarik.' };
     }
 
-    // Panggil gateway deleteMessage
-    const targetWaId = msg.wa_message_id || msg.id;
-    const deleteResult = await gateway.deleteMessage(customer.phone, targetWaId, true);
-    if (!deleteResult.success) {
-      const rawError = deleteResult.error || '';
-      const friendlyError = rawError.includes('404')
-        ? 'Pesan tidak ditemukan di server WhatsApp (kemungkinan sudah ditarik atau sesi WhatsApp telah ter-reset).'
-        : rawError || 'Gagal menarik pesan dari WhatsApp.';
-      return { success: false, error: friendlyError };
+    // Panggil gateway deleteMessage untuk chat non-sandbox (CD-06: sandbox bypass WAHA; V-03: wajib wa_message_id)
+    if (!customer.is_sandbox_test) {
+      if (!msg.wa_message_id) {
+        return {
+          success: false,
+          error: 'Pesan historis ini tidak memiliki ID WhatsApp sehingga tidak dapat ditarik.',
+        };
+      }
+      const deleteResult = await gateway.deleteMessage(customer.phone, msg.wa_message_id, true);
+      if (!deleteResult.success) {
+        const rawError = deleteResult.error || '';
+        const friendlyError = rawError.includes('404')
+          ? 'Pesan tidak ditemukan di server WhatsApp (kemungkinan sudah ditarik atau sesi WhatsApp telah ter-reset).'
+          : rawError || 'Gagal menarik pesan dari WhatsApp.';
+        return { success: false, error: friendlyError };
+      }
     }
 
-    // Update pesan di DB & broadcast SSE
-    await messageService.markMessageDeleted(msg.id, tenantId);
+    // Update pesan di DB (dual-write kolom + payload_raw) & broadcast SSE
+    await messageService.markMessageDeleted(msg.id, tenantId, 'ADMIN');
 
     // Audit log
     const { auditService } = await import('./audit.service');
@@ -1121,6 +1150,14 @@ export class LiveChatService {
       return { success: false, error: 'Pesan tidak ditemukan.' };
     }
 
+    if (String(msg.sender_type || '').toUpperCase() === 'INTERNAL_NOTE') {
+      return { success: false, error: 'Catatan internal tidak dapat diedit ke WhatsApp.' };
+    }
+
+    if (msg.is_revoked || (msg.payload_raw as any)?.is_revoked || msg.content === '🚫 Pesan ini telah ditarik') {
+      return { success: false, error: 'Pesan yang telah ditarik tidak dapat diedit.' };
+    }
+
     if (msg.direction !== Direction.OUTBOUND && msg.direction !== 'OUTBOUND') {
       return { success: false, error: 'Hanya pesan keluar (outbound) yang dapat diedit.' };
     }
@@ -1135,15 +1172,22 @@ export class LiveChatService {
       };
     }
 
-    // Panggil gateway editMessage
-    const targetWaId = msg.wa_message_id || msg.id;
-    const editResult = await gateway.editMessage(customer.phone, targetWaId, newContent.trim());
-    if (!editResult.success) {
-      const rawError = editResult.error || '';
-      const friendlyError = rawError.includes('404')
-        ? 'Pesan tidak ditemukan di server WhatsApp atau sudah melewati batas waktu pengeditan (15 menit).'
-        : rawError || 'Gagal mengedit pesan di WhatsApp.';
-      return { success: false, error: friendlyError };
+    // Panggil gateway editMessage untuk chat non-sandbox (CD-06: sandbox bypass WAHA; V-03: wajib wa_message_id)
+    if (!customer.is_sandbox_test) {
+      if (!msg.wa_message_id) {
+        return {
+          success: false,
+          error: 'Pesan historis ini tidak memiliki ID WhatsApp sehingga tidak dapat diedit.',
+        };
+      }
+      const editResult = await gateway.editMessage(customer.phone, msg.wa_message_id, newContent.trim());
+      if (!editResult.success) {
+        const rawError = editResult.error || '';
+        const friendlyError = rawError.includes('404')
+          ? 'Pesan tidak ditemukan di server WhatsApp atau sudah melewati batas waktu pengeditan (15 menit).'
+          : rawError || 'Gagal mengedit pesan di WhatsApp.';
+        return { success: false, error: friendlyError };
+      }
     }
 
     // Update pesan di DB & broadcast SSE

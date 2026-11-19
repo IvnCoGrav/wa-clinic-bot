@@ -647,6 +647,7 @@ export async function metaAttributionAdminRoutes(fastify: FastifyInstance) {
           customer.name = name;
         }
 
+        const trimmedTestCode = testEventCode ? testEventCode.trim() : undefined;
         const result = await capiService.sendCapiEvent({
           eventName,
           customer: effectiveCustomer,
@@ -654,12 +655,13 @@ export async function metaAttributionAdminRoutes(fastify: FastifyInstance) {
           value: value !== undefined && value !== null && !isNaN(Number(value)) ? Number(value) : undefined,
           currency: currency || 'IDR',
           tenantId,
+          testEventCode: trimmedTestCode,
           customData: {
             source: 'MANUAL_DASHBOARD_SEND',
             treatment: treatment ? treatment.trim() : undefined,
             content_name: treatment ? treatment.trim() : undefined,
             content_type: 'product',
-            testEventCode: testEventCode ? testEventCode.trim() : undefined,
+            testEventCode: trimmedTestCode,
             adminSender: (request as any).adminIdentity || 'Admin CS',
           },
         });
@@ -766,7 +768,7 @@ export async function metaAttributionAdminRoutes(fastify: FastifyInstance) {
       const hasFbqInit = body.includes("fbq('init'");
       const hasAddToCart = body.includes("fbq('track', 'AddToCart'");
 
-      const isOk = res.statusCode === 200 && hasFbScript && hasXfoDeny;
+      const isOk = res.statusCode === 200 && hasFbScript && hasXfoDeny && hasFbqInit && hasAddToCart;
 
       return reply.send({
         status: isOk ? 'ok' : 'degraded',

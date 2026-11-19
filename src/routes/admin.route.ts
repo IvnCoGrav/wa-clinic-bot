@@ -45,6 +45,12 @@ import { staffRetentionAdminRoutes } from './admin/staff-retention.subroute';
 import { quickRepliesAdminRoutes } from './admin/quick-replies.subroute';
 import { aiHealthAdminRoutes } from './admin/ai-health.subroute';
 import type { StaffSessionWithStaff } from '../services/staff-auth.service';
+import {
+  SUPER_ADMIN_ONLY_PREFIXES,
+  SETTINGS_READ_ALLOWLIST,
+  SUPER_ADMIN_WRITE_PREFIXES,
+  SUPER_ADMIN_RESTRICTED_SUBPATHS,
+} from '../domain/role-module-scopes';
 
 let cachedIndexHtml: string | null = null;
 let cachedManifest: Buffer | null = null;
@@ -205,54 +211,11 @@ export async function adminRoutes(fastify: FastifyInstance) {
       const urlPath = request.url.split('?')[0];
 
       // Sensitive endpoints that MUST be restricted to Super Admin only
-      const superAdminOnlyPrefixes = [
-        '/api/admin/backup',
-        '/api/admin/settings',
-        // Cfg-011: `/api/admin/tenant-settings` TIDAK lagi di sini — baca (GET)
-        // dibutuhkan staf operasional (titik klinik di form reservasi, KNOWN #324)
-        // dan dijaga scope data-driven. TULIS tetap Super Admin via
-        // `superAdminWritePrefixes` di bawah.
-        '/api/admin/ai-models',
-        '/api/admin/evaluations',
-        '/api/admin/ai-evaluations',
-        '/api/admin/sandbox',
-        '/api/admin/debug',
-        '/api/admin/migration',
-        '/api/admin/persona',
-        '/api/admin/export',
-        // SEC-AUDIT-10: prefix lama '/api/admin/google' tidak pernah cocok dengan
-        // rute riil '/api/admin/integrations/google/*' (mismatch = semua staf bisa akses).
-        '/api/admin/integrations/google',
-        '/api/admin/waba',
-        '/api/admin/whatsapp-provider',
-        '/api/admin/waba-templates',
-        // Tahap-B hardening: unduh PII massal (Custom Audience Meta) hanya Super Admin.
-        '/api/admin/customers/audience-export',
-        '/api/admin/few-shots',
-        '/api/admin/ai-rollout-scope',
-        '/api/admin/prompt-config',
-        '/api/admin/conversation-behavior',
-        '/api/admin/customer-service',
-      ];
-
-      if (superAdminOnlyPrefixes.some((prefix) => urlPath.startsWith(prefix))) {
-        // Read-only monitoring: staf operasional (ADMIN_CS/SPV_CS) boleh MEMBACA
-        // endpoint Settings tertentu (GET) — WRITE tetap super-admin. Rahasia sudah
-        // ter-masking di layer endpoint (mis. telegramBotTokenConfigured, bukan token).
-        // Rasional nyata (bukti log live): LiveChatMonitor memanggil GET /api/admin/settings
-        // (status globalBotActive) saat dibuka CS → sebelumnya 403. Halaman /admin/settings
-        // SENDIRI tetap TIDAK dibuka untuk CS (boundary keamanan: WAHA QR/session, AI model,
-        // token CAPI) — dijaga di frontend rolePermissions (role-permissions.test.ts).
-        // Daftar final (Task 0.2, enumerasi Settings.tsx + DailyReportPanel.tsx + LiveChatMonitor).
-        const settingsReadAllowlist = [
-          '/api/admin/settings',
-          // Cfg-004: '/api/admin/settings/notifications' SENGAJA tidak masuk —
-          // responsnya memuat telegramPairingToken (rahasia tenant).
-          '/api/admin/settings/notifications/logs',
-          '/api/admin/settings/daily-report',
-        ];
+      // (Single Source of Truth: src/domain/role-module-scopes.ts — KNOWN #358 A-009;
+      //  Cfg-004: `/api/admin/settings/notifications` tetap diblokir karena memuat telegramPairingToken)
+      if (SUPER_ADMIN_ONLY_PREFIXES.some((prefix) => urlPath.startsWith(prefix))) {
         const isSettingsRead =
-          request.method.toUpperCase() === 'GET' && settingsReadAllowlist.includes(urlPath);
+          request.method.toUpperCase() === 'GET' && SETTINGS_READ_ALLOWLIST.includes(urlPath);
         if (!isSettingsRead) {
           console.warn(`[RBAC GUARD] Blocked unauthorized access attempt by staff role '${staffRole}' on ${request.method} ${urlPath}`);
           return reply.status(403).send({
@@ -262,16 +225,11 @@ export async function adminRoutes(fastify: FastifyInstance) {
         }
       }
 
-      // Cfg-013 (Opsi A): endpoint tulis katalog/tier/marketing-spend wajib
-      // Super Admin. GET tetap boleh untuk staf (monitoring), write ditolak.
-      // Cfg-011 (KNOWN #324): setelan tenant hanya boleh DIBACA staf operasional
-      // (GET via `role_api_scopes`); PATCH/POST/PUT tetap Super Admin.
-      const superAdminWritePrefixes = [
-        '/api/admin/services',
-        '/api/admin/delivery-tiers',
-        '/api/admin/meta-performance',
-        '/api/admin/tenant-settings',
-      ];
+      // Cfg-011/013 & K-3: endpoint tulis katalog/tier/marketing-spend/tenant-settings/CS wajib Super Admin.
+      // Daftar kanonis diimpor dari src/domain/role-module-scopes.ts (termasuk:
+      //       '/api/admin/tenant-settings',
+      // ).
+      const superAdminWritePrefixes = SUPER_ADMIN_WRITE_PREFIXES;
       if (
         request.method.toUpperCase() !== 'GET' &&
         superAdminWritePrefixes.some((prefix) => urlPath.startsWith(prefix))
@@ -280,6 +238,22 @@ export async function adminRoutes(fastify: FastifyInstance) {
         return reply.status(403).send({
           error: 'Forbidden: Hanya Super Admin yang boleh mengubah konfigurasi ini.',
           code: 'FORBIDDEN_SUPER_ADMIN_ONLY_WRITE',
+        });
+      }
+
+      // KNOWN #358 (A-002 / K-6 / CD-01): Deny deterministik Layer 1 untuk sub-path sensitif
+      // di bawah wildcard `*` operasional (CAPI approve/reject/unreject-purchase & live-chat sync-full).
+      const { isApiScopeAllowed, matchApiScopePrefix, normalizeRoleKey } = await import('../services/role-scope.service');
+      const reqMethodUpper = request.method.toUpperCase();
+      if (
+        SUPER_ADMIN_RESTRICTED_SUBPATHS.some(
+          (rule) => rule.method === reqMethodUpper && matchApiScopePrefix(urlPath, rule.pattern)
+        )
+      ) {
+        console.warn(`[RBAC GUARD] Blocked restricted sub-path by '${staffRole}' on ${reqMethodUpper} ${urlPath} (K-6)`);
+        return reply.status(403).send({
+          error: 'Forbidden: Hanya Super Admin yang dapat menjalankan aksi sensitif ini.',
+          code: 'FORBIDDEN_STAFF_ROLE',
         });
       }
 
@@ -323,10 +297,9 @@ export async function adminRoutes(fastify: FastifyInstance) {
       // Fase 2 (Task 2.1.2): scope enforcement data-driven (tabel role_api_scopes).
       // Seluruh role wajib punya baris allowlist di tabel role_api_scopes (fail-closed).
       // Role tanpa baris atau tanpa kecocokan (prefix, method) langsung ditolak (403).
-      const { isApiScopeAllowed, normalizeRoleKey } = await import('../services/role-scope.service');
       const staffTenant = (request as any).staffTenantId || DEFAULT_TENANT_ID;
       const scope = await isApiScopeAllowed(staffTenant, normalizeRoleKey(staffRole), urlPath, request.method);
-      if (!scope.allowed) {
+      if (!scope?.allowed) {
         console.warn(`[RBAC SCOPE GUARD] Blocked '${staffRole}' on ${request.method} ${urlPath} (no matching role_api_scopes row)`);
         return reply.status(403).send({
           error: 'Forbidden: Peran Anda tidak memiliki hak akses ke resource ini.',

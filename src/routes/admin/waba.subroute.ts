@@ -33,9 +33,9 @@ export async function wabaAdminRoutes(fastify: FastifyInstance) {
     if (staffRole && staffRole !== 'SUPER_ADMIN') {
       try {
         await auditService.logAdminAction({
-          tenantId: resolveRouteTenantId(request),
           apiKey: (request as any).adminKeyUsed,
           adminIdentity: (request as any).adminIdentity || (request as any).staffName || `staff:${staffRole}`,
+          tenantId: resolveSessionTenantId(request),
           action: 'UNAUTHORIZED_WHATSAPP_PROVIDER_ACCESS_ATTEMPT',
           targetId: request.url,
           payload: { method: request.method, url: request.url, staffRole },
@@ -123,9 +123,9 @@ export async function wabaAdminRoutes(fastify: FastifyInstance) {
         const data = await whatsappProviderService.startSessionForTenant(tenantId);
 
         await auditService.logAdminAction({
-          tenantId: tenantId,
           apiKey: (request as any).adminKeyUsed,
           adminIdentity: (request as any).adminIdentity,
+          tenantId,
           action: 'WAHA_SESSION_START',
           targetId: data.sessionId,
           payload: { status: data.status, tenantId },
@@ -151,9 +151,9 @@ export async function wabaAdminRoutes(fastify: FastifyInstance) {
         const data = await whatsappProviderService.resetSessionForTenant(tenantId);
 
         await auditService.logAdminAction({
-          tenantId: tenantId,
           apiKey: (request as any).adminKeyUsed,
           adminIdentity: (request as any).adminIdentity,
+          tenantId,
           action: 'WAHA_SESSION_RESET',
           targetId: data.sessionId,
           payload: { status: data.status, tenantId },
@@ -179,9 +179,9 @@ export async function wabaAdminRoutes(fastify: FastifyInstance) {
         const data = await whatsappProviderService.disconnectSessionForTenant(tenantId);
 
         await auditService.logAdminAction({
-          tenantId: tenantId,
           apiKey: (request as any).adminKeyUsed,
           adminIdentity: (request as any).adminIdentity,
+          tenantId,
           action: 'WAHA_SESSION_DISCONNECT',
           targetId: data.sessionId,
           payload: { status: data.status, tenantId },
@@ -221,9 +221,9 @@ export async function wabaAdminRoutes(fastify: FastifyInstance) {
         const newState = await whatsappProviderService.setOutboundCutOff(tenantId, cutOff);
 
         await auditService.logAdminAction({
-          tenantId: tenantId,
           apiKey: (request as any).adminKeyUsed,
           adminIdentity: (request as any).adminIdentity,
+          tenantId,
           action: 'WAHA_INTERNAL_CUTOFF_TOGGLE',
           targetId: tenantId,
           payload: { previousState, newState, tenantId },
@@ -321,9 +321,9 @@ export async function wabaAdminRoutes(fastify: FastifyInstance) {
         invalidateWabaTenantCache(tenant.waba_phone_number_id ?? null);
 
         await auditService.logAdminAction({
-          tenantId: tenantId,
           apiKey: (request as any).adminKeyUsed,
           adminIdentity: (request as any).adminIdentity,
+          tenantId,
           action: 'UPDATE_WHATSAPP_PROVIDER',
           targetId: tenantId,
           payload: {
@@ -398,9 +398,9 @@ export async function wabaAdminRoutes(fastify: FastifyInstance) {
         });
 
         await auditService.logAdminAction({
-          tenantId: tenantId,
           apiKey: (request as any).adminKeyUsed,
           adminIdentity: (request as any).adminIdentity,
+          tenantId,
           action: 'UPDATE_WABA_TEMPLATE',
           targetId: `${tenantId}:${type}#${variant}`,
           payload: { tenantId, type, variant, templateName },

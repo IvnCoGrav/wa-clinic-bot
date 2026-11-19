@@ -120,7 +120,7 @@ describe('Meta Full-Funnel Attribution & Landing URL Preservation', () => {
 
     const event = sentPayload.data[0];
     expect(event.event_name).toBe('Contact');
-    expect(event.event_id).toBe('ck_contact');
+    expect(event.event_id).toBe('ck');
     expect(event.event_source_url).toBe('https://kalababyspa.online/reservasionline?utm_source=ig&fbclid=PAcGRvZ');
     expect(event.action_source).toBe('chat');
 

@@ -149,17 +149,13 @@ describe('CTWA Fuzzy Attribution & Badging (Frontend Parity)', () => {
       expect((payloadNoWaba as any).messaging_channel).toBeUndefined();
     });
 
-    it('Scenario Web LP (Paid Promo): action_source chat, allows sample IP/UA/fbp fallback for browser ads preview', () => {
+    it('Scenario Web LP (Paid Promo): action_source chat, TIDAK memfabrikasi IP/UA/fbp palsu saat data browser kosong (A-005)', () => {
       const webLpItem = {
         ...baseItem,
         attribution: {
           ...baseItem.attribution,
           trackingCode: 'promo_lp_1',
           isPaid: true,
-          // Data contoh eksplisit untuk preview iklan browser (tidak bergantung .env).
-          ipAddress: '114.122.34.56',
-          userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
-          fbp: 'fb.1.1787293849.1029384756',
         },
         utm: {
           medium: 'cpc',
@@ -168,9 +164,9 @@ describe('CTWA Fuzzy Attribution & Badging (Frontend Parity)', () => {
 
       const payload = buildCapiJsonPayload(webLpItem, false);
       expect(payload.action_source).toBe('chat');
-      expect(payload.user_data.client_ip_address).toBe('114.122.34.56');
-      expect(payload.user_data.client_user_agent).toBeDefined();
-      expect(payload.user_data.fbp).toBe('fb.1.1787293849.1029384756');
+      expect(payload.user_data.client_ip_address).toBeUndefined();
+      expect(payload.user_data.client_user_agent).toBeUndefined();
+      expect(payload.user_data.fbp).toBeUndefined();
       expect(payload.user_data.fbc).toContain('promo_lp_1');
     });
   });

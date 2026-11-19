@@ -67,7 +67,7 @@ export function useLiveChatMessageOperations({
     setRevokingId(msg.id);
     try {
       const res = await apiRequest(
-        `/api/admin/conversations/${selectedChat.conversationId}/messages/${msg.id}`,
+        `/api/admin/live-chat/conversations/${selectedChat.conversationId}/messages/${msg.id}`,
         { method: 'DELETE' }
       );
 
@@ -103,7 +103,7 @@ export function useLiveChatMessageOperations({
     setIsEditingSaving(true);
     try {
       const res = await apiRequest(
-        `/api/admin/conversations/${selectedChat.conversationId}/messages/${editingMsg.id}/edit`,
+        `/api/admin/live-chat/conversations/${selectedChat.conversationId}/messages/${editingMsg.id}/edit`,
         {
           method: 'PUT',
           body: JSON.stringify({ text: editContent.trim() }),
@@ -387,7 +387,7 @@ export function useLiveChatMessageOperations({
 
     setReleasingId(chat.conversationId);
     try {
-      await apiRequest(`/api/admin/conversation/${chat.conversationId}/release`, {
+      await apiRequest(`/api/admin/live-chat/conversations/${chat.conversationId}/release`, {
         method: 'PATCH',
         body: JSON.stringify({}),
       });
@@ -426,7 +426,7 @@ export function useLiveChatMessageOperations({
 
     setReleasingId(chat.conversationId);
     try {
-      await apiRequest(`/api/admin/conversation/${chat.conversationId}/takeover`, {
+      await apiRequest(`/api/admin/live-chat/conversations/${chat.conversationId}/takeover`, {
         method: 'PATCH',
         body: JSON.stringify({}),
       });

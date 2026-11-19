@@ -438,5 +438,50 @@ describe('Live Chat Admin Endpoints (monitor & balas)', () => {
     expect(body.data).toHaveProperty('staffOwnership');
     expect(body.data.staffOwnership).toBeNull();
   });
+
+  it('ADVERSARIAL: POST /reply meneruskan tenantId eksplisit ke auditService dan tetap HTTP 200 bila prisma.auditLog.create gagal setelah WA terkirim', async () => {
+    const { auditService } = await import('../../src/services/audit.service');
+    const { prisma } = await import('../../src/db/client');
+
+    const fake = {
+      providerType: 'WAHA',
+      sendTextMessage: vi.fn().mockResolvedValue({ success: true, messageId: 'waid_audit_fail_1', provider: 'WAHA' }),
+    } as any;
+    createTestGateway(fake, DEFAULT_TENANT_ID);
+
+    const phone = `628511${Date.now().toString().slice(-7)}`;
+    const customer = await customerService.getOrCreateCustomer(phone, 'Bunda Audit Resilience', DEFAULT_TENANT_ID);
+    const conversation = await conversationService.getOrCreateConversation(customer.id, DEFAULT_TENANT_ID);
+
+    const logSpy = vi.spyOn(auditService, 'logAdminAction');
+    const createSpy = vi.spyOn(prisma.auditLog, 'create').mockRejectedValue(new Error('audit db unreachable'));
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    try {
+      const res = await app.inject({
+        method: 'POST',
+        url: `/api/admin/live-chat/conversations/${conversation.id}/reply`,
+        headers: { 'x-api-key': ADMIN_KEY },
+        payload: { text: 'Halo Bunda, sudah kami catat ya', adminName: 'Admin Klinik' },
+      });
+
+      expect(res.statusCode).toBe(200);
+      const body = JSON.parse(res.body);
+      expect(body.success).toBe(true);
+      expect(fake.sendTextMessage).toHaveBeenCalledWith(phone, 'Halo Bunda, sudah kami catat ya');
+      expect(logSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          tenantId: DEFAULT_TENANT_ID,
+          action: 'LIVE_CHAT_ADMIN_REPLY',
+          targetId: conversation.id,
+        })
+      );
+      expect(createSpy).toHaveBeenCalled();
+    } finally {
+      logSpy.mockRestore();
+      createSpy.mockRestore();
+      errSpy.mockRestore();
+    }
+  });
 });
 

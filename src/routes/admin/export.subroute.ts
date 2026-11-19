@@ -54,6 +54,7 @@ export async function exportAdminRoutes(fastify: FastifyInstance) {
         await auditService.logAdminAction({
           apiKey: (request as any).adminKeyUsed,
           adminIdentity: (request as any).adminIdentity,
+          tenantId,
           action: 'CHAT_EXPORT_GENERATE',
           targetId: label,
           payload: { tenantId, fileName: result.fileName, stats: result.stats },

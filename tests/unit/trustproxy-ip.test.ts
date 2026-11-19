@@ -3,6 +3,7 @@ import { buildApp } from '../../src/app';
 import { prisma } from '../../src/db/client';
 
 describe('TrustProxy & Per-IP Rate Limit Isolation (Fase 2)', () => {
+  process.env.DEFAULT_WHATSAPP_PHONE = '628123456789';
   let app: any;
 
   beforeEach(() => {

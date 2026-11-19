@@ -41,11 +41,14 @@ if ! grep -q "AI_MODEL_RECEIPT_VISION" /opt/wa-clinic-bot/.env; then
   echo "Added AI_MODEL_RECEIPT_VISION to remote .env"
 fi
 
+echo "--> Record previous HEAD before pull..."
+PREV_HEAD=$(git rev-parse HEAD)
+
 echo "--> Discard any uncommitted whitespace/CRLF drifts on working tree..."
 git checkout -- .
 
 echo "--> Git Pull Latest Code..."
-git pull origin master
+git pull --no-rebase --no-edit origin master
 
 echo "--> Build Docker Images (app & worker)..."
 docker compose build app worker
@@ -57,8 +60,15 @@ fi
 echo "--> Recreate App Container Safely (WAHA untouched)..."
 docker compose up -d --no-deps app
 
-echo "--> Reload Caddy Reverse Proxy (apply Caddyfile changes)..."
-docker compose exec -T caddy caddy reload || docker compose restart caddy
+CADDY_CHANGED=$(git diff --name-only "$PREV_HEAD" HEAD -- Caddyfile || true)
+if [ -n "$CADDY_CHANGED" ] || [ "${FORCE_RECREATE_CADDY:-0}" = "1" ]; then
+  echo "--> Validate Caddyfile (fail-fast before touching running Caddy)..."
+  docker compose run -T --rm --no-deps --entrypoint caddy caddy validate --config /etc/caddy/Caddyfile </dev/null
+  echo "--> Recreate Caddy Reverse Proxy Safely (Caddyfile changed / forced, WAHA untouched)..."
+  docker compose up -d --no-deps --force-recreate caddy </dev/null
+else
+  echo "--> Caddyfile unchanged; skipping Caddy recreate (zero edge interruption)."
+fi
 
 echo "--> Run Database Migrations..."
 docker compose exec -T app npx prisma migrate deploy

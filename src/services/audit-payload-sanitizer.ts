@@ -11,30 +11,45 @@ import { maskName } from './capi.helpers';
 const PII_REDACTED_TEXT = '[REDACTED]';
 
 /**
- * Sanitasi rekursif untuk objek payload audit log
+ * Sanitasi rekursif untuk objek payload audit log.
+ * - Menggunakan ancestor-stack WeakSet (add sebelum rekursi, delete di finally)
+ *   agar objek yang dipakai berulang non-circular tidak salah ditandai [CIRCULAR].
+ * - Mengonversi BigInt -> string, Date -> ISO string, Error -> { name, code } tanpa message PII.
+ * - Parsing JSON string hanya berlaku di level atas (top-level) dan mengembalikan objek tersanitasi
+ *   supaya AuditService tidak melakukan double-encode JSON.stringify.
  */
-export function sanitizeAuditPayload(action: string, payload: any): any {
+function sanitizeNode(action: string, payload: any, ancestors: WeakSet<object>): any {
   if (payload === null || payload === undefined) {
     return payload;
   }
 
-  // Jika payload adalah string, coba parse sebagai JSON
-  if (typeof payload === 'string') {
-    try {
-      const parsed = JSON.parse(payload);
-      const sanitized = sanitizeAuditPayload(action, parsed);
-      return JSON.stringify(sanitized);
-    } catch {
-      // Jika string biasa bukan JSON
-      return payload;
+  if (typeof payload === 'bigint') {
+    return payload.toString();
+  }
+
+  if (payload instanceof Date) {
+    return Number.isNaN(payload.getTime()) ? '[INVALID_DATE]' : payload.toISOString();
+  }
+
+  if (payload instanceof Error) {
+    const code = (payload as any).code;
+    return code !== undefined ? { name: payload.name, code } : { name: payload.name };
+  }
+
+  if (typeof payload !== 'object') {
+    return payload;
+  }
+
+  if (ancestors.has(payload)) {
+    return '[CIRCULAR]';
+  }
+
+  ancestors.add(payload);
+  try {
+    if (Array.isArray(payload)) {
+      return payload.map((item) => sanitizeNode(action, item, ancestors));
     }
-  }
 
-  if (Array.isArray(payload)) {
-    return payload.map(item => sanitizeAuditPayload(action, item));
-  }
-
-  if (typeof payload === 'object') {
     const result: Record<string, any> = {};
 
     for (const [key, val] of Object.entries(payload)) {
@@ -47,7 +62,7 @@ export function sanitizeAuditPayload(action: string, payload: any): any {
         lowerKey === 'phonenumber' ||
         lowerKey === 'customerphone'
       ) {
-        result[key] = typeof val === 'string' ? maskPhoneWithTenantSuffix(val) : val;
+        result[key] = typeof val === 'string' ? maskPhoneWithTenantSuffix(val) : sanitizeNode(action, val, ancestors);
         continue;
       }
 
@@ -93,21 +108,38 @@ export function sanitizeAuditPayload(action: string, payload: any): any {
         lowerKey === 'customername' ||
         lowerKey === 'patientname'
       ) {
-        result[key] = typeof val === 'string' ? maskName(val) : val;
+        result[key] = typeof val === 'string' ? maskName(val) : sanitizeNode(action, val, ancestors);
         continue;
       }
 
-      // 6. Rekursi untuk child objects
-      if (val !== null && typeof val === 'object') {
-        result[key] = sanitizeAuditPayload(action, val);
-      } else {
-        // Pertahankan field asli (termasuk nilai komersial: value, price, currency, event_id, dll)
-        result[key] = val;
-      }
+      // 6. Rekursi penuh (termasuk BigInt, Date, Error, Array, child object; string bersarang tetap string)
+      result[key] = sanitizeNode(action, val, ancestors);
     }
 
     return result;
+  } finally {
+    ancestors.delete(payload);
+  }
+}
+
+export function sanitizeAuditPayload(action: string, payload: any): any {
+  if (payload === null || payload === undefined) {
+    return payload;
   }
 
-  return payload;
+  // Parsing string JSON hanya di level atas (A-011 / N-8) agar audit tidak double-encode
+  // dan string bersarang di dalam objek tidak berubah tipe secara diam-diam.
+  if (typeof payload === 'string') {
+    try {
+      const parsed = JSON.parse(payload);
+      if (parsed !== null && typeof parsed === 'object') {
+        return sanitizeNode(action, parsed, new WeakSet<object>());
+      }
+      return payload;
+    } catch {
+      return payload;
+    }
+  }
+
+  return sanitizeNode(action, payload, new WeakSet<object>());
 }

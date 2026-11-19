@@ -135,7 +135,8 @@ export function isBotOrCrawler(ua?: string | null): boolean {
     lower.includes('bytespider') ||
     lower.includes('petalbot') ||
     lower.includes('headlesschrome') ||
-    lower.includes('phantomjs')
+    lower.includes('phantomjs') ||
+    lower.includes('metapixelhealthbot')
   );
 }
 
