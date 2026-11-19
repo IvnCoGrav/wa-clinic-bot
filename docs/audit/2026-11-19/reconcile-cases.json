@@ -1,10 +1,10 @@
 {
   "tenantId": "default-tenant",
   "notes": [
-    "Sumber kebenaran kasus: docs/audit/2026-11-19/gate-0-evaluation.md + verifikasi read-only DB.",
+    "Sumber kebenaran: docs/audit/2026-11-19/gate-0-evaluation.md + verifikasi visual thumbnail chat (19 Nov 2026).",
     "DILARANG menambah kasus tanpa nominal (amount) yang cocok dengan bukti transfer asli.",
-    "state: DONE = sudah diremediasi & diverifikasi; PENDING = menunggu bukti/verifikasi.",
-    "state PENDING wajib punya proofSource yang benar-benar ada di disk."
+    "evidenceOnly=true: reservasi sudah tercatat lunas; hanya menempelkan bukti, status bayar TIDAK diubah.",
+    "state DONE = sudah diremediasi & diverifikasi."
   ],
   "cases": [
     {
@@ -13,14 +13,80 @@
       "amount": 155000,
       "paymentMethod": "QRIS",
       "referenceNumber": "0115001SZHJ7",
-      "billing": {
-        "purchaseValue": 145000,
-        "deliveryFee": 15000,
-        "discountAmount": 5000
-      },
+      "billing": { "purchaseValue": 145000, "deliveryFee": 15000, "discountAmount": 5000 },
       "state": "DONE",
       "verifiedAt": "2026-11-19",
-      "notes": "Bunda Nida. Sudah diverifikasi ulang read-only: purchase 145000, diskon 5000, ongkir 15000, receipt 155000, proof_url di payment-proofs, purchase_occurred_at terisi."
+      "notes": "Bunda Nida. Sudah diverifikasi & diremediasi sebelumnya."
+    },
+    {
+      "reservationId": "1a20e5c6-9bb5-4cdb-8a54-6e46af354266",
+      "state": "DONE",
+      "proofSource": "/media/inbound/default-tenant/1c4ae53541254d11bc4f09905e7ec42c_thumb.jpg",
+      "amount": 210000,
+      "paymentMethod": "GoPay",
+      "paidAt": "2026-10-20T01:50:44Z",
+      "notes": "Bunda Paw. GoPay Rp210.000 (screenshot tanpa tanggal/nama); tanggal lunas memakai waktu pesan gambar (proxy)."
+    },
+    {
+      "reservationId": "ad587990-f70d-43b9-9573-94732538ef5c",
+      "state": "DONE",
+      "proofSource": "/media/inbound/default-tenant/b01ac19627e24f7bb721d7e8064646ae_thumb.jpg",
+      "amount": 105000,
+      "paymentMethod": "QRIS",
+      "referenceNumber": "242971971961",
+      "paidAt": "2026-11-01T03:34:40Z",
+      "notes": "Susi Setyowati. BRI QRIS 01/11/2026 10:34 WIB; tagihan 75.000-5.000+35.000."
+    },
+    {
+      "reservationId": "d5a28a02-188d-4506-893f-13912acba54b",
+      "state": "DONE",
+      "proofSource": "/media/inbound/default-tenant/21cb19cc7b644a558ff6b771e0fddfe0_thumb.jpg",
+      "amount": 95000,
+      "paymentMethod": "QRIS",
+      "referenceNumber": "261102QMJDLKST",
+      "paidAt": "2026-11-02T08:12:37Z",
+      "notes": "Bunda Jennifer. Superbank 02/11/2026 15:12 WIB; tagihan 80.000-10.000+25.000."
+    },
+    {
+      "reservationId": "a5328509-e022-4627-9850-0701a48a7c7c",
+      "state": "DONE",
+      "proofSource": "/media/inbound/default-tenant/f6e96421bc9e4f579b9e0aac5bdd95d2_thumb.jpg",
+      "amount": 80000,
+      "paymentMethod": "QRIS",
+      "referenceNumber": "95031202611031722068436413EA5B49809",
+      "evidenceOnly": true,
+      "notes": "Bunda Leliy. BCA QRIS 03/11/2026 17:22 WIB; sudah lunas tanpa bukti."
+    },
+    {
+      "reservationId": "1c8fcda2-0a99-4d81-8a6c-030ea7bec953",
+      "state": "DONE",
+      "proofSource": "/media/inbound/default-tenant/9afbdc7d457a46d28a38da3f982cf2df_thumb.jpg",
+      "amount": 90000,
+      "paymentMethod": "QRIS",
+      "referenceNumber": "0118001H355D",
+      "evidenceOnly": true,
+      "notes": "Bunda Ervina. SeaBank QRIS 25/10/2026 16:40; sudah lunas tanpa bukti (kelebihan Rp10.000)."
+    },
+    {
+      "reservationId": "6c8b70d1-4e9d-44af-96b9-ed3317a96501",
+      "state": "DONE",
+      "proofSource": "/media/inbound/default-tenant/8a70a9a1d9d540578e54e1b9ae02936c_thumb.jpg",
+      "amount": 90000,
+      "paymentMethod": "QRIS",
+      "referenceNumber": "9503120261104070422821FA8A132047D7A",
+      "evidenceOnly": true,
+      "notes": "Bunda Pamela. BCA QRIS 04/11/2026 07:04; sudah lunas tanpa bukti (kurang Rp25.000 dari tagihan 115.000)."
+    },
+    {
+      "reservationId": "6afa71c2-e281-459e-8d7d-67c01fe8963a",
+      "state": "DONE",
+      "proofSource": "/media/inbound/default-tenant/5d45bff44ed84d6f88f5a809ce259309_thumb.jpg",
+      "amount": 120000,
+      "paymentMethod": "Transfer BCA",
+      "referenceNumber": "95271202611031034",
+      "evidenceOnly": true,
+      "notes": "Bunda Devia. BCA transfer 03/11/2026 10:34 (Pijat Allesia); sudah lunas tanpa bukti (kelebihan Rp1.000)."
     }
   ]
 }
+

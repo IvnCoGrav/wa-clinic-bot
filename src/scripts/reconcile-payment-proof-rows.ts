@@ -35,6 +35,7 @@ import { DEFAULT_TENANT_ID } from '../config/tenant';
 import { resolveReservationBilling } from '../services/reservation-billing.service';
 import { verifyReservationPayment } from '../services/reservation-payment-verification.service';
 import { mediaService } from '../services/media.service';
+import { auditService } from '../services/audit.service';
 
 const DEFAULT_CASES_PATH = path.join('docs', 'audit', '2026-11-19', 'reconcile-cases.json');
 const CONFIRM_TOKEN = 'RECONCILE_PAYMENT_PROOFS_CONFIRMED';
@@ -52,6 +53,19 @@ interface ReconcileCase {
   paymentMethod: string;
   referenceNumber?: string;
   billing?: BillingOverride;
+  /**
+   * true = hanya menempelkan bukti (reservasi sudah tercatat lunas). Nominal
+   * tidak dipakai untuk memverifikasi pembayaran dan `purchase_occurred_at`
+   * TIDAK disentuh. Dipakai untuk backfill bukti historis yang nominalnya
+   * berbeda (kelebihan/kekurangan bayar) dan butuh keputusan bisnis terpisah.
+   */
+  evidenceOnly?: boolean;
+  /**
+   * Tanggal transaksi pada bukti (ISO string). Bila diisi, `purchase_occurred_at`
+   * dikoreksi ke tanggal ini setelah verifikasi agar laporan bulanan tidak
+   * bergeser ke tanggal eksekusi script. Hanya untuk mode verifikasi.
+   */
+  paidAt?: string;
   state?: 'PENDING' | 'DONE';
   notes?: string;
 }
@@ -117,6 +131,9 @@ function loadCases(filePath: string): { data: CasesFile | null; errors: string[]
     }
     if (!c.paymentMethod || typeof c.paymentMethod !== 'string') {
       errors.push(`${label}: paymentMethod wajib diisi.`);
+    }
+    if (c.paidAt && isNaN(new Date(c.paidAt).getTime())) {
+      errors.push(`${label}: paidAt bukan tanggal valid (${c.paidAt}).`);
     }
     if (c.billing) {
       const b = c.billing;
@@ -221,7 +238,7 @@ async function reconcileCase(
     `- Bukti      : ${entry.proofSource} (${entry.paymentMethod}${entry.referenceNumber ? `, Ref: ${entry.referenceNumber}` : ''}) nominal Rp ${entry.amount.toLocaleString('id-ID')}`
   );
 
-  if (Math.round(entry.amount) !== Math.round(billingTotal)) {
+  if (!entry.evidenceOnly && Math.round(entry.amount) !== Math.round(billingTotal)) {
     console.error(
       `[GUARD BLOCKED] amount (Rp ${entry.amount}) != tagihan kanonis (Rp ${billingTotal}). Tidak ada data yang ditulis.`
     );
@@ -235,6 +252,77 @@ async function reconcileCase(
   }
   const stats = fs.statSync(absPath);
   console.log(`- Berkas     : ${absPath} (${(stats.size / 1024).toFixed(1)} KB)`);
+
+  // --- Mode evidence-only: tempel bukti historis tanpa menyentuh status bayar ---
+  if (entry.evidenceOnly) {
+    const existingProof = String(reservation.proof_url || '').trim();
+
+    if (isDryRun) {
+      console.log('[DRY-RUN][EVIDENCE ONLY] Rencana: salin bukti ke /media/payment-proofs/, isi proof_url + payment_method + receipt; status bayar TIDAK diubah.');
+      if (existingProof) {
+        console.log(`  Catatan: proof_url sudah terisi (${existingProof}) → apply akan MELEWATI tanpa menimpa.`);
+      }
+      console.log('[DRY-RUN SELESAI] Tidak ada perubahan data.');
+      return true;
+    }
+
+    if (existingProof) {
+      console.log(`[SKIP] proof_url sudah terisi (${existingProof}); tidak menimpa.`);
+      return true;
+    }
+
+    const saved = await mediaService.savePaymentProof({
+      tenantId,
+      buffer: fs.readFileSync(absPath),
+      mimeType: mimeFromPath(absPath),
+      fileName: `proof-${reservation.id}.jpg`,
+    });
+
+    await prisma.reservation.update({
+      where: { id: reservation.id },
+      data: {
+        proof_url: saved.hdUrl,
+        payment_method: entry.paymentMethod,
+        receipt_amount: entry.amount,
+        ...(entry.referenceNumber ? { receipt_reference: entry.referenceNumber } : {}),
+      },
+    });
+
+    try {
+      await auditService.logAdminAction({
+        apiKey: 'SCRIPT_RECONCILIATION',
+        adminIdentity: 'SYSTEM_RECONCILE_SCRIPT_CLI',
+        action: 'PAYMENT_PROOF_EVIDENCE_ATTACHED',
+        targetId: reservation.id,
+        tenantId,
+        payload: {
+          proofUrl: saved.hdUrl,
+          amount: entry.amount,
+          paymentMethod: entry.paymentMethod,
+          reference: entry.referenceNumber ?? null,
+          billingTotal,
+          evidenceOnly: true,
+        },
+        ipAddress: '127.0.0.1',
+      });
+    } catch (auditErr: any) {
+      console.warn(`[AUDIT WARN] ${auditErr?.message || auditErr}`);
+    }
+
+    console.log(`[SUCCESS] Bukti ditempelkan (evidence-only): ${saved.hdUrl}`);
+
+    if (syncSheets && reservation.status === 'completed') {
+      try {
+        const { sheetsSyncService } = await import('../services/sheets/sheets-sync.service');
+        await sheetsSyncService.syncReservation(reservation.id, tenantId);
+        console.log('[SHEETS] Sinkronisasi selesai.');
+      } catch (sheetsErr: any) {
+        console.warn(`[SHEETS WARN] ${sheetsErr?.message || sheetsErr}`);
+      }
+    }
+
+    return true;
+  }
 
   const needsBillingUpdate = Boolean(
     entry.billing &&
@@ -253,6 +341,9 @@ async function reconcileCase(
     console.log('  2. verifyReservationPayment(): simpan bukti permanen, purchase_occurred_at, LTV, audit.');
     if (entry.referenceNumber) {
       console.log(`  3. receipt_reference=${entry.referenceNumber}, receipt_amount=${entry.amount}`);
+    }
+    if (entry.paidAt) {
+      console.log(`  4. purchase_occurred_at dikoreksi ke tanggal bukti: ${entry.paidAt}`);
     }
     if (syncSheets) {
       console.log(`  4. sync Google Sheets (hanya bila status completed).`);
@@ -310,6 +401,32 @@ async function reconcileCase(
     }
   } else if (verifyResult.kind === 'verified') {
     console.log(`[SUCCESS] Pembayaran terverifikasi. Proof: ${verifyResult.data.proofUrl}`);
+
+    if (entry.paidAt) {
+      const paidAtDate = new Date(entry.paidAt);
+      await prisma.reservation.update({
+        where: { id: reservation.id },
+        data: { purchase_occurred_at: paidAtDate },
+      });
+      try {
+        await auditService.logAdminAction({
+          apiKey: 'SCRIPT_RECONCILIATION',
+          adminIdentity: 'SYSTEM_RECONCILE_SCRIPT_CLI',
+          action: 'PAYMENT_PROOF_PAID_AT_SET',
+          targetId: reservation.id,
+          tenantId,
+          payload: {
+            paidAt: paidAtDate.toISOString(),
+            source: 'receipt_date',
+            billingTotal,
+          },
+          ipAddress: '127.0.0.1',
+        });
+      } catch (auditErr: any) {
+        console.warn(`[AUDIT WARN] ${auditErr?.message || auditErr}`);
+      }
+      console.log(`[APPLY] purchase_occurred_at dikoreksi ke ${paidAtDate.toISOString()}`);
+    }
   } else {
     if (needsBillingUpdate) {
       await restoreBilling(reservation.id, snapshot);
@@ -319,29 +436,31 @@ async function reconcileCase(
     return false;
   }
 
-  if (entry.referenceNumber) {
+  if (entry.amount > 0) {
     const fresh = await prisma.reservation.findUnique({
       where: { id: reservation.id },
       select: { raw_text: true },
     });
     const currentRaw = fresh?.raw_text || '';
-    const refTag = `[RECEIPT_REF:${entry.referenceNumber}]`;
     const amountTag = `[RECEIPT_AMOUNT:${entry.amount}]`;
     const newTags: string[] = [];
-    if (!currentRaw.includes(refTag)) newTags.push(refTag);
     if (!currentRaw.includes(amountTag)) newTags.push(amountTag);
+    if (entry.referenceNumber) {
+      const refTag = `[RECEIPT_REF:${entry.referenceNumber}]`;
+      if (!currentRaw.includes(refTag)) newTags.push(refTag);
+    }
 
     await prisma.reservation.update({
       where: { id: reservation.id },
       data: {
-        receipt_reference: entry.referenceNumber,
         receipt_amount: entry.amount,
+        ...(entry.referenceNumber ? { receipt_reference: entry.referenceNumber } : {}),
         ...(newTags.length > 0
           ? { raw_text: `${currentRaw}\n${newTags.join('\n')}`.trim() }
           : {}),
       },
     });
-    console.log('[APPLY] receipt_reference & receipt_amount tersimpan.');
+    console.log('[APPLY] receipt_amount & tag bukti tersimpan.');
   }
 
   if (syncSheets) {

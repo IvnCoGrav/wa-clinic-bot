@@ -10,7 +10,8 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
 - **Fallback berbahaya DIHAPUS:** `findFirst` tanpa filter status/tanggal/lunas di `customer-payment-proof.service.ts` dihapus. Error DB kini `INTERNAL_ERROR` (fail-closed), dan status `cancelled`/`rejected` ditolak di domain. **DILARANG menghidupkan kembali fallback ini.**
 - **Batasan PDF/dokumen:** pipeline bukti bayar hanya memproses `canonical.type === 'image'` (`src/routes/webhook.route.ts`). PDF tidak didukung (`ALLOWED_MIME` tanpa `application/pdf`, Vision memakai `image_url`).
 - **Batasan WABA:** bukti via Meta Cloud API belum masuk pipeline (rujuk #271).
-- **Sisa data (OPEN):** 8 reservasi belum lunas tanpa bukti (Feriyal, Ferlin, Izza, Paw, Kinnas, Susi, Jennifer, Rika) + 4 lunas tanpa bukti non-tunai (Ervina, Pamela, Devia, Leliy). Menunggu berkas bukti asli; nominal **tidak boleh ditebak** (`reconcile-payment-proof-rows.ts` menolak `amount` kosong).
+- **Remediasi 2026-11-19 (7 kasus selesai):** bukti transfer ditemukan di riwayat pesan (thumbnail, HD sudah terhapus retensi) dan ditempelkan via `reconcile-payment-proof-rows.ts` — verifikasi: Paw (GoPay 210.000), Susi (QRIS 105.000), Jennifer (QRIS 95.000); evidence-only: Leliy (80.000), Ervina (90.000), Pamela (90.000), Devia (120.000). Semua `/proof/{id}` = 200; backup pra-apply: `/home/ubuntu/backups/pre_payment_proof_20261119_150759.dump`.
+- **Sisa data (OPEN, 5 kasus):** belum lunas — Feriyal (bukti 160.000 vs tagihan 85.000), Kinnas (DP 50.000 vs 105.000), Rika (90.000 vs 85.000), Ferlin (90.000 vs 85.000); sudah lunas tanpa bukti — Izza (bukti 265.000 vs tagihan 95.000, kemungkinan bundling). Menunggu keputusan bisnis; nominal **tidak boleh ditebak**.
 - **Verifikasi:** `npm run typecheck` bersih; 76 test terkait hijau pada kode produksi; image staging diverifikasi (fallback=0, fail-closed marker, terminal filter, field dashboard) sebelum switch; pasca-deploy `/health` 200 dan `/proof/0975f422-4f19-43ef-b03e-7ee9d13d6f2c` 200.
 - **Full suite:** 8.007 test → 7.971 lulus, 8 gagal, 28 skip. Kedelapan kegagalan terbukti pre-existing (revert-and-rerun pada `374f403d` menghasilkan 8 kegagalan identik): `admin-config-write-rbac`, `cta-redirect-delay`, `fase05-audit-artifact`, `fase10-audit-artifact`, `hybrid-reservation-parser` (2), `production_edge_cases`, `trustproxy-ip`.
 - **Catatan label Sheets:** formatter kanonik menulis `payment_method` apa adanya (mis. `QRIS`), bukan "Transfer QRIS".
@@ -36,7 +37,7 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
 
 ## 359. [Audit Bidan / Raport] Raport Kinerja Bidan v1 tidak valid sebagai alat penilaian (2026-11-19, OPEN — UI/UX dirombak lebih dulu)
 
-- **Status:** OPEN. Menunggu persetujuan desain UI/UX. Belum ada perubahan kode/sistem; angka di prototipe masih hardcode.
+- **Status:** OPEN — F1 selesai (2026-11-19): skema 3 tabel + domain `staff-scorecard.ts` + 36 tes + registrasi modul. Migrasi dibuat tetapi belum diterapkan (DB lokal tidak tersedia). F2 (kolektor bukti) berikutnya. Plan: `docs/plans/BIDAN_SCORECARD_PLAN_2026-11-19.md`.
 - **Konteks:** `raport_bidan.html` (artefak Antigravity) + `.agents/skills/audit-treatment-repeat/scripts/run-audit.mjs` diverifikasi ulang terhadap DB production (`wa_clinic_db`, status `completed`, cutoff 18 Nov 2026).
 - **Temuan kritis (terverifikasi query, bukan dugaan):**
   1. **Nilai A dari data kosong.** Bidan Yusi: `arrived_at` terisi **0 dari 125** kunjungan selesai (Okt–Nov); `otw_sent_at` 2 dari 125. Raport menampilkan "100% tepat jam, 0 komplain, nilai A". Insentif terbalik: tidak memakai tracking = nilai sempurna.
