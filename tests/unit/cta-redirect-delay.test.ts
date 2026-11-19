@@ -4,6 +4,9 @@ import { prisma } from '../../src/db/client';
 import { TenantHtmlService } from '../../src/services/tenant-html.service';
 
 describe('CTA & Landing Redirect Delay — Anti-Race Pixel Flush (Fase 1)', () => {
+  // /cta fail-closed 503 jika tidak ada nomor WA. Test ini menguji delay,
+  // jadi sediakan nomor default yang valid (bukan memalsukan data produksi).
+  process.env.DEFAULT_WHATSAPP_PHONE = '628123456789';
   const app = buildApp();
 
   beforeEach(() => {

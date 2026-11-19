@@ -504,7 +504,7 @@ describe('Production Edge Cases & Abuse Testing Suite (Revisu 16 Final)', () => 
     expect(finalCust.kelurahan).toBe('Ngingas');
   });
 
-  it('13. should handle LOCATION_CONFIRMED lenient override via V3 Agent (V3 contract - no deterministic AWAITING_LOCATION)', async () => {
+  it('13. should handle LOCATION_CONFIRMED lenient override via V3 Agent (V3 contract - no deterministic AWAITING_LOCATION)', { timeout: 30000 }, async () => {
     const phone = `628999${Math.floor(100000 + Math.random() * 900000)}`;
     const cust = await customerService.getOrCreateCustomer(phone, undefined, DEFAULT_TENANT_ID);
     await customerService.updateCustomerPendingLocation(

@@ -14,7 +14,7 @@ describe('RBAC tulis konfigurasi — Super Admin only (Cfg-013)', () => {
   const staffHeaders = { cookie: 'staff_session=cs', 'x-requested-with': 'XMLHttpRequest' };
 
   beforeEach(() => {
-    vi.restoreAllMocks();
+    vi.clearAllMocks();
     process.env.ADMIN_API_KEY = 'test_admin_key_cfg013';
     vi.spyOn(StaffAuthService, 'validateSession').mockResolvedValue({
       staff: { id: 'cs1', name: 'CS', role: 'ADMIN_CS', active: true, tenant_id: 'default-tenant' },

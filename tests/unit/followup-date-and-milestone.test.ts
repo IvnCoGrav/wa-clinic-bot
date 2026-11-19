@@ -5,10 +5,10 @@ import { DEFAULT_TENANT_ID } from '../../src/config/tenant';
 
 // M2 — aritmatika tanggal anti-overflow. M11 — milestone menerima kategori BOTH
 // dan memindai seluruh anak (bukan hanya children[0]).
-describe('M2: computeNextTreatment anti-overflow akhir bulan', () => {
+describe('M2: computeNextTreatment deterministik akhir bulan (25 hari)', () => {
   beforeEach(() => vi.restoreAllMocks());
 
-  it('anchor 31 Okt + 1 bulan → 30 Nov (bukan 1 Des)', async () => {
+  it('anchor 31 Okt + 25 hari → 25 Nov pada 09:00 WIB', async () => {
     vi.spyOn(prisma.customer, 'findUnique').mockResolvedValue(null as any);
     vi.spyOn(prisma.followUp, 'findFirst').mockResolvedValue(null as any);
     const createSpy = vi.spyOn(prisma.followUp, 'create').mockResolvedValue({} as any);
@@ -21,9 +21,10 @@ describe('M2: computeNextTreatment anti-overflow akhir bulan', () => {
       .find((d: any) => d?.type === 'NEXT_TREATMENT' && d?.stage === 1);
     expect(stage1).toBeTruthy();
     const s = new Date(stage1.scheduled_at);
-    // November (bulan ke-10 index) tanggal 30 — bukan Desember.
+    // November (bulan ke-10 index) tanggal 25 jam 02:00 UTC (09:00 WIB).
     expect(s.getUTCMonth()).toBe(10);
-    expect(s.getUTCDate()).toBe(30);
+    expect(s.getUTCDate()).toBe(25);
+    expect(s.getUTCHours()).toBe(2);
   });
 });
 

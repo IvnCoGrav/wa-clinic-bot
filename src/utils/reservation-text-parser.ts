@@ -926,8 +926,9 @@ export function parseConversationalReservation(rawText: string): ParsedReservati
     }
   }
 
-  // Validasi: harus ada Nama DAN Alamat
-  if (!name || !address) {
+  // Validasi: harus ada Alamat DAN minimal satu identitas (nama Bunda ATAU nama anak).
+  // Integritas Penamaan: nama anak TIDAK disalin ke `name` (nama pemesan); ia tetap di `babies`.
+  if ((!name && !babyName) || !address) {
     return null;
   }
 

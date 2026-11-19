@@ -4,13 +4,56 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### 2026-11-19 - Fix: Audit `tenantId` pada Route/Service Lama (SEC-AUDIT A-015b)
+
+- **Masalah:** `AuditService.logAdminAction` mewajibkan `tenantId`, tetapi banyak route/service lama belum mengirimkannya. Request yang seharusnya sukses berubah menjadi **500** (DELETE reservasi, landing admin, live-chat, WABA/QR, archive/restore, pembayaran & lokasi staf).
+- **Perbaikan:** Menambahkan `tenantId` dari sesi/tenant record pada seluruh pemanggilan `logAdminAction` di 11 file (route + service). Tidak mengubah kontrak endpoint.
+- **Verifikasi:** Cluster test terkait **109/109 hijau**; setelah seluruh perbaikan, full suite **8022 test — 7994 lulus, 0 gagal** (28 skipped).
+
+#### 2026-11-19 - Fitur: Skema Repeat Follow-Up 25 Hari & Mode Libur Follow-Up (Holiday Mode)
+
+- **Permintaan Pengguna:**
+  1. Majukan jadwal pengingat repeat treatment (`NEXT_TREATMENT`) dari siklus 30 hari menjadi 25 hari (`[25, 50, 75]` hari pukul 09:00 WIB), dengan syarat jaminan non-retroaktif (antrean lama yang sudah terjadwal tidak disentuh, hanya berlaku untuk reservasi baru).
+  2. Implementasi mekanisme jeda/pause follow-up (Mode Libur / Holiday Mode) saat klinik libur operasional, disertai skema pasca-libur yang aman dari lonjakan blasting (*anti-blasting smooth reschedule*).
+- **Perubahan & Implementasi Fondasional:**
+  1. **Skema Repeat Order 25 Hari (`src/config/followup-templates.ts`)**:
+     - `NEXT_TREATMENT_STAGE_DAYS` dimutakhirkan menjadi `[25, 50, 75]`.
+     - Ditambahkan helper kanonis `computeNextTreatmentAtWib0900(serviceDate, stageDays)` untuk perhitungan waktu deterministik pukul 09:00 WIB.
+     - Penyelarasan template pesan default stage 1 menjadi narasi "hampir 1 bulan".
+     - Non-retroaktif: baris yang dibuat sebelum `NEXT_TREATMENT_SCHEME_EPOCH` (default 2026-11-19) tidak digeser, dan reconciler hanya memindai kunjungan setelah epoch. Reservasi baru tetap memakai jadwal 25/50/75.
+  2. **Kontrak & Konfigurasi Mode Libur (`src/config/followup-scheduling.ts`, `src/config/followup-quota.ts`)**:
+     - Struktur config murni di `Tenant.settings.followUpHoliday` & `Tenant.settings.followUpQuota` (tanpa migrasi database Prisma).
+     - Mendukung aktivasi fleksibel: mode manual (toggle ON/OFF dengan batas aman maks 30 hari) atau rentang tanggal kalender (`startDate` s/d `endDate`).
+     - Kuota harian terukur (`maxPerDay`, default 40/hari di jam kerja 09:00–16:30 WIB) dan batas kesegaran (`staleCapDays`, default 14 hari).
+  3. **Alokator Slot Cerdas & Smooth Reschedule (`src/services/followup-schedule-allocator.ts`, `src/services/followup-holiday.service.ts`)**:
+     - `allocateFollowUpSlots`: membagi antrean tertahan secara bertahap dan merata, load-aware (menghitung beban existing di database agar tidak melebihi kuota harian).
+     - Eksekusi transisi keluar libur (`runExitReschedule`) dilindungi idempotensi database via `adminNotificationLog` untuk mencegah eksekusi ganda antar-proses worker.
+     - Item tertahan yang melampaui `staleCapDays` dibatalkan secara bersih dengan `CANCEL_REASON.HOLIDAY_STALE`.
+  4. **Proteksi Generator & Worker (`follow-up-engine.service.ts`, `follow-up-lifecycle.service.ts`)**:
+     - Selama mode libur aktif: background worker secara otomatis menghentikan pengiriman pesan keluar (`return 0`) dan membekukan pembatalan aturan 48 jam (`OVERDUE_48H`). Percakapan masuk dan respon AI tetap berjalan normal.
+     - Generator baru (`NO_PURCHASE`, `NEXT_TREATMENT`, `REMINDER_H1`/`REVIEW_H1`) saat libur otomatis di-*clamp* ke hari kerja pertama pasca-libur.
+  5. **Admin API & Guard (`src/routes/admin/follow-up.subroute.ts`)**:
+     - `GET /api/admin/follow-ups/holiday-mode`: informasi status libur, rentang tanggal, ringkasan reschedule, dan jumlah backlog tertahan.
+     - `POST /api/admin/follow-ups/holiday-mode`: update status libur dengan validasi parser ketat dan pencatatan audit log admin.
+     - Tombol manual `POST /api/admin/follow-ups/reschedule-overdue` mengembalikan 409 Conflict bila dicoba saat mode libur sedang aktif.
+  6. **UI Dashboard Admin (`FollowUpQueue.tsx`, `FollowUpHolidayModal.tsx`)**:
+     - Dibuat komponen modal kontrol `FollowUpHolidayModal` (terdaftar di `ui-registry.json`).
+     - Tombol akses `[Mode Libur]` di toolbar `FollowUpQueue.tsx` dengan badge animasi pulsing amber saat mode libur aktif.
+     - Proteksi tombol `Majukan Overdue` di-disable dengan tooltip informatif saat mode libur aktif.
+- **Verifikasi & Kepatuhan Gerbang:**
+  - Seluruh test terkait hijau: `followup-holiday-state.test.ts`, `followup-holiday-mode.test.ts`, `followup-schedule-allocator.test.ts`, `follow-up-admin.test.ts`, `follow-up-repeat-schedule-25d.test.ts`.
+  - `npm run check:reuse`: Lulus (189 baseline, 0 baru).
+  - `npm run check:architecture`: Lulus (59 baseline, 0 baru, 0 circular import baru).
+  - `npm run check:ui-reuse`: Lulus (62 halaman, 28 komponen, 0 pelanggaran).
+  - `npm run build:all`: Lulus (backend `tsc` & frontend `vite build` bersih).
+
 #### 2026-11-18 - Fix Fase 4 (#358): Modul Kanonis Layer 1 + Auto-Sync Transaksional Custom Role SaaS & CI Contract Matrix Anti-Drift
 
 - **Perbaikan Fondasional SaaS (`H-04`, `CD-07`, `V-07`, `A-009`, `A-010`):**
   1. **Sumber Kebenaran Tunggal (`src/domain/role-module-scopes.ts` + `src/routes/admin.route.ts`):** Memusatkan seluruh konstanta pagar keras Layer 1 (`SUPER_ADMIN_ONLY_PREFIXES`, `SETTINGS_READ_ALLOWLIST`, `SUPER_ADMIN_WRITE_PREFIXES`, `SUPER_ADMIN_RESTRICTED_SUBPATHS`) bersama pemetaan kanonis `MODULE_PATH_TO_API_SCOPES` & fungsi murni `deriveApiScopesForAllowedPaths` / `isScopeFullyBlockedByLayer1` (terdaftar di `scripts/module-registry.json` & `docs/MODULE_INDEX.md`). `src/routes/admin.route.ts` kini mengimpor langsung daftar Layer 1 tersebut sehingga mustahil terjadi drift antara pagar kode dan derivasi scope (`A-009`). `/admin/overview` **tidak pernah** membocorkan `/api/admin/financial-analytics` (wajib opt-in lewat modul `/admin/financial-analytics`).
   2. **Auto-Sync Transaksional Custom Role (`src/routes/admin/roles.subroute.ts`):** `POST /api/admin/roles` kini membungkus `customRole.upsert` + `roleApiScope.deleteMany` + `roleApiScope.createMany` dalam `prisma.$transaction`, lalu memanggil `invalidateScopeCache(tenantId, cleanKey)` agar custom role baru langsung aktif tanpa terkunci 403 fail-closed. `DELETE /api/admin/roles/:key` menolak role sistem (`409 SYSTEM_ROLE_IMMUTABLE`) dan membersihkan `role_api_scopes` secara transaksional hanya bila `customRole` non-sistem benar-benar terhapus.
   3. **Full CI Contract Matrix (`tests/unit/rbac-route-contract-matrix.test.ts`):** Mengunci 4 invariant otomatis: (a) 1:1 antara seluruh modul di `packages/admin-dashboard/src/config/rolePermissions.ts` (`ALL_MODULES`) vs `MODULE_PATH_TO_API_SCOPES` / `SUPER_ADMIN_ONLY_MODULE_PATHS`; (b) 0 orphan & 0 kontradiksi Layer 1↔Layer 2 pada modul kanonis maupun hasil akhir seluruh migrasi SQL lintas 4 peran; (c) `/admin/overview` tidak menghasilkan `/api/admin/financial-analytics` (`A-009`); (d) end-to-end `POST`/`DELETE /api/admin/roles` auto-sync dan batas 403 endpoint sensitif.
-- **Dokumentasi:** Diperbarui di `docs/FEATURE_INVENTORY.md`, `docs/MODULE_INDEX.md`, `docs/KNOWN_ISSUES.md` (`#358` → Fase 0–4 SELESAI, tersisa Fase 5 deploy produksi), serta `docs/changelog/INDEX.md`.
+- **Dokumentasi:** Diperbarui di `docs/FEATURE_INVENTORY.md`, `docs/MODULE_INDEX.md`, `docs/KNOWN_ISSUES.md` (`#358` → **RESOLVED** pasca-deploy Fase 5 ke produksi `43.173.11.79` pada 2026-11-18 22:31 WIB, commit `b8f55af6`: backup 12 MB + 3 migrasi `prisma@5.19.1` sukses, 0 orphan/kontradiksi, backfill `is_revoked` 156=156, `app` + `worker` rebuild bersih tanpa menyentuh `waha`), serta `docs/changelog/INDEX.md`.
 
 #### 2026-11-18 - Fix Fase 2 & Fase 3 (#358): Hardening Operasi Pesan/Webhook WAHA, Backfill 156 Revoke, & Rekonsiliasi RBAC Lintas 4 Peran
 
@@ -56,7 +99,6 @@ dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.
   3. **Hardening `sanitizeAuditPayload` (`src/services/audit-payload-sanitizer.ts`):** Guard circular reference berbasis ancestor-stack `WeakSet` (`add`/`delete` di `finally` agar shared object non-circular tidak salah ditandai `[CIRCULAR]`), rekursi penuh `BigInt` bersarang → string, `Date` → ISO string, `Error` → `{ name, code }` tanpa `message` PII, serta parsing JSON string khusus top-level untuk mencegah double-encode (menutup A-011) tanpa mengubah tipe string bersarang.
 - **Dokumentasi & Utang Terbuka:** Dicatat di `docs/KNOWN_ISSUES.md` #357 (insiden 3× 500 + 21 audit hilang; utang terbuka A-008 observabilitas alert `[AUDIT_FAILURE]` dan A-010 flag `AUDIT_PII_REDACTION`).
 - **Verifikasi:** `npm run typecheck` (exit 0), `npm run build` (exit 0), `npm run check:reuse` (0 pelanggaran baru / baseline 189), 3 suite terfokus (`audit-service-resilience`, `audit-payload-sanitizer`, `live-chat-reply` — **24/24 lulus**), full `npm test` (**1019/1025 file, 7923 lulus**; 4 failure pre-existing terkonfirmasi di file yang tidak tersentuh).
-
 #### 2026-11-15 - Fix: Salinan Alert Watchdog Iklan via WhatsApp (Solusi Sementara)
 
 - **Latar:** Alert `AD_FUNNEL_ANOMALY` sebenarnya sudah terkirim ke Telegram grup "Report kala" (thread 3) 8x sejak 14 Nov (status `SENT`), tetapi owner tidak melihatnya karena masuk topik laporan harian, `notification_channels` kosong, dan tidak ada kanal WhatsApp.

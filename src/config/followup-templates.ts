@@ -147,14 +147,14 @@ export const FOLLOWUP_ROLLING_TEMPLATES: Record<
       `Salam hangat Bunda ${name}! ✨ Terima kasih sudah pernah menghubungi ${businessName || getBrandIdentity().businessName}. Jangan sungkan chat Bidan kapan pun butuh layanan pijat homecare terpercaya ya bund! ❤️`,
   ],
 
-  // 7. Follow-Up Next Treatment Stage 1 (Bulan ke-1)
+  // 7. Follow-Up Next Treatment Stage 1 (Hari ke-25 / Menjelang 1 Bulan)
   NEXT_TREATMENT_1: [
     ({ name, babyName, businessName }) =>
-      `Halo Bunda ${name}! 🌸 Sudah 1 bulan nih sejak treatment terakhir di ${businessName || getBrandIdentity().businessName}. Saatnya ${babyName || 'si kecil'} pijat rutin bulanan nih bund, supaya tumbuh kembangnya makin optimal! 🥰`,
+      `Halo Bunda ${name}! 🌸 Sudah hampir 1 bulan nih sejak treatment terakhir di ${businessName || getBrandIdentity().businessName}. Saatnya ${babyName || 'si kecil'} pijat rutin bulanan nih bund, supaya tumbuh kembangnya makin optimal! 🥰`,
     ({ name, babyName, businessName }) =>
       `Selamat pagi Bunda ${name}! ✨ Pijat rutin 1 bulan sekali sangat bagus untuk menjaga kelenturan otot & kualitas tidur ${babyName || 'si kecil'} lho bund. Mau Bidan jadwalkan minggu ini? 😊`,
     ({ name, babyName, businessName }) =>
-      `Pagi Bunda ${name}! 💖 Tidak terasa sudah sebulan lalu ya bund. Yuk amankan slot treatment rutin ${babyName || 'si kecil'} atau ibu hamil/nifas minggu ini bersama Bidan ${businessName || getBrandIdentity().businessName}! ✨`,
+      `Pagi Bunda ${name}! 💖 Sebentar lagi sudah sebulan sejak treatment lalu ya bund. Yuk amankan slot treatment rutin ${babyName || 'si kecil'} atau ibu hamil/nifas minggu ini bersama Bidan ${businessName || getBrandIdentity().businessName}! ✨`,
   ],
 
   // 8. Follow-Up Next Treatment Stage 2 (Bulan ke-2)
@@ -177,17 +177,17 @@ export const FOLLOWUP_ROLLING_TEMPLATES: Record<
       `Salam Bunda ${name}! 💖 Terima kasih telah menjadi pelanggan setia ${businessName || getBrandIdentity().businessName}. Simpan kontak ini ya bund, kapan pun butuh treatment homecare kami siap datang! ✨`,
   ],
 
-  // 9b. Follow-Up Next Treatment MOMS — Stage 1..3 (Bulan ke-1..3).
+  // 9b. Follow-Up Next Treatment MOMS — Stage 1..3 (Hari ke-25, 50, 75).
   // Keluarga template khusus perawatan IBU (mis. oksitosin/induksi massage,
   // laktasi, relaksasi nifas). DILARANG memuat {babyName}, "si kecil",
   // "tumbuh kembang" — narasi bayi hanya sah untuk klaster ANAK.
   NEXT_TREATMENT_MOMS_1: [
     ({ name, momStage, businessName }) =>
-      `Halo Bunda ${name}! 🌸 Sudah 1 bulan sejak perawatan terakhir Bunda di ${businessName || getBrandIdentity().businessName}. Bagaimana kondisi Bunda ${momPhaseLine(momStage)} sekarang? Kami siap bantu jadwalkan sesi perawatan berikutnya kapan pun Bunda siap. 🥰`,
+      `Halo Bunda ${name}! 🌸 Sudah hampir 1 bulan sejak perawatan terakhir Bunda di ${businessName || getBrandIdentity().businessName}. Bagaimana kondisi Bunda ${momPhaseLine(momStage)} sekarang? Kami siap bantu jadwalkan sesi perawatan berikutnya kapan pun Bunda siap. 🥰`,
     ({ name, momStage, businessName }) =>
-      `Selamat pagi Bunda ${name}! ✨ Sudah sebulan nih sejak sesi perawatan terakhir Bunda ${momPhaseLine(momStage)}. Kalau badan mulai terasa pegal lagi, Bidan kami siap datang membantu Bunda relaksasi di rumah. Mau kami bantu pilih jadwalnya? 😊`,
+      `Selamat pagi Bunda ${name}! ✨ Hampir sebulan nih sejak sesi perawatan terakhir Bunda ${momPhaseLine(momStage)}. Kalau badan mulai terasa pegal lagi, Bidan kami siap datang membantu Bunda relaksasi di rumah. Mau kami bantu pilih jadwalnya? 😊`,
     ({ name, momStage, businessName }) =>
-      `Pagi Bunda ${name}! 💖 Tidak terasa sudah sebulan sejak perawatan terakhir Bunda ${momPhaseLine(momStage)}. Yuk amankan waktu untuk diri sendiri — kami siap bantu jadwalkan sesi perawatan Bunda minggu ini. ✨`,
+      `Pagi Bunda ${name}! 💖 Sebentar lagi sudah sebulan sejak perawatan terakhir Bunda ${momPhaseLine(momStage)}. Yuk amankan waktu untuk diri sendiri — kami siap bantu jadwalkan sesi perawatan Bunda minggu ini. ✨`,
   ],
 
   NEXT_TREATMENT_MOMS_2: [

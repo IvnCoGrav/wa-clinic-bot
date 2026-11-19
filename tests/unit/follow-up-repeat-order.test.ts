@@ -85,9 +85,9 @@ describe('Follow-Up Repeat Order & Reconciler Unit Tests (TDD Adversarial)', () 
     const findFirstSpy = vi.spyOn(prisma.followUp, 'findFirst');
     // Panggilan 1: null (terbuat 3)
     // Panggilan 2: baris QUEUED dengan scheduled_at yang sama (skip idempoten)
-    const s1Date = new Date('2030-11-03T02:00:00.000Z');
-    const s2Date = new Date('2030-12-03T02:00:00.000Z');
-    const s3Date = new Date('2031-01-03T02:00:00.000Z');
+    const s1Date = new Date('2030-10-28T02:00:00.000Z');
+    const s2Date = new Date('2030-11-22T02:00:00.000Z');
+    const s3Date = new Date('2030-12-17T02:00:00.000Z');
 
     findFirstSpy
       .mockResolvedValueOnce(null as any)

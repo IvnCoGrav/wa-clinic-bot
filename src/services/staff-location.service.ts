@@ -320,6 +320,7 @@ export class StaffLocationService {
       // Audit log
       const { auditService } = await import('./audit.service');
       await auditService.logAdminAction({
+        tenantId,
         apiKey: 'STAFF_SESSION',
         adminIdentity: staffName,
         action: needsMoveConfirmation ? 'STAFF_UPDATE_CUSTOMER_LOCATION_DIVERGED' : 'STAFF_UPDATE_CUSTOMER_LOCATION',
@@ -337,7 +338,6 @@ export class StaffLocationService {
           housePhotoUrl,
           landmark: finalLandmark,
         },
-        tenantId,
       });
 
       const coordsUpdated = shouldUpdatePrimaryCoords && lat != null && lng != null;

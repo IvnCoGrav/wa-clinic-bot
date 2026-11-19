@@ -5,6 +5,9 @@ import { auditService } from '../../services/audit.service';
 import { parsePositiveInt } from '../../utils/env-numeric';
 import { findForbiddenPlaceholders } from '../../utils/followup-placeholder';
 import { resolveSessionTenantId } from './route-helpers';
+import { parseFollowUpHolidayInput, resolveFollowUpHolidayState } from '../../config/followup-scheduling';
+import { getWibDateKey } from '../../config/followup-templates';
+import { followUpHolidayService } from '../../services/followup-holiday.service';
 
 export async function followUpAdminRoutes(fastify: FastifyInstance) {
   /**
@@ -68,9 +71,9 @@ export async function followUpAdminRoutes(fastify: FastifyInstance) {
         }
 
         await auditService.logAdminAction({
+          tenantId: resolveSessionTenantId(request),
           apiKey: (request as any).adminKeyUsed || 'SYSTEM',
           adminIdentity: (request as any).adminIdentity || 'Admin',
-          tenantId: resolveSessionTenantId(request),
           action: 'QUEUE_FOLLOWUP',
           targetId: id,
           payload: { status: 'QUEUED' },
@@ -98,9 +101,9 @@ export async function followUpAdminRoutes(fastify: FastifyInstance) {
         const queuedCount = await followUpService.bulkQueueFollowUps(resolveSessionTenantId(request));
 
         await auditService.logAdminAction({
+          tenantId: resolveSessionTenantId(request),
           apiKey: (request as any).adminKeyUsed || 'SYSTEM',
           adminIdentity: (request as any).adminIdentity || 'Admin',
-          tenantId: resolveSessionTenantId(request),
           action: 'BULK_QUEUE_FOLLOWUP',
           targetId: 'ALL',
           payload: { count: queuedCount, status: 'QUEUED' },
@@ -130,9 +133,9 @@ export async function followUpAdminRoutes(fastify: FastifyInstance) {
         const success = await followUpService.sendNow(id, resolveSessionTenantId(request));
 
         await auditService.logAdminAction({
+          tenantId: resolveSessionTenantId(request),
           apiKey: (request as any).adminKeyUsed || 'SYSTEM',
           adminIdentity: (request as any).adminIdentity || 'Admin',
-          tenantId: resolveSessionTenantId(request),
           action: 'MANUAL_SEND_FOLLOWUP',
           targetId: id,
           payload: { success },
@@ -164,9 +167,9 @@ export async function followUpAdminRoutes(fastify: FastifyInstance) {
           return reply.status(404).send({ error: 'Tidak ada item FAILED dengan id tersebut.' });
         }
         await auditService.logAdminAction({
+          tenantId: resolveSessionTenantId(request),
           apiKey: (request as any).adminKeyUsed || 'SYSTEM',
           adminIdentity: (request as any).adminIdentity || 'Admin',
-          tenantId: resolveSessionTenantId(request),
           action: 'RETRY_FOLLOWUP',
           targetId: id,
           payload: { status: 'QUEUED' },
@@ -200,9 +203,9 @@ export async function followUpAdminRoutes(fastify: FastifyInstance) {
         }
 
         await auditService.logAdminAction({
+          tenantId: resolveSessionTenantId(request),
           apiKey: (request as any).adminKeyUsed || 'SYSTEM',
           adminIdentity: (request as any).adminIdentity || 'Admin',
-          tenantId: resolveSessionTenantId(request),
           action: 'CANCEL_FOLLOWUP',
           targetId: id,
           payload: { status: 'CANCELLED', reason: reason || undefined },
@@ -235,9 +238,9 @@ export async function followUpAdminRoutes(fastify: FastifyInstance) {
           : await followUpService.bulkCancelFollowUps(resolveSessionTenantId(request), targetStatus);
 
         await auditService.logAdminAction({
+          tenantId: resolveSessionTenantId(request),
           apiKey: (request as any).adminKeyUsed || 'SYSTEM',
           adminIdentity: (request as any).adminIdentity || 'Admin',
-          tenantId: resolveSessionTenantId(request),
           action: 'BULK_CANCEL_FOLLOWUP',
           targetId: 'ALL',
           payload: { count: cancelledCount, targetStatus, reason: reason || undefined },
@@ -287,9 +290,9 @@ export async function followUpAdminRoutes(fastify: FastifyInstance) {
         );
 
         await auditService.logAdminAction({
+          tenantId: resolveSessionTenantId(request),
           apiKey: (request as any).adminKeyUsed || 'SYSTEM',
           adminIdentity: (request as any).adminIdentity || 'Admin',
-          tenantId: resolveSessionTenantId(request),
           action: 'UPDATE_FOLLOWUP',
           targetId: id,
           payload: { scheduledAt, stage, customText },
@@ -321,9 +324,9 @@ export async function followUpAdminRoutes(fastify: FastifyInstance) {
         const updated = await followUpService.rescheduleFollowUp(id, new Date(scheduledAt), resolveSessionTenantId(request));
 
         await auditService.logAdminAction({
+          tenantId: resolveSessionTenantId(request),
           apiKey: (request as any).adminKeyUsed || 'SYSTEM',
           adminIdentity: (request as any).adminIdentity || 'Admin',
-          tenantId: resolveSessionTenantId(request),
           action: 'RESCHEDULE_FOLLOWUP',
           targetId: id,
           payload: { scheduledAt },
@@ -354,20 +357,48 @@ export async function followUpAdminRoutes(fastify: FastifyInstance) {
       reply: FastifyReply
     ) => {
       try {
+        const tenantId = resolveSessionTenantId(request);
+
+        const holidayStatus = await followUpHolidayService.getStatus(tenantId);
+        if (holidayStatus.state.status === 'active') {
+          return reply.status(409).send({
+            success: false,
+            error: 'Mode Libur sedang aktif. Tidak dapat memajukan antrean overdue selama klinik libur. Nonaktifkan mode libur terlebih dahulu.',
+          });
+        }
+
         const { maxPerDay, startDate } = request.body || {};
-        const parsedStartDate = startDate ? new Date(startDate) : undefined;
+        let parsedStartDate: Date | undefined;
+        if (startDate !== undefined && startDate !== null && String(startDate).trim() !== '') {
+          parsedStartDate = new Date(String(startDate));
+          if (isNaN(parsedStartDate.getTime())) {
+            return reply.status(400).send({
+              success: false,
+              error: 'startDate tidak valid. Gunakan format tanggal ISO (YYYY-MM-DD).',
+            });
+          }
+        }
+        if (maxPerDay !== undefined && maxPerDay !== null) {
+          const parsedMax = Number(maxPerDay);
+          if (!Number.isInteger(parsedMax) || parsedMax < 1 || parsedMax > 200) {
+            return reply.status(400).send({
+              success: false,
+              error: 'maxPerDay harus bilangan bulat antara 1 sampai 200.',
+            });
+          }
+        }
         const effectiveMaxPerDay = maxPerDay
           ? Number(maxPerDay)
           : parsePositiveInt(process.env.FOLLOWUP_MAX_PER_DAY, 40);
-        const result = await followUpService.rescheduleOverdueFollowUps(resolveSessionTenantId(request), {
+        const result = await followUpService.rescheduleOverdueFollowUps(tenantId, {
           maxPerDay: effectiveMaxPerDay,
           startDate: parsedStartDate,
         });
 
         await auditService.logAdminAction({
+          tenantId,
           apiKey: (request as any).adminKeyUsed || 'SYSTEM',
           adminIdentity: (request as any).adminIdentity || 'Admin',
-          tenantId: resolveSessionTenantId(request),
           action: 'RESCHEDULE_OVERDUE_FOLLOWUPS',
           payload: { maxPerDay, startDate, rescheduledCount: result.rescheduledCount },
           ipAddress: request.ip,
@@ -381,6 +412,108 @@ export async function followUpAdminRoutes(fastify: FastifyInstance) {
       } catch (err: any) {
         request.log.error(err);
         return reply.status(500).send({ error: 'Gagal menjadwalkan ulang follow-up overdue', details: err.message });
+      }
+    }
+  );
+
+  /**
+   * GET /api/admin/follow-ups/holiday-mode
+   * Mengambil konfigurasi mode libur tenant, status aktif saat ini, dan jumlah antrean backlog yang tertahan.
+   */
+  fastify.get(
+    '/api/admin/follow-ups/holiday-mode',
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      try {
+        const tenantId = resolveSessionTenantId(request);
+        const status = await followUpHolidayService.getStatus(tenantId);
+        return reply.status(200).send({
+          success: true,
+          data: status,
+        });
+      } catch (err: any) {
+        request.log.error(err);
+        return reply.status(500).send({ error: 'Gagal mengambil status mode libur follow-up', details: err.message });
+      }
+    }
+  );
+
+  /**
+   * POST /api/admin/follow-ups/holiday-mode
+   * Memperbarui konfigurasi mode libur tenant (toggle manual / rentang kalender).
+   * Bila mode libur dimatikan dan autoRescheduleOnExit aktif, otomatis mencicil antrean overdue.
+   */
+  fastify.post(
+    '/api/admin/follow-ups/holiday-mode',
+    async (
+      request: FastifyRequest<{
+        Body?: unknown;
+      }>,
+      reply: FastifyReply
+    ) => {
+      try {
+        const tenantId = resolveSessionTenantId(request);
+        const parsed = parseFollowUpHolidayInput(request.body);
+        if (!parsed.ok) {
+          return reply.status(400).send({
+            success: false,
+            errors: parsed.errors,
+          });
+        }
+
+        const prevConfig = await followUpHolidayService.getConfig(tenantId);
+        const updatedConfig = await followUpHolidayService.updateConfig(tenantId, parsed.value);
+
+        let updatedQuota: number | null = null;
+        const rawMaxPerDay = (request.body as any)?.maxPerDay;
+        if (rawMaxPerDay !== undefined && rawMaxPerDay !== null) {
+          const quota = Number(rawMaxPerDay);
+          if (!Number.isInteger(quota) || quota < 1 || quota > 200) {
+            return reply.status(400).send({
+              success: false,
+              errors: ['maxPerDay harus bilangan bulat antara 1 sampai 200.'],
+            });
+          }
+          updatedQuota = await followUpHolidayService.updateQuota(tenantId, quota);
+        }
+
+        let rescheduleSummary = null;
+        if (prevConfig.enabled && parsed.value.enabled === false && updatedConfig.autoRescheduleOnExit) {
+          const now = new Date();
+          // Kunci keluar HARUS sama dengan endDate yang dipakai resolver,
+          // agar transisi tidak dijalankan dua kali pada tick berikutnya.
+          const exitEndDate = prevConfig.endDate || getWibDateKey(now) || 'manual';
+          rescheduleSummary = await followUpHolidayService.runExitReschedule(
+            tenantId,
+            { status: 'exit_pending', exitEndDate },
+            now,
+            followUpService.rescheduleOverdueFollowUps.bind(followUpService)
+          );
+        }
+
+        const state = resolveFollowUpHolidayState(updatedConfig, new Date());
+
+        await auditService.logAdminAction({
+          tenantId: resolveSessionTenantId(request),
+          apiKey: (request as any).adminKeyUsed || 'SYSTEM',
+          adminIdentity: (request as any).adminIdentity || 'Admin',
+          action: 'UPDATE_FOLLOWUP_HOLIDAY_MODE',
+          payload: { patch: parsed.value, state: state.status, rescheduled: rescheduleSummary?.rescheduledCount ?? 0, maxPerDay: updatedQuota },
+          ipAddress: request.ip,
+        });
+
+        return reply.status(200).send({
+          success: true,
+          message: 'Konfigurasi mode libur follow-up berhasil diperbarui.',
+          data: {
+            config: updatedConfig,
+            state,
+            rescheduleSummary,
+            maxPerDay: updatedQuota,
+          },
+        });
+      } catch (err: any) {
+        request.log.error(err);
+        return reply.status(500).send({ error: 'Gagal memperbarui mode libur follow-up', details: err.message });
       }
     }
   );
@@ -420,9 +553,9 @@ export async function followUpAdminRoutes(fastify: FastifyInstance) {
       await followUpService.saveTemplate(type, variant, text, resolveSessionTenantId(request));
 
       await auditService.logAdminAction({
+        tenantId: resolveSessionTenantId(request),
         apiKey: (request as any).adminKeyUsed || 'SYSTEM',
         adminIdentity: (request as any).adminIdentity || 'Admin',
-        tenantId: resolveSessionTenantId(request),
         action: 'UPDATE_FOLLOWUP_TEMPLATE',
         targetId: `${type}_${variant}`,
         payload: { text },
@@ -452,9 +585,9 @@ export async function followUpAdminRoutes(fastify: FastifyInstance) {
         await followUpService.resetTemplate(type, parseInt(variant, 10), resolveSessionTenantId(request));
 
         await auditService.logAdminAction({
+          tenantId: resolveSessionTenantId(request),
           apiKey: (request as any).adminKeyUsed || 'SYSTEM',
           adminIdentity: (request as any).adminIdentity || 'Admin',
-          tenantId: resolveSessionTenantId(request),
           action: 'RESET_FOLLOWUP_TEMPLATE',
           targetId: `${type}_${variant}`,
           ipAddress: request.ip,

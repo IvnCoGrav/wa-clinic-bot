@@ -7,12 +7,14 @@
 
 ## 1. Daftar Kapabilitas Kanonis Aktif
 
-Total kapabilitas terdaftar: **27 modul**.
+Total kapabilitas terdaftar: **29 modul**.
 
 | ID Kapabilitas | Judul & Deskripsi | Modul Kanonis | Ekspor Resmi | Test File |
 |---|---|---|---|---|
 | `capi.pure_helpers` | **Helper murni Meta Conversions API**<br>Transformasi deterministik nilai CAPI, format _fbc, hash SHA-256, decrypt token, kanonikalisasi landing URL, ekstraksi nominal template, dan event_id Purchase — tanpa I/O. | [`src/services/capi.helpers.ts`](../src/services/capi.helpers.ts) | `maskName`, `parseCapiValue`, `formatMetaFbc`, `sha256Hash`, `decryptCapiToken`, `resolveCanonicalLandingUrl`, `extractValueByFormat`, `normalizeCapiMatchingGeo`, `buildDeterministicPurchaseEventId`, `buildLegacyPurchaseEventId` | [`capi-value-guard.test.ts`](../tests/unit/capi-value-guard.test.ts) |
 | `date.parse_indonesian` | **Parser tanggal bahasa Indonesia**<br>Parsing ekspresi tanggal bahasa alami Indonesia (hari, nama bulan teks/angka, relatif) menjadi objek Date standar. | [`src/utils/indonesian-date-parser.ts`](../src/utils/indonesian-date-parser.ts) | `parseIndonesianDate`, `parseHistoricalIndonesianDate`, `applyBookingTimeToDate` | [`indonesian-date-parser.test.ts`](../tests/unit/v3/indonesian-date-parser.test.ts) |
+| `followup.holiday_scheduling` | **Kontrak & resolusi Mode Libur Follow-Up**<br>Parser konfigurasi libur tenant, resolver state (active/exit_pending/manual_expired), clamp jadwal ke hari buka pertama, dan epoch skema repeat 25/50/75 hari yang non-retroaktif. | [`src/config/followup-scheduling.ts`](../src/config/followup-scheduling.ts) | `parseFollowUpHolidayConfig`, `parseFollowUpHolidayInput`, `resolveFollowUpHolidayState`, `clampScheduledAtToPostHoliday`, `countWibDaysBetween`, `isRepeatSchemeEligible`, `NEXT_TREATMENT_SCHEME_EPOCH` | [`followup-holiday-state.test.ts`](../tests/unit/followup-holiday-state.test.ts) |
+| `followup.schedule_allocator` | **Alokator slot follow-up beban-aware**<br>Membagi antrean follow-up ke slot jam kerja WIB secara deterministik, menghormati beban existing per hari, dan mengisi celah slot kosong untuk mencegah blasting. | [`src/services/followup-schedule-allocator.ts`](../src/services/followup-schedule-allocator.ts) | `allocateFollowUpSlots`, `loadFollowUpDailyLoad`, `loadFollowUpDailyLoadDetailed`, `getWibMinutes` | [`followup-schedule-allocator.test.ts`](../tests/unit/followup-schedule-allocator.test.ts) |
 | `json.extract` | **Ekstraksi JSON dari output AI**<br>Mengekstrak blok JSON seimbang dari respons teks LLM yang mengandung markdown atau teks pelengkap. | [`src/utils/json-extract.ts`](../src/utils/json-extract.ts) | `extractBalancedJson`, `extractJsonContent`, `repairTruncatedJson` | [`json-extract.test.ts`](../tests/unit/json-extract.test.ts) |
 | `livechat.serialize` | **Proyeksi DTO LiveChat**<br>Memetakan baris percakapan/kustomer/reservasi menjadi DTO LiveChat (badge reservasi, sumber lokasi, awaiting-reply) tanpa akses DB. | [`src/services/live-chat.serializer.ts`](../src/services/live-chat.serializer.ts) | `serializeLiveChatConversation` | [`livechat-payload-completeness.test.ts`](../tests/unit/livechat-payload-completeness.test.ts) |
 | `location.adequacy` | **Kecukupan, presisi, dan precedence lokasi tugas**<br>Resolver kanonis kecukupan/presisi/kepercayaan lokasi serta precedence titik tugas (pemilik koordinat) berbasis status; mencegah penurunan label & shareloc palsu. | [`src/domain/location-adequacy.ts`](../src/domain/location-adequacy.ts) | `resolveLocationAdequacy`, `resolveTaskLocationPrecedence`, `extractStaffVerifiedCoords`, `SAME_PLACE_TOLERANCE_M` | [`location-adequacy.test.ts`](../tests/unit/location-adequacy.test.ts) |
@@ -58,6 +60,24 @@ Total kapabilitas terdaftar: **27 modul**.
 - **Simbol Terlarang di Luar Kanonis:** `parseIndonesianDate`
 - **File yang Diizinkan:** `src/utils/indonesian-date-parser.ts`
 - **File Test:** [`tests/unit/v3/indonesian-date-parser.test.ts`](../tests/unit/v3/indonesian-date-parser.test.ts)
+
+### `followup.holiday_scheduling` — Kontrak & resolusi Mode Libur Follow-Up
+
+- **Deskripsi:** Parser konfigurasi libur tenant, resolver state (active/exit_pending/manual_expired), clamp jadwal ke hari buka pertama, dan epoch skema repeat 25/50/75 hari yang non-retroaktif.
+- **File Kanonis:** [`src/config/followup-scheduling.ts`](../src/config/followup-scheduling.ts)
+- **Ekspor Kanonis:** `parseFollowUpHolidayConfig`, `parseFollowUpHolidayInput`, `resolveFollowUpHolidayState`, `clampScheduledAtToPostHoliday`, `countWibDaysBetween`, `isRepeatSchemeEligible`, `NEXT_TREATMENT_SCHEME_EPOCH`
+- **Simbol Terlarang di Luar Kanonis:** `parseFollowUpHolidayConfig`, `parseFollowUpHolidayInput`, `resolveFollowUpHolidayState`, `clampScheduledAtToPostHoliday`, `isRepeatSchemeEligible`
+- **File yang Diizinkan:** `src/config/followup-scheduling.ts`
+- **File Test:** [`tests/unit/followup-holiday-state.test.ts`](../tests/unit/followup-holiday-state.test.ts)
+
+### `followup.schedule_allocator` — Alokator slot follow-up beban-aware
+
+- **Deskripsi:** Membagi antrean follow-up ke slot jam kerja WIB secara deterministik, menghormati beban existing per hari, dan mengisi celah slot kosong untuk mencegah blasting.
+- **File Kanonis:** [`src/services/followup-schedule-allocator.ts`](../src/services/followup-schedule-allocator.ts)
+- **Ekspor Kanonis:** `allocateFollowUpSlots`, `loadFollowUpDailyLoad`, `loadFollowUpDailyLoadDetailed`, `getWibMinutes`
+- **Simbol Terlarang di Luar Kanonis:** `allocateFollowUpSlots`, `loadFollowUpDailyLoad`
+- **File yang Diizinkan:** `src/services/followup-schedule-allocator.ts`
+- **File Test:** [`tests/unit/followup-schedule-allocator.test.ts`](../tests/unit/followup-schedule-allocator.test.ts)
 
 ### `json.extract` — Ekstraksi JSON dari output AI
 

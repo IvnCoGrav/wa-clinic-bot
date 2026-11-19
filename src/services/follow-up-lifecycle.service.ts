@@ -7,15 +7,24 @@ import {
   checkCustomerBypass,
   buildNonBypassCustomerWhere,
 } from '../utils/customer-bypass';
-import {
-  normalizeTreatmentCategory,
-  isChildCategory,
-} from '../utils/treatment-category';
+import { normalizeTreatmentCategory, isChildCategory } from '../utils/treatment-category';
 import { canonicalMomStage } from './maternal-state.service';
 import { getWibDateKey } from '../config/followup-templates';
+import { getFollowUpMaxPerDay } from '../config/followup-quota';
+import { loadFollowUpDailyLoad, allocateFollowUpSlots } from './followup-schedule-allocator';
+import { clampScheduledAtToPostHoliday, isRepeatSchemeEligible, NEXT_TREATMENT_SCHEME_EPOCH } from '../config/followup-scheduling';
+import { getFollowUpHolidayConfig } from './tenant-settings.store';
 
 // Offset hari jadwal NO_PURCHASE per stage (stage 1, 2, 3 -> +3, +7, +14 hari).
 export const NO_PURCHASE_STAGE_DAYS: readonly number[] = [3, 7, 14];
+
+// Offset hari jadwal NEXT_TREATMENT per stage (stage 1, 2, 3 -> +25, +50, +75 hari).
+// Default dapat di-override via env NEXT_TREATMENT_STAGE_DAYS untuk fleksibilitas operasional/tenant.
+export const NEXT_TREATMENT_STAGE_DAYS: readonly number[] = (
+  process.env.NEXT_TREATMENT_STAGE_DAYS
+    ? process.env.NEXT_TREATMENT_STAGE_DAYS.split(',').map((s) => parseInt(s.trim(), 10)).filter((n) => !isNaN(n) && n > 0)
+    : [25, 50, 75]
+);
 
 // Alasan pembatalan kanonis (cancel_reason) — single source of truth.
 export const CANCEL_REASON = {
@@ -33,6 +42,7 @@ export const CANCEL_REASON = {
   EXPIRED_PENDING: 'Antrean PENDING kadaluarsa (tidak disetujui sebelum akhir hari jadwal)',
   NON_SERIOUS_STAGE3: 'Pengingat hari ke-14 hanya untuk kontak serius (MQL/legacy)',
   UNRESOLVED_PLACEHOLDER: 'Placeholder pesan belum tersubstitusi (dibatalkan gerbang pengiriman)',
+  HOLIDAY_STALE: 'Kadaluarsa: melewati batas kesegaran setelah mode libur',
 } as const;
 
 export const FOLLOWUP_TYPE_PRIORITY: Record<string, number> = {
@@ -65,21 +75,14 @@ export class FollowUpLifecycleService {
   }
 
   /**
-   * Hitung waktu kirim NEXT_TREATMENT pada 09:00 WIB untuk tanggal booking + offset bulan.
+   * Hitung waktu kirim NEXT_TREATMENT pada 09:00 WIB untuk tanggal booking + offset hari per stage.
+   * Stage 1 = +25 hari, Stage 2 = +50 hari, Stage 3 = +75 hari (atau sesuai NEXT_TREATMENT_STAGE_DAYS).
    */
-  public computeNextTreatmentAtWib0900(bookingDate: Date, monthOffset: number): Date {
+  public computeNextTreatmentAtWib0900(bookingDate: Date, stage: number): Date {
     const bWib = new Date(bookingDate.getTime() + 7 * 60 * 60 * 1000);
-    const year = bWib.getUTCFullYear();
-    const month = bWib.getUTCMonth();
-    const day = bWib.getUTCDate();
-
-    const targetMonthIndex = month + monthOffset;
-    const targetYear = year + Math.floor(targetMonthIndex / 12);
-    const normalizedMonth = ((targetMonthIndex % 12) + 12) % 12;
-    const daysInTargetMonth = new Date(Date.UTC(targetYear, normalizedMonth + 1, 0)).getUTCDate();
-    const finalDay = Math.min(day, daysInTargetMonth);
-
-    return new Date(Date.UTC(targetYear, normalizedMonth, finalDay, 2, 0, 0, 0));
+    const stageIdx = Math.min(3, Math.max(1, stage)) - 1;
+    const dayOffset = NEXT_TREATMENT_STAGE_DAYS[stageIdx] ?? (stage * 25);
+    return new Date(Date.UTC(bWib.getUTCFullYear(), bWib.getUTCMonth(), bWib.getUTCDate() + dayOffset, 2, 0, 0, 0));
   }
 
   /**
@@ -152,9 +155,17 @@ export class FollowUpLifecycleService {
         momStage = canonicalMomStage(sd.momProfile?.stage);
       } catch {}
 
+      let holidayConfig: any = null;
+      try {
+        holidayConfig = await getFollowUpHolidayConfig(tenantId);
+      } catch {}
+
       await Promise.all(
         stages.map(async (stage, idx) => {
-          const scheduledAt = this.computeScheduleAtWib0940(new Date(), days[idx], customerId);
+          const rawScheduledAt = this.computeScheduleAtWib0940(new Date(), days[idx], customerId);
+          const scheduledAt = holidayConfig
+            ? clampScheduledAtToPostHoliday(rawScheduledAt, holidayConfig)
+            : rawScheduledAt;
           try {
             await prisma.followUp?.create?.({
               data: {
@@ -352,13 +363,21 @@ export class FollowUpLifecycleService {
         return;
       }
 
+      let holidayConfig: any = null;
+      try {
+        holidayConfig = await getFollowUpHolidayConfig(tenantId);
+      } catch {}
+
       const now = new Date();
       const bDateWib = new Date(bDate.getTime() + 7 * 60 * 60 * 1000);
       const year = bDateWib.getUTCFullYear();
       const month = bDateWib.getUTCMonth();
       const day = bDateWib.getUTCDate();
 
-      const reminderDate = new Date(Date.UTC(year, month, day - 1, 12, 0, 0, 0));
+      const rawReminderDate = new Date(Date.UTC(year, month, day - 1, 12, 0, 0, 0));
+      const reminderDate = holidayConfig
+        ? clampScheduledAtToPostHoliday(rawReminderDate, holidayConfig)
+        : rawReminderDate;
 
       let effectiveReminderDate: Date | null = reminderDate;
       if (reminderDate <= now) {
@@ -369,7 +388,10 @@ export class FollowUpLifecycleService {
         }
       }
 
-      const reviewDate = new Date(Date.UTC(year, month, day + 1, 1, 0, 0, 0));
+      const rawReviewDate = new Date(Date.UTC(year, month, day + 1, 1, 0, 0, 0));
+      const reviewDate = holidayConfig
+        ? clampScheduledAtToPostHoliday(rawReviewDate, holidayConfig)
+        : rawReviewDate;
       const isBaby = treatmentCategory == null || treatmentCategory === ''
         ? true
         : isChildCategory(treatmentCategory);
@@ -567,8 +589,16 @@ export class FollowUpLifecycleService {
       let skippedExists = 0;
       let reAnchored = 0;
 
+      let holidayConfig: any = null;
+      try {
+        holidayConfig = await getFollowUpHolidayConfig(tenantId);
+      } catch {}
+
       for (const stage of [1, 2, 3] as const) {
-        const scheduledAt = this.computeNextTreatmentAtWib0900(bDate, stage);
+        const rawScheduledAt = this.computeNextTreatmentAtWib0900(bDate, stage);
+        const scheduledAt = holidayConfig
+          ? clampScheduledAtToPostHoliday(rawScheduledAt, holidayConfig)
+          : rawScheduledAt;
         if (scheduledAt.getTime() <= now.getTime()) {
           skippedPast++;
           continue;
@@ -592,6 +622,12 @@ export class FollowUpLifecycleService {
           const existsStatus = String(exists.status || '').toUpperCase();
 
           if (existsStatus === 'PENDING' || existsStatus === 'QUEUED') {
+            // Non-retroaktif: baris yang dibuat sebelum epoch skema tidak boleh digeser.
+            const isLegacyRow = !!exists.created_at && !isRepeatSchemeEligible(exists.created_at);
+            if (isLegacyRow) {
+              skippedExists++;
+              continue;
+            }
             const oldAt = exists.scheduled_at ? new Date(exists.scheduled_at) : null;
             const needsReAnchor =
               !oldAt ||
@@ -699,6 +735,9 @@ export class FollowUpLifecycleService {
     try {
       const now = new Date();
       const ninetyDaysAgo = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
+      // Non-retroaktif: reconciler tidak boleh membuat antrean skema baru
+      // untuk kunjungan yang sudah selesai sebelum epoch skema.
+      const reconcileCutoff = new Date(Math.max(ninetyDaysAgo.getTime(), NEXT_TREATMENT_SCHEME_EPOCH.getTime()));
 
       let completed: Array<{ customer_id: string; booking_date: Date | null; treatment_category?: string | null }> = [];
       try {
@@ -706,7 +745,7 @@ export class FollowUpLifecycleService {
           where: {
             tenant_id: tenantId,
             status: 'completed',
-            booking_date: { gte: ninetyDaysAgo, lte: now },
+            booking_date: { gte: reconcileCutoff, lte: now },
           },
           select: { customer_id: true, booking_date: true, treatment_category: true },
           orderBy: { booking_date: 'desc' },
@@ -846,7 +885,7 @@ export class FollowUpLifecycleService {
    * Hitung slot jadwal WINBACK_60D pada jam kerja 09:30–16:00 WIB.
    */
   public async buildWinbackScheduleSlots(tenantId: string, count: number, now: Date): Promise<Date[]> {
-    const maxPerDay = parsePositiveInt(process.env.FOLLOWUP_MAX_PER_DAY, 40);
+    const maxPerDay = await getFollowUpMaxPerDay(tenantId);
     const nowWib = new Date(now.getTime() + 7 * 60 * 60 * 1000);
     const startY = nowWib.getUTCFullYear();
     const startM = nowWib.getUTCMonth();
@@ -857,60 +896,30 @@ export class FollowUpLifecycleService {
       Date.UTC(nowWib.getUTCFullYear(), nowWib.getUTCMonth(), nowWib.getUTCDate()) - 7 * 60 * 60 * 1000
     );
 
-    let existing: Array<{ scheduled_at: Date }> = [];
-    const loadByDate = new Map<string, number>();
-    try {
-      const grouped = await (prisma.followUp as any)?.groupBy?.({
-        by: ['scheduled_at'],
-        where: {
-          tenant_id: tenantId,
-          status: { in: ['PENDING', 'QUEUED'] },
-          scheduled_at: { gte: startOfTodayUtc },
-        },
-        _count: { _all: true },
-      });
-      if (Array.isArray(grouped) && grouped.length > 0) {
-        for (const g of grouped) {
-          if (!g?.scheduled_at) continue;
-          const key = getWibDateKey(g.scheduled_at);
-          if (key) loadByDate.set(key, (loadByDate.get(key) || 0) + (g._count?._all || 1));
-        }
-      } else {
-        existing = (await prisma.followUp.findMany({
-          where: {
-            tenant_id: tenantId,
-            status: { in: ['PENDING', 'QUEUED'] },
-            scheduled_at: { gte: startOfTodayUtc },
-          },
-          select: { scheduled_at: true },
-        })) as any;
-        for (const e of existing || []) {
-          if (!e?.scheduled_at) continue;
-          const key = getWibDateKey(e.scheduled_at);
-          if (key) loadByDate.set(key, (loadByDate.get(key) || 0) + 1);
-        }
-      }
-    } catch {}
+    const loadByDate = await loadFollowUpDailyLoad(tenantId, startOfTodayUtc);
 
-    const slots: Date[] = [];
-    let dayIndex = 0;
-    const step = Math.max(5, Math.floor(390 / maxPerDay));
-
-    for (let i = 0; i < count; i++) {
-      // eslint-disable-next-line no-constant-condition
-      while (true) {
-        const key = new Date(Date.UTC(startY, startM, startD + dayIndex)).toISOString().slice(0, 10);
-        if ((loadByDate.get(key) || 0) < maxPerDay) break;
-        dayIndex++;
+    const holidayConfig = await getFollowUpHolidayConfig(tenantId);
+    const skipDateKeys = new Set<string>();
+    if (holidayConfig.enabled && holidayConfig.startDate && holidayConfig.endDate) {
+      const [sy, sm, sd] = holidayConfig.startDate.split('-').map(Number);
+      const [ey, em, ed] = holidayConfig.endDate.split('-').map(Number);
+      const cur = new Date(Date.UTC(sy, sm - 1, sd));
+      const end = new Date(Date.UTC(ey, em - 1, ed));
+      while (cur <= end) {
+        skipDateKeys.add(cur.toISOString().slice(0, 10));
+        cur.setUTCDate(cur.getUTCDate() + 1);
       }
-      const key = new Date(Date.UTC(startY, startM, startD + dayIndex)).toISOString().slice(0, 10);
-      const slotIndex = loadByDate.get(key) || 0;
-      const offset = Math.min(389, slotIndex * step);
-      slots.push(new Date(Date.UTC(startY, startM, startD + dayIndex, 2, 30 + offset, 0, 0)));
-      loadByDate.set(key, slotIndex + 1);
     }
 
-    return slots;
+    return allocateFollowUpSlots({
+      count,
+      maxPerDay,
+      windowStartMinWib: 570, // 09:30 WIB
+      windowEndMinWib: 960,   // 16:00 WIB
+      startDateWib: { year: startY, month: startM, day: startD },
+      loadByDate,
+      skipDateKeys,
+    });
   }
 
   /**
