@@ -3,6 +3,18 @@
 Catatan temuan yang sengaja dipisah dari fitur aktif, supaya tidak hilang dan
 tidak disalahartikan sebagai bug dari perubahan terbaru.
 
+## 361. [Payment Proof / Deploy] Source Produksi Sempat Tidak Sinkron dengan Image & Batasan Cakupan Bukti Bayar (2026-11-19, SEBAGIAN SELESAI)
+
+- **Status:** SEBAGIAN SELESAI — hotfix sudah ter-deploy & terverifikasi; sisa remediasi data, PDF, dan WABA masih terbuka.
+- **Temuan drift source vs image (2026-11-19):** container produksi memuat `payment-proof-config.service.ts` dan `select-payment-proof-candidate.ts` yang **tidak pernah di-commit** dan tidak ada di source server. Rebuild dari source saat itu akan menghapus seluruh fitur bukti bayar. Perbaikan: hotfix di-*cherry-pick* ke branch deploy (`b10304fa`), source server di-fast-forward, dan image lama di-tag `pre-hotfix-20261119` untuk rollback.
+- **Fallback berbahaya DIHAPUS:** `findFirst` tanpa filter status/tanggal/lunas di `customer-payment-proof.service.ts` dihapus. Error DB kini `INTERNAL_ERROR` (fail-closed), dan status `cancelled`/`rejected` ditolak di domain. **DILARANG menghidupkan kembali fallback ini.**
+- **Batasan PDF/dokumen:** pipeline bukti bayar hanya memproses `canonical.type === 'image'` (`src/routes/webhook.route.ts`). PDF tidak didukung (`ALLOWED_MIME` tanpa `application/pdf`, Vision memakai `image_url`).
+- **Batasan WABA:** bukti via Meta Cloud API belum masuk pipeline (rujuk #271).
+- **Sisa data (OPEN):** 8 reservasi belum lunas tanpa bukti (Feriyal, Ferlin, Izza, Paw, Kinnas, Susi, Jennifer, Rika) + 4 lunas tanpa bukti non-tunai (Ervina, Pamela, Devia, Leliy). Menunggu berkas bukti asli; nominal **tidak boleh ditebak** (`reconcile-payment-proof-rows.ts` menolak `amount` kosong).
+- **Verifikasi:** `npm run typecheck` bersih; 76 test terkait hijau pada kode produksi; image staging diverifikasi (fallback=0, fail-closed marker, terminal filter, field dashboard) sebelum switch; pasca-deploy `/health` 200 dan `/proof/0975f422-4f19-43ef-b03e-7ee9d13d6f2c` 200.
+- **Full suite:** 8.007 test → 7.971 lulus, 8 gagal, 28 skip. Kedelapan kegagalan terbukti pre-existing (revert-and-rerun pada `374f403d` menghasilkan 8 kegagalan identik): `admin-config-write-rbac`, `cta-redirect-delay`, `fase05-audit-artifact`, `fase10-audit-artifact`, `hybrid-reservation-parser` (2), `production_edge_cases`, `trustproxy-ip`.
+- **Catatan label Sheets:** formatter kanonik menulis `payment_method` apa adanya (mis. `QRIS`), bukan "Transfer QRIS".
+
 ## 360. [Follow-Up / Mode Libur] Batasan Operasional Mode Libur & Epoch Repeat 25 Hari (2026-11-19)
 
 - **Status:** IMPLEMENTED dengan batasan yang disengaja.
