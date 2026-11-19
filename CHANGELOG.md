@@ -4,6 +4,12 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### 2026-11-19 - Fix: Audit `tenantId` pada Route/Service Lama (SEC-AUDIT A-015b)
+
+- **Masalah:** `AuditService.logAdminAction` mewajibkan `tenantId`, tetapi banyak route/service lama belum mengirimkannya. Request yang seharusnya sukses berubah menjadi **500** (DELETE reservasi, landing admin, live-chat, WABA/QR, archive/restore, pembayaran & lokasi staf).
+- **Perbaikan:** Menambahkan `tenantId` dari sesi/tenant record pada seluruh pemanggilan `logAdminAction` di 11 file (route + service). Tidak mengubah kontrak endpoint.
+- **Verifikasi:** Cluster test terkait **109/109 hijau**; full suite turun dari 29 menjadi sisa 3 failure lama di luar area ini (`hybrid-reservation-parser` 2, `ctwa-fuzzy-attribution-dashboard` 1 yang bergantung `.env` lokal).
+
 #### 2026-11-19 - Fitur: Skema Repeat Follow-Up 25 Hari & Mode Libur Follow-Up (Holiday Mode)
 
 - **Permintaan Pengguna:**
