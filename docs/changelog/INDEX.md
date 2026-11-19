@@ -5,8 +5,12 @@
 > Dilarang menyerap seluruh file sejarah 1,1 MB ke context window LLM.
 > Regenerate ulang index setiap entri baru: `node scripts/make-changelog-index.mjs --write`.
 
-Total entri terindeks: 699
+Total entri terindeks: 703
 
+- 2026-11-19 | Ops: Eksekusi Data Historis P1 Meta CAPI di Produksi (D1 Redaksi PII + D2 Backfill `purcha
+- 2026-11-19 | Fix: Remediasi P1 Meta CAPI (#356) — Guard Nilai `warn`, Nilai GROSS, Prefix `returning_`,
+- 2026-11-19 | Fix: Audit `tenantId` pada Route/Service Lama (SEC-AUDIT A-015b)
+- 2026-11-19 | Fitur: Skema Repeat Follow-Up 25 Hari & Mode Libur Follow-Up (Holiday Mode)
 - 2026-11-18 | Fix Fase 4 (#358): Modul Kanonis Layer 1 + Auto-Sync Transaksional Custom Role SaaS & CI C
 - 2026-11-18 | Fix Fase 2 & Fase 3 (#358): Hardening Operasi Pesan/Webhook WAHA, Backfill 156 Revoke, & R
 - 2026-11-18 | Fix Fase 0+1 (#358): Unblock Edit/Tarik/Aksi Live Chat, Dispatch Trip, Follow-Up & Hapus A

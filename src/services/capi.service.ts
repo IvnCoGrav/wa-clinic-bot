@@ -1066,7 +1066,10 @@ export class CapiService {
           if (policy === 'DUAL_EVENT') {
             console.log(`[CAPI POLICY] Transforming Purchase to ReturningCustomerPurchase for repeat customer ${maskPhoneWithTenantSuffix(customer?.phone)}.`);
             eventData.event_name = 'ReturningCustomerPurchase';
-            if (eventData.event_id && !customEventId) {
+            // D5 (2026-11-19): prefix `returning_` WAJIB konsisten walau admin
+            // mengirim `customEventId`, dan idempoten agar resend memakai stored
+            // event_id tidak menghasilkan `returning_returning_...`.
+            if (eventData.event_id && !eventData.event_id.startsWith('returning_')) {
               eventData.event_id = `returning_${eventData.event_id}`;
             }
           } else {

@@ -7,7 +7,7 @@
 
 ## 1. Daftar Kapabilitas Kanonis Aktif
 
-Total kapabilitas terdaftar: **29 modul**.
+Total kapabilitas terdaftar: **32 modul**.
 
 | ID Kapabilitas | Judul & Deskripsi | Modul Kanonis | Ekspor Resmi | Test File |
 |---|---|---|---|---|
@@ -35,6 +35,9 @@ Total kapabilitas terdaftar: **29 modul**.
 | `reservation.payment_response` | **Response wrapper evaluasi pembayaran reservasi**<br>Menyematkan hasil kalkulasi paymentEvaluation ke dalam payload respons reservasi admin. | [`src/routes/admin/shared/reservation-response.ts`](../src/routes/admin/shared/reservation-response.ts) | `withPaymentEvaluation` | [`reservation-payment-response.test.ts`](../tests/unit/reservation-payment-response.test.ts) |
 | `reservation.payment_verification` | **Verifikasi bukti pembayaran reservasi**<br>Seam kanonis verifikasi pembayaran transfer/non-tunai: simpan bukti permanen, hitung tagihan kanonis (GROSS), catat pembayaran tanpa mengubah status kunjungan, audit tenant-aware — tanpa akses Prisma di route. | [`src/services/reservation-payment-verification.service.ts`](../src/services/reservation-payment-verification.service.ts) | `verifyReservationPayment` | [`admin-verify-payment.test.ts`](../tests/integration/admin-verify-payment.test.ts) |
 | `schedule.overlap` | **Deteksi tumpang tindih slot jadwal**<br>Menghitung durasi efektif dan memeriksa tumpang-tindih interval reservasi atau janji temu. | [`src/services/slot-overlap.service.ts`](../src/services/slot-overlap.service.ts) | `effectiveDuration`, `intervalsOverlap` | [`slot-overlap-parity.test.ts`](../tests/unit/slot-overlap-parity.test.ts) |
+| `staff.scorecard_domain` | **Domain penilaian bidan (bobot, komponen, grade)**<br>Perhitungan deterministik ketepatan waktu, volume kunjungan, kelayakan retensi, komposisi bobot, dan grade A-E. Tanpa I/O; komponen yang sampelnya kurang dikeluarkan dan bobotnya dinormalisasi. | [`src/domain/staff-scorecard.ts`](../src/domain/staff-scorecard.ts) | `computePunctuality`, `computeVolume`, `evaluateRetentionEligibility`, `composeScore`, `gradeFromScore`, `validateWeights`, `DEFAULT_SCORECARD_WEIGHTS`, `DEFAULT_GRADE_THRESHOLDS` | [`staff-scorecard-domain.test.ts`](../tests/unit/staff-scorecard-domain.test.ts) |
+| `staff.scorecard_policy` | **Policy penilaian bidan (versioned)**<br>Validasi dan penyimpanan policy bobot, ambang waktu, target kunjungan, dan grade. Fallback default saat basis data offline; setiap perubahan menjadi versi baru yang tercatat di audit. | [`src/services/staff-scorecard.service.ts`](../src/services/staff-scorecard.service.ts) | `validateStaffScorecardPolicy`, `staffScorecardService` | [`staff-scorecard-policy.test.ts`](../tests/integration/staff-scorecard-policy.test.ts) |
+| `staff.visit_evidence` | **Kontrak bukti kedatangan kunjungan**<br>Jendela bukti deterministik (jadwal s.d. min(tiba, durasi+buffer)), penyusunan bukti TAP/OTW/PHOTO/CHAT, dan kandidat chat yang wajib direview. Tanpa menulis arrived_at. | [`src/domain/visit-evidence.ts`](../src/domain/visit-evidence.ts) | `resolveEvidenceWindow`, `buildVisitEvidence`, `hasVisitEvidence`, `DEFAULT_WINDOW_BUFFER_MINUTES` | [`visit-evidence.test.ts`](../tests/unit/visit-evidence.test.ts) |
 | `tenant.resolve` | **Resolusi ID tenant admin**<br>Mendapatkan tenant_id dari request Fastify admin secara aman dengan fallback DEFAULT_TENANT_ID. | [`src/routes/admin/settings-helpers.ts`](../src/routes/admin/settings-helpers.ts) | `resolveTenantId`, `requireTenantId` | *Belum ada (Fase lanjutan)* |
 | `tenant.scope` | **Isolasi tenant pembacaan baris**<br>Gerbang kanonis yang hanya mengembalikan baris milik tenant pemanggil (atau baris tanpa tenant_id/data lama), dan menolak baris milik tenant lain. | [`src/utils/tenant-scope.ts`](../src/utils/tenant-scope.ts) | `tenantScopedRow` | [`tenant-scope.test.ts`](../tests/unit/tenant-scope.test.ts) |
 | `text.strip_edges` | **Pembersihan tepi token kata utuh**<br>Membuang karakter non-alfanumerik (a-z, 0-9) di awal dan akhir token hasil split spasi sebelum dicocokkan dengan himpunan kata. | [`src/utils/text-edge.ts`](../src/utils/text-edge.ts) | `stripNonAlnumEdges` | [`text-edge.test.ts`](../tests/unit/text-edge.test.ts) |
@@ -258,6 +261,33 @@ Total kapabilitas terdaftar: **29 modul**.
 - **Simbol Terlarang di Luar Kanonis:** `effectiveDuration`, `intervalsOverlap`
 - **File yang Diizinkan:** `src/services/slot-overlap.service.ts`
 - **File Test:** [`tests/unit/slot-overlap-parity.test.ts`](../tests/unit/slot-overlap-parity.test.ts)
+
+### `staff.scorecard_domain` — Domain penilaian bidan (bobot, komponen, grade)
+
+- **Deskripsi:** Perhitungan deterministik ketepatan waktu, volume kunjungan, kelayakan retensi, komposisi bobot, dan grade A-E. Tanpa I/O; komponen yang sampelnya kurang dikeluarkan dan bobotnya dinormalisasi.
+- **File Kanonis:** [`src/domain/staff-scorecard.ts`](../src/domain/staff-scorecard.ts)
+- **Ekspor Kanonis:** `computePunctuality`, `computeVolume`, `evaluateRetentionEligibility`, `composeScore`, `gradeFromScore`, `validateWeights`, `DEFAULT_SCORECARD_WEIGHTS`, `DEFAULT_GRADE_THRESHOLDS`
+- **Simbol Terlarang di Luar Kanonis:** `computePunctuality`, `computeVolume`, `evaluateRetentionEligibility`, `composeScore`, `gradeFromScore`, `validateWeights`
+- **File yang Diizinkan:** `src/domain/staff-scorecard.ts`
+- **File Test:** [`tests/unit/staff-scorecard-domain.test.ts`](../tests/unit/staff-scorecard-domain.test.ts)
+
+### `staff.scorecard_policy` — Policy penilaian bidan (versioned)
+
+- **Deskripsi:** Validasi dan penyimpanan policy bobot, ambang waktu, target kunjungan, dan grade. Fallback default saat basis data offline; setiap perubahan menjadi versi baru yang tercatat di audit.
+- **File Kanonis:** [`src/services/staff-scorecard.service.ts`](../src/services/staff-scorecard.service.ts)
+- **Ekspor Kanonis:** `validateStaffScorecardPolicy`, `staffScorecardService`
+- **Simbol Terlarang di Luar Kanonis:** `validateStaffScorecardPolicy`
+- **File yang Diizinkan:** `src/services/staff-scorecard.service.ts`, `src/routes/admin/staff-scorecard.subroute.ts`
+- **File Test:** [`tests/integration/staff-scorecard-policy.test.ts`](../tests/integration/staff-scorecard-policy.test.ts)
+
+### `staff.visit_evidence` — Kontrak bukti kedatangan kunjungan
+
+- **Deskripsi:** Jendela bukti deterministik (jadwal s.d. min(tiba, durasi+buffer)), penyusunan bukti TAP/OTW/PHOTO/CHAT, dan kandidat chat yang wajib direview. Tanpa menulis arrived_at.
+- **File Kanonis:** [`src/domain/visit-evidence.ts`](../src/domain/visit-evidence.ts)
+- **Ekspor Kanonis:** `resolveEvidenceWindow`, `buildVisitEvidence`, `hasVisitEvidence`, `DEFAULT_WINDOW_BUFFER_MINUTES`
+- **Simbol Terlarang di Luar Kanonis:** `resolveEvidenceWindow`, `buildVisitEvidence`, `hasVisitEvidence`
+- **File yang Diizinkan:** `src/domain/visit-evidence.ts`, `src/services/visit-evidence.service.ts`, `src/scripts/backfill-visit-evidence.ts`
+- **File Test:** [`tests/unit/visit-evidence.test.ts`](../tests/unit/visit-evidence.test.ts)
 
 ### `tenant.resolve` — Resolusi ID tenant admin
 

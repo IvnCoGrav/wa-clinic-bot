@@ -155,6 +155,54 @@ describe('Meta CAPI Repeat Purchase Policy & Blueprint Compliance', () => {
     expect(event.custom_data.order_id).toBe('res-all-tag');
   });
 
+  it('6. Repeat + customEventId → prefix returning_ TIDAK boleh dilewati (D5)', async () => {
+    vi.mocked(prisma.tenant.findUnique).mockResolvedValue({
+      id: DEFAULT_TENANT_ID,
+      settings: { metaPurchasePolicy: 'DUAL_EVENT' },
+    } as any);
+    vi.mocked(prisma.customer.findFirst).mockRejectedValue(new Error('Database offline'));
+    vi.mocked(prisma.adClick.findFirst).mockRejectedValue(new Error('Database offline'));
+    vi.mocked(prisma.reservation.count).mockResolvedValue(2);
+
+    const res = await capiService.sendCapiEvent({
+      eventName: 'Purchase',
+      customer: { id: 'cust-custom-id', phone: '081211112222', name: 'Bunda Custom' },
+      tenantId: DEFAULT_TENANT_ID,
+      value: 95000,
+      reservationId: 'res-custom-id',
+      customEventId: 'pur_default_tenant__res-custom-id',
+    });
+
+    expect(res.success).toBe(true);
+    const event = postBody().data[0];
+    expect(event.event_name).toBe('ReturningCustomerPurchase');
+    expect(event.event_id).toBe('returning_pur_default_tenant__res-custom-id');
+  });
+
+  it('7. Resend repeat dengan event_id berprefix returning_ → tidak double prefix (idempoten)', async () => {
+    vi.mocked(prisma.tenant.findUnique).mockResolvedValue({
+      id: DEFAULT_TENANT_ID,
+      settings: { metaPurchasePolicy: 'DUAL_EVENT' },
+    } as any);
+    vi.mocked(prisma.customer.findFirst).mockRejectedValue(new Error('Database offline'));
+    vi.mocked(prisma.adClick.findFirst).mockRejectedValue(new Error('Database offline'));
+    vi.mocked(prisma.reservation.count).mockResolvedValue(2);
+
+    const res = await capiService.sendCapiEvent({
+      eventName: 'Purchase',
+      customer: { id: 'cust-double-prefix', phone: '081233334444', name: 'Bunda Prefix' },
+      tenantId: DEFAULT_TENANT_ID,
+      value: 95000,
+      reservationId: 'res-double-prefix',
+      eventId: 'returning_pur_default_tenant__res-double-prefix',
+    });
+
+    expect(res.success).toBe(true);
+    const event = postBody().data[0];
+    expect(event.event_id).toBe('returning_pur_default_tenant__res-double-prefix');
+    expect(event.event_id?.startsWith('returning_returning_')).toBe(false);
+  });
+
   it('5. force_send_repeat_purchase escape hatch → tetap terkirim walau policy SUPPRESS_REPEAT', async () => {
     vi.mocked(prisma.tenant.findUnique).mockResolvedValue({
       id: DEFAULT_TENANT_ID,

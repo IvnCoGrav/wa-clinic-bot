@@ -358,6 +358,7 @@ model Reservation {
   customer_address_id      String?
   customer_address         CustomerAddress?  @relation(fields: [customer_address_id], references: [id], onDelete: SetNull)
   items                    ReservationItem[]
+  arrivalEvidence          VisitArrivalEvidence[]
   // Sinkronisasi rekapan Google Sheets (cermin satu-arah; sumber kebenaran tetap DB).
   // row_index = nomor baris 1-based di tab (header baris 1) → update baris yang sama
   // saat admin menugaskan bidan/mencatat bayar (anti baris ganda). Harga hanya ditulis
@@ -1053,6 +1054,7 @@ model Staff {
   /// Tanggal mulai kerja (fallback: created_at bila null)
   employment_started_at  DateTime?
   retentionSnapshots     StaffRetentionSnapshot[]
+  scorecardSnapshots     StaffScorecardSnapshot[]
 
   @@index([tenant_id])
   @@unique([tenant_id, phone])
@@ -1392,6 +1394,110 @@ model StaffRetentionSnapshot {
   @@unique([tenant_id, staff_id, period_year, period_month])
   @@index([tenant_id, period_year, period_month])
   @@map("staff_retention_snapshots")
+}
+
+/// Kebijakan penilaian bidan (versioned). Bobot dan ambang dapat diubah tanpa
+/// deploy; versi lama disimpan agar snapshot periode lama tetap dapat diaudit.
+model StaffScorecardPolicy {
+  id                     String    @id @default(uuid())
+  tenant_id              String    @default("default-tenant")
+  weight_punctuality     Int       @default(50)
+  weight_retention       Int       @default(30)
+  weight_volume          Int       @default(20)
+  tolerance_minutes      Int       @default(30)
+  chat_evidence_minutes  Int       @default(30)
+  target_visits_per_day  Int       @default(3)
+  working_days_per_month Int       @default(26)
+  min_sample_punctuality Int       @default(10)
+  min_sample_retention   Int       @default(40)
+  min_tenure_months      Int       @default(4)
+  grade_a_min            Int       @default(90)
+  grade_b_min            Int       @default(75)
+  grade_c_min            Int       @default(60)
+  grade_d_min            Int       @default(40)
+  formula_version        String    @default("v1")
+  effective_from         DateTime
+  effective_to           DateTime?
+  created_at             DateTime  @default(now())
+  updated_at             DateTime  @default(now()) @updatedAt
+
+  @@unique([tenant_id, effective_from])
+  @@index([tenant_id, effective_from])
+  @@map("staff_scorecard_policies")
+}
+
+enum ArrivalEvidenceSource {
+  TAP
+  GEOFENCE
+  PHOTO
+  CHAT
+  OTW
+  ESTIMATE
+}
+
+enum ArrivalEvidenceReview {
+  AUTO
+  NEEDS_REVIEW
+  APPROVED
+  REJECTED
+}
+
+/// Satu baris per bukti kedatangan. Tidak pernah menulis `reservations.arrived_at`;
+/// hanya menjadi dasar penilaian yang dapat ditelusuri ke pesan/foto/waktu.
+model VisitArrivalEvidence {
+  id               String                @id @default(uuid())
+  tenant_id        String                @default("default-tenant")
+  reservation_id   String
+  reservation      Reservation           @relation(fields: [reservation_id], references: [id], onDelete: Cascade)
+  source           ArrivalEvidenceSource
+  evidence_at      DateTime
+  /// Selisih menit terhadap jadwal. Negatif = lebih awal.
+  observed_minutes Int?
+  /// 0..1, hanya untuk sumber inferensial (CHAT/ESTIMATE).
+  confidence       Float?
+  /// Referensi lunak ke messages.id (tanpa FK: pesan dapat dipangkas retensi).
+  message_id       String?
+  model            String?
+  review_status    ArrivalEvidenceReview @default(AUTO)
+  reviewed_by      String?
+  reviewed_at      DateTime?
+  review_note      String?
+  created_at       DateTime              @default(now())
+
+  @@unique([tenant_id, reservation_id, source, evidence_at])
+  @@index([tenant_id, review_status])
+  @@index([reservation_id])
+  @@map("visit_arrival_evidence")
+}
+
+/// Angka beku per periode. Status FINAL tidak boleh dihitung ulang; koreksi
+/// dilakukan lewat snapshot baru + catatan.
+model StaffScorecardSnapshot {
+  id              String   @id @default(uuid())
+  tenant_id       String   @default("default-tenant")
+  staff_id        String
+  staff_name      String
+  staff           Staff    @relation(fields: [staff_id], references: [id], onDelete: Restrict)
+  period_year     Int
+  period_month    Int
+  policy_id       String?
+  punctuality_pct Float?
+  retention_pct   Float?
+  volume_pct      Float?
+  weighted_score  Float?
+  grade           String?
+  coverage_pct    Float?
+  measured_n      Int      @default(0)
+  chat_late_n     Int      @default(0)
+  unknown_n       Int      @default(0)
+  status          String   @default("DRAFT") // DRAFT | PREVIEW | FINAL
+  computed_at     DateTime @default(now())
+  computed_by     String?
+  notes           String?
+
+  @@unique([tenant_id, staff_id, period_year, period_month])
+  @@index([tenant_id, period_year, period_month])
+  @@map("staff_scorecard_snapshots")
 }
 
 /// Log append-only pergantian bidan. Diperlukan agar metrik kebocoran A→B

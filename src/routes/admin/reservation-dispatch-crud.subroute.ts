@@ -23,6 +23,7 @@ import {
   PrematureCompletionError,
 } from '../../services/reservation-status.service';
 import { getPurchaseValueGuard } from '../../config/feature-flags';
+import { evaluatePurchaseValueMutation } from '../../domain/purchase-value-guard';
 
 export async function reservationDispatchCrudRoutes(fastify: FastifyInstance) {
   /**
@@ -335,22 +336,24 @@ export async function reservationDispatchCrudRoutes(fastify: FastifyInstance) {
         if (normalizedCat !== undefined) updateData.treatment_category = normalizedCat;
         if (treatmentDetail !== undefined) updateData.treatment_detail = treatmentDetail;
         if (purchaseValue !== undefined) {
-          if (
-            existing.purchase_event_sent_at != null &&
-            purchaseValue !== existing.purchase_value
-          ) {
-            const guardMode = getPurchaseValueGuard();
-            if (guardMode === 'block') {
-              return reply.status(400).send({
-                success: false,
-                code: 'PURCHASE_VALUE_MUTATION_BLOCKED',
-                error: `Nilai transaksi tidak dapat diubah setelah event Purchase terkirim ke Meta CAPI (${existing.purchase_event_value || existing.purchase_value}). Batalkan pengiriman atau gunakan opsi override bila berwenang.`,
-              });
-            } else if (guardMode === 'warn') {
-              request.log.warn(
-                `[PURCHASE VALUE GUARD] Mutasi purchase_value pada reservasi ${id} dari ${existing.purchase_value} menjadi ${purchaseValue} setelah CAPI terkirim pada ${existing.purchase_event_sent_at}. Meta CAPI tidak mendukung update nilai retroaktif.`
-              );
-            }
+          // Keputusan bisnis 2026-11-19: nilai TETAP boleh diubah. Guard hanya
+          // memberi peringatan; mode `block` tidak lagi menjadi default dan pesan
+          // tidak menjanjikan "opsi override" yang tidak ada.
+          const valueVerdict = evaluatePurchaseValueMutation({
+            previousValue: existing.purchase_value,
+            nextValue: purchaseValue,
+            purchaseEventSentAt: existing.purchase_event_sent_at,
+            mode: getPurchaseValueGuard(),
+          });
+          if (valueVerdict.blocked) {
+            return reply.status(400).send({
+              success: false,
+              code: 'PURCHASE_VALUE_MUTATION_BLOCKED',
+              error: `Nilai transaksi tidak dapat diubah setelah event Purchase terkirim ke Meta CAPI (${existing.purchase_event_value || existing.purchase_value}). Mode blok aktif lewat PURCHASE_VALUE_GUARD=block; ubah env ke warn bila nilai harus tetap bisa diedit.`,
+            });
+          }
+          if (valueVerdict.warning) {
+            request.log.warn(valueVerdict.warning);
           }
           updateData.purchase_value = purchaseValue;
         }

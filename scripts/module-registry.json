@@ -559,6 +559,75 @@
         "src/domain/role-module-scopes.ts"
       ],
       "test": "tests/unit/rbac-route-contract-matrix.test.ts"
+    },
+    {
+      "id": "staff.scorecard_domain",
+      "title": "Domain penilaian bidan (bobot, komponen, grade)",
+      "description": "Perhitungan deterministik ketepatan waktu, volume kunjungan, kelayakan retensi, komposisi bobot, dan grade A-E. Tanpa I/O; komponen yang sampelnya kurang dikeluarkan dan bobotnya dinormalisasi.",
+      "canonical": "src/domain/staff-scorecard.ts",
+      "exports": [
+        "computePunctuality",
+        "computeVolume",
+        "evaluateRetentionEligibility",
+        "composeScore",
+        "gradeFromScore",
+        "validateWeights",
+        "DEFAULT_SCORECARD_WEIGHTS",
+        "DEFAULT_GRADE_THRESHOLDS"
+      ],
+      "forbiddenDeclarations": [
+        "computePunctuality",
+        "computeVolume",
+        "evaluateRetentionEligibility",
+        "composeScore",
+        "gradeFromScore",
+        "validateWeights"
+      ],
+      "allowedFiles": [
+        "src/domain/staff-scorecard.ts"
+      ],
+      "test": "tests/unit/staff-scorecard-domain.test.ts"
+    },
+    {
+      "id": "staff.visit_evidence",
+      "title": "Kontrak bukti kedatangan kunjungan",
+      "description": "Jendela bukti deterministik (jadwal s.d. min(tiba, durasi+buffer)), penyusunan bukti TAP/OTW/PHOTO/CHAT, dan kandidat chat yang wajib direview. Tanpa menulis arrived_at.",
+      "canonical": "src/domain/visit-evidence.ts",
+      "exports": [
+        "resolveEvidenceWindow",
+        "buildVisitEvidence",
+        "hasVisitEvidence",
+        "DEFAULT_WINDOW_BUFFER_MINUTES"
+      ],
+      "forbiddenDeclarations": [
+        "resolveEvidenceWindow",
+        "buildVisitEvidence",
+        "hasVisitEvidence"
+      ],
+      "allowedFiles": [
+        "src/domain/visit-evidence.ts",
+        "src/services/visit-evidence.service.ts",
+        "src/scripts/backfill-visit-evidence.ts"
+      ],
+      "test": "tests/unit/visit-evidence.test.ts"
+    },
+    {
+      "id": "staff.scorecard_policy",
+      "title": "Policy penilaian bidan (versioned)",
+      "description": "Validasi dan penyimpanan policy bobot, ambang waktu, target kunjungan, dan grade. Fallback default saat basis data offline; setiap perubahan menjadi versi baru yang tercatat di audit.",
+      "canonical": "src/services/staff-scorecard.service.ts",
+      "exports": [
+        "validateStaffScorecardPolicy",
+        "staffScorecardService"
+      ],
+      "forbiddenDeclarations": [
+        "validateStaffScorecardPolicy"
+      ],
+      "allowedFiles": [
+        "src/services/staff-scorecard.service.ts",
+        "src/routes/admin/staff-scorecard.subroute.ts"
+      ],
+      "test": "tests/integration/staff-scorecard-policy.test.ts"
     }
   ]
 }

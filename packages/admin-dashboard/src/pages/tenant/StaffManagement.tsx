@@ -4,6 +4,7 @@ import { useUiFeedback } from '../../components/common/UiFeedback';
 import { Modal } from '../../components/ui/Modal';
 import { FormErrorSummary } from '../../components/ui/FormErrorSummary';
 import { StaffRoleModal } from './StaffRoleModal';
+import { ScorecardPolicyPanel } from '../../components/staff/ScorecardPolicyPanel';
 import type { FieldIssue } from '../../lib/validateReservation';
 import { ToggleSwitch } from '../../components/common/ToggleSwitch';
 import {
@@ -53,7 +54,7 @@ interface StaffItem {
 
 export const StaffManagement: React.FC = () => {
   const { toast, confirm } = useUiFeedback();
-  const [activeTab, setActiveTab] = useState<'STAFF' | 'ROLES'>('STAFF');
+  const [activeTab, setActiveTab] = useState<'STAFF' | 'ROLES' | 'PENILAIAN'>('STAFF');
   const [staffList, setStaffList] = useState<StaffItem[]>([]);
   const [staffDeviceCounts, setStaffDeviceCounts] = useState<Record<string, number>>({});
   const [testingPushStaffId, setTestingPushStaffId] = useState<string | null>(null);
@@ -589,6 +590,18 @@ export const StaffManagement: React.FC = () => {
             {roleEntries.length} Role
           </span>
         </button>
+
+        <button
+          onClick={() => setActiveTab('PENILAIAN')}
+          className={`flex items-center space-x-2 px-4 py-2 rounded-xl text-xs font-bold transition ${
+            activeTab === 'PENILAIAN'
+              ? 'bg-accent text-accent-ink shadow-xs'
+              : 'bg-surface text-ink-2 border border-divider hover:bg-fill-1'
+          }`}
+        >
+          <Sliders size={15} />
+          <span>Penilaian Bidan</span>
+        </button>
       </div>
 
       {/* ========================================================================= */}
@@ -1097,6 +1110,10 @@ export const StaffManagement: React.FC = () => {
       )}
 
       {/* ========================================================================= */}
+      {/* TAB 3: PENILAIAN BIDAN */}
+      {/* ========================================================================= */}
+      {activeTab === 'PENILAIAN' && <ScorecardPolicyPanel />}
+
       {/* ========================================================================= */}
       {/* MODAL: TAMBAH / EDIT ROLE & HAK AKSES */}
       {/* ========================================================================= */}

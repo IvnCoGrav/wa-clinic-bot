@@ -69,6 +69,7 @@ import {
 import { resolveStaffName } from '../../utils/resolveStaffName';
 import { AddressBookDrawer } from '../customer/AddressBookDrawer';
 import { recommendSlots, formatMinutesToTime } from '../../utils/slotRecommendations';
+import { buildReservationCommercialPayload } from '../../utils/reservationCommercialPayload';
 
 // Koordinat klinik fallback (netral). Nilai sebenarnya diambil per tenant dari
 // `GET /api/admin/tenant-settings` saat modal dibuka (Cfg-015).
@@ -1884,8 +1885,7 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
         address: address.trim() || undefined,
         landmark: landmark.trim() || undefined,
         babies: babies.filter((b) => b.name.trim().length > 0),
-        purchaseValue: subtotalTreatments,
-        discountAmount: Math.min(subtotalTreatments, Math.max(0, Number(discount) || 0)),
+        ...buildReservationCommercialPayload(subtotalTreatments, discount),
         ongkir: Number(ongkir) || 0,
         requestId: submitRequestIdRef.current || undefined,
         ...(force ? { force: true } : {}),
@@ -1909,14 +1909,16 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
       address: address.trim() || undefined,
       landmark: landmark.trim() || undefined,
       babies: babies.filter((b) => b.name.trim().length > 0),
-      purchaseValue: subtotalTreatments,
-      discountAmount: Math.min(subtotalTreatments, Math.max(0, Number(discount) || 0)),
+      ...buildReservationCommercialPayload(subtotalTreatments, discount),
       ongkir: Number(ongkir) || 0,
       ...(force ? { force: true } : {}),
     };
   };
 
-  // Helper: enrich API response with form state for invoice (R1, R2) — NO discount (purchaseValue already net).
+  // Helper: enrich API response dengan state form untuk invoice.
+  // Kontrak kanonis: `purchase_value` = GROSS (sebelum diskon) dan diskon
+  // dikirim terpisah lewat `discount_amount`, sehingga invoice menghitung
+  // net = gross - diskon tepat sekali.
   // `withInvoice` diteruskan sebagai penanda kontrak agar pemanggil (LiveChatMonitor) tahu
   // apakah invoice sudah ditangani `onSuccessAndInvoice` (jangan buka modal kedua).
   const enrichResWithFormState = (savedRes: any, withInvoice = false) => {
@@ -2144,10 +2146,9 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
             treatmentName: primaryTreatment?.name || treatmentSummary,
             treatmentCategory: computedCategory,
               totalSessions: multiSessionSchedule.length,
-            purchaseValue: Math.max(0, subtotalTreatments - (Number(discount) || 0)),
+            ...buildReservationCommercialPayload(subtotalTreatments, discount),
               deliveryFee: Number(ongkir) || 0,
               customerAddressId: customerAddressId || (selectedCustomerInfo?.addresses?.[0]?.id || (selectedCustomerInfo as any)?.customer_address_id) || undefined,
-              discountAmount: Math.min(subtotalTreatments, Math.max(0, Number(discount) || 0)),
               durationMinutes: Number(totalScheduledDurationMinutes) || Number(pureDurationMinutes) || 60,
               requestId: reqId,
             assignedStaffId: assignedStaffId || undefined,
