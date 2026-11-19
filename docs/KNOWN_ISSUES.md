@@ -3,6 +3,25 @@
 Catatan temuan yang sengaja dipisah dari fitur aktif, supaya tidak hilang dan
 tidak disalahartikan sebagai bug dari perubahan terbaru.
 
+## 358. [Follow-Up / Mode Libur] Batasan Operasional Mode Libur & Epoch Repeat 25 Hari (2026-11-19)
+
+- **Status:** IMPLEMENTED dengan batasan yang disengaja.
+- **Hari tutup mingguan belum dimodelkan:** `operationalHours` tenant hanya menyimpan jam mulai/selesai, bukan hari libur mingguan. Pencicilan pasca-libur karena itu menyebar pada **hari kalender**, bukan hanya hari kerja. Jika klinik tutup tiap Minggu, tambahkan data hari tutup tenant sebelum mengandalkan pencicilan penuh.
+- **Kuota & jendela pencicilan:** kuota harian dibaca dari `Tenant.settings.followUpQuota.maxPerDay` (fallback `FOLLOWUP_MAX_PER_DAY`, default 40) dan dapat diubah dari modal Mode Libur. Jendela 09:00–16:30 WIB dan `staleCapDays` belum punya field UI; perubahan lewat DB/settings.
+- **Item PENDING:** `rescheduleOverdueFollowUps` juga memindahkan baris `PENDING`, tetapi worker hanya mengirim `QUEUED` kecuali `AUTO_FOLLOWUP_ENABLED=true`. PENDING yang tidak diantrekan dapat berakhir `EXPIRED_PENDING`; ini perilaku lama dan tidak diubah oleh Mode Libur.
+- **Epoch skema repeat:** `NEXT_TREATMENT_SCHEME_EPOCH` (default 2026-11-19, bisa dioverride env) menjaga sifat non-retroaktif. Baris `NEXT_TREATMENT` yang dibuat sebelum epoch tidak digeser; reconciler hanya memindai kunjungan setelah epoch. Reservasi baru tetap memakai 25/50/75 hari.
+- **Verifikasi:** `tests/unit/followup-holiday-mode.test.ts`, `tests/unit/followup-holiday-state.test.ts`, `tests/unit/followup-schedule-allocator.test.ts`, `tests/unit/follow-up-repeat-schedule-25d.test.ts`.
+
+## 357. [Payment Proof / SOP] Keputusan Bisnis: Transfer/DP Sebelum Reservasi Dibuat adalah Kesalahan Admin, Bukan Tanggung Jawab Sistem (2026-11-19)
+
+- **Status:** POLICY LOCKED & DOCUMENTED (2026-11-19).
+- **Latar Belakang:** Dari audit empiris 21 kasus kegagalan penempelan bukti pembayaran (`NO_ACTIVE_RESERVATION`) di server produksi (`docs/audit/2026-11-19/gate-0-evaluation.md`), ditemukan 7 kasus di mana customer mentransfer uang / DP sebelum reservasi diinput ke dalam sistem oleh staf/admin (selisih 0.9 s/d 36.3 jam).
+- **Keputusan Bisnis & SOP:**
+  - Sesuai keputusan resmi pengguna/manajemen klinik (2026-11-19): **"Kalau misalkan dia DP tapi belum ada treatment berarti ini kesalahan admin, bukan sistem."**
+  - **SOP Operasional:** Admin klinik wajib menginput reservasi terlebih dahulu ke sistem sebelum meminta atau menerima pembayaran transfer dari customer.
+  - **Larangan Sistem:** Sistem DILARANG membuat tabel penampung sementara (`PaymentProofInbox`) atau staging queue untuk menampung bukti pembayaran yang mendahului reservasi.
+  - **Penanganan:** Jika situasi ini terjadi di lapangan, penempelan bukti bayar menjadi tanggung jawab manual admin klinik (dilakukan via Admin Dashboard saat admin menginput reservasi tersebut). Sistem otomatis hanya bertugas menempelkan bukti pada reservasi yang sudah eksis di database dalam jendela tanggal yang valid.
+
 ## 356. [Meta CAPI / Funnel] Audit Menyeluruh 17 Titik Kritis Meta Funnel & Silent Failure (2026-11-18, FASE 0 s.d. 7 IMPLEMENTED & VERIFIED)
 
 - **Status:** IMPLEMENTED & VERIFIED (2026-11-18, FASE 0 s.d. 7 SELESAI). Referensi plan: `plan-remediasi-meta-capi.md`.
