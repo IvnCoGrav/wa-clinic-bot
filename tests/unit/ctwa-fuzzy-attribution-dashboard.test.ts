@@ -156,6 +156,10 @@ describe('CTWA Fuzzy Attribution & Badging (Frontend Parity)', () => {
           ...baseItem.attribution,
           trackingCode: 'promo_lp_1',
           isPaid: true,
+          // Data contoh eksplisit untuk preview iklan browser (tidak bergantung .env).
+          ipAddress: '114.122.34.56',
+          userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
+          fbp: 'fb.1.1787293849.1029384756',
         },
         utm: {
           medium: 'cpc',

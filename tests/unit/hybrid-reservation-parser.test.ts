@@ -38,14 +38,23 @@ Treatment : Pijat Bayi Ceria`;
       expect(isReservationFormMessage(freeFormMsg1)).toBe(true);
     });
 
-    it('should extract entities from free-form conversational text (Name, Age, Address, Date)', () => {
+    it('should extract entities from free-form conversational text (Age, Address, Date)', () => {
       const result = parseReservationText(freeFormMsg1);
       expect(result.success).toBe(true);
-      expect(result.reservation?.name).toBe('Raffa');
+      // Integritas penamaan: nama anak TIDAK boleh menjadi nama pemesan.
+      expect(result.reservation?.name).toBe('');
       expect(result.reservation?.address).toContain('Wisma Lidah Kulon');
       expect(result.reservation?.babies[0]?.name).toBe('Raffa');
       expect(result.reservation?.babies[0]?.age).toContain('1 tahun');
       expect(result.reservation?.treatmentDetail).toMatch(/Baby:|Pijat/);
+    });
+
+    it('should extract mother name separately when explicitly provided', () => {
+      const withMom = 'Nama Bunda: Sari, anak saya Raffa usia 1 tahun, alamat Wisma Lidah Kulon Blok A no 12, besok rabu jam 10';
+      const result = parseReservationText(withMom);
+      expect(result.success).toBe(true);
+      expect(result.reservation?.name).toBe('Sari');
+      expect(result.reservation?.babies[0]?.name).toBe('Raffa');
     });
 
     const freeFormMsg2 = 'Pesan paket newborn untuk anak saya Arkana 2 bulan, alamat di Sedati Agung gang 3, hari Sabtu';
@@ -53,8 +62,10 @@ Treatment : Pijat Bayi Ceria`;
     it('should extract entities from newborn free-form booking', () => {
       const result = parseReservationText(freeFormMsg2);
       expect(result.success).toBe(true);
-      expect(result.reservation?.name).toBe('Arkana');
+      // Nama anak tetap di babies, bukan di name pemesan.
+      expect(result.reservation?.name).toBe('');
       expect(result.reservation?.address).toContain('Sedati Agung');
+      expect(result.reservation?.babies[0]?.name).toBe('Arkana');
       expect(result.reservation?.babies[0]?.age).toContain('2 bulan');
     });
   });
