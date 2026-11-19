@@ -1,0 +1,26 @@
+{
+  "tenantId": "default-tenant",
+  "notes": [
+    "Sumber kebenaran kasus: docs/audit/2026-11-19/gate-0-evaluation.md + verifikasi read-only DB.",
+    "DILARANG menambah kasus tanpa nominal (amount) yang cocok dengan bukti transfer asli.",
+    "state: DONE = sudah diremediasi & diverifikasi; PENDING = menunggu bukti/verifikasi.",
+    "state PENDING wajib punya proofSource yang benar-benar ada di disk."
+  ],
+  "cases": [
+    {
+      "reservationId": "0975f422-4f19-43ef-b03e-7ee9d13d6f2c",
+      "proofSource": "/media/inbound/default-tenant/81fa56ec309a499f9b559b9ac868d01f.jpg",
+      "amount": 155000,
+      "paymentMethod": "QRIS",
+      "referenceNumber": "0115001SZHJ7",
+      "billing": {
+        "purchaseValue": 145000,
+        "deliveryFee": 15000,
+        "discountAmount": 5000
+      },
+      "state": "DONE",
+      "verifiedAt": "2026-11-19",
+      "notes": "Bunda Nida. Sudah diverifikasi ulang read-only: purchase 145000, diskon 5000, ongkir 15000, receipt 155000, proof_url di payment-proofs, purchase_occurred_at terisi."
+    }
+  ]
+}

@@ -25,6 +25,31 @@ describe('CustomerPaymentProofService (TDD Unit Tests)', () => {
     ],
   };
 
+  const mockActiveReservation = {
+    id: 'res-999',
+    tenant_id: tenantId,
+    customer_id: customerId,
+    status: 'confirmed',
+    booking_date: new Date(),
+    purchase_value: 230000,
+    delivery_fee: 20000,
+    proof_url: null,
+    payment_method: null,
+    receipt_reference: null,
+    raw_text: 'Reservasi Baru',
+    purchase_review_status: 'pending',
+  };
+
+  /**
+   * Guard duplikat selalu memakai findFirst; kandidat reservasi memakai findMany.
+   * Helper ini mencegah urutan mock yang rapuh (findFirst dipanggil 2x).
+   */
+  const mockNoDuplicate = () =>
+    vi.spyOn(prisma.reservation, 'findFirst').mockResolvedValueOnce(null);
+
+  const mockCandidates = (rows: any[]) =>
+    vi.spyOn(prisma.reservation, 'findMany').mockResolvedValueOnce(rows as any);
+
   beforeEach(() => {
     vi.restoreAllMocks();
     _clearProcessedCacheForTesting();
@@ -79,27 +104,9 @@ describe('CustomerPaymentProofService (TDD Unit Tests)', () => {
       confidence: 0.95,
     };
 
-    const mockActiveReservation = {
-      id: 'res-999',
-      tenant_id: tenantId,
-      customer_id: customerId,
-      status: 'confirmed',
-      booking_date: new Date(),
-      purchase_value: 230000,
-      delivery_fee: 20000,
-      proof_url: null,
-      payment_method: null,
-      receipt_reference: null,
-      raw_text: 'Reservasi Baru',
-      purchase_review_status: 'pending',
-    };
-
     it('attaches valid proof to active reservation as pending (CS moderation)', async () => {
-      vi.spyOn(prisma.reservation, 'findFirst')
-        // 1. check duplicate
-        .mockResolvedValueOnce(null)
-        // 2. find active reservation
-        .mockResolvedValueOnce(mockActiveReservation as any);
+      mockNoDuplicate();
+      mockCandidates([mockActiveReservation]);
 
       const updateSpy = vi.spyOn(prisma.reservation, 'update').mockResolvedValueOnce({
         ...mockActiveReservation,
@@ -163,9 +170,8 @@ describe('CustomerPaymentProofService (TDD Unit Tests)', () => {
         bankDestination: 'BANK JAGO',
       };
 
-      vi.spyOn(prisma.reservation, 'findFirst')
-        .mockResolvedValueOnce(null) // no duplicate
-        .mockResolvedValueOnce(mockActiveReservation as any);
+      mockNoDuplicate();
+      mockCandidates([mockActiveReservation]);
 
       const updateSpy = vi.spyOn(prisma.reservation, 'update').mockResolvedValueOnce({
         ...mockActiveReservation,
@@ -192,9 +198,8 @@ describe('CustomerPaymentProofService (TDD Unit Tests)', () => {
         amount: 50000, // expected total is 230000 + 20000 = 250000
       };
 
-      vi.spyOn(prisma.reservation, 'findFirst')
-        .mockResolvedValueOnce(null)
-        .mockResolvedValueOnce(mockActiveReservation as any);
+      mockNoDuplicate();
+      mockCandidates([mockActiveReservation]);
 
       const updateSpy = vi.spyOn(prisma.reservation, 'update').mockResolvedValueOnce({
         ...mockActiveReservation,
@@ -217,9 +222,8 @@ describe('CustomerPaymentProofService (TDD Unit Tests)', () => {
     });
 
     it('returns attached: false when no active reservation exists for customer', async () => {
-      vi.spyOn(prisma.reservation, 'findFirst')
-        .mockResolvedValueOnce(null) // no duplicate
-        .mockResolvedValueOnce(null); // no active reservation
+      mockNoDuplicate();
+      mockCandidates([]);
 
       const result = await attachCustomerPaymentProof({
         tenantId,
@@ -234,13 +238,11 @@ describe('CustomerPaymentProofService (TDD Unit Tests)', () => {
       expect(result.reason).toBe('NO_ACTIVE_RESERVATION');
     });
 
-    it('enforces tenant isolation — cannot attach to reservation of another tenant', async () => {
-      vi.spyOn(prisma.reservation, 'findFirst').mockImplementation(async (args: any) => {
-        if (args.where?.tenant_id === 'other-tenant') {
-          return mockActiveReservation as any;
-        }
-        return null;
-      });
+    it('enforces tenant isolation — query kandidat selalu tenant-scoped', async () => {
+      mockNoDuplicate();
+      const findManySpy = vi
+        .spyOn(prisma.reservation, 'findMany')
+        .mockResolvedValueOnce([] as any);
 
       const result = await attachCustomerPaymentProof({
         tenantId: 'tenant-x',
@@ -253,6 +255,11 @@ describe('CustomerPaymentProofService (TDD Unit Tests)', () => {
 
       expect(result.attached).toBe(false);
       expect(result.reason).toBe('NO_ACTIVE_RESERVATION');
+      expect(findManySpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ tenant_id: 'tenant-x', customer_id: customerId }),
+        })
+      );
     });
 
     it('handles exact amount match without auto-approving (must stay pending for CS moderation)', async () => {
@@ -261,9 +268,8 @@ describe('CustomerPaymentProofService (TDD Unit Tests)', () => {
         amount: 250000, // exact matches purchase_value (230000) + delivery_fee (20000)
       };
 
-      vi.spyOn(prisma.reservation, 'findFirst')
-        .mockResolvedValueOnce(null)
-        .mockResolvedValueOnce(mockActiveReservation as any);
+      mockNoDuplicate();
+      mockCandidates([mockActiveReservation]);
 
       const updateSpy = vi.spyOn(prisma.reservation, 'update').mockResolvedValueOnce({
         ...mockActiveReservation,
@@ -284,25 +290,187 @@ describe('CustomerPaymentProofService (TDD Unit Tests)', () => {
     });
 
     it('preserves approved status when purchase_event_sent_at already set', async () => {
-      vi.spyOn(prisma.reservation, 'findFirst')
-        .mockResolvedValueOnce(null)
-        .mockResolvedValueOnce({
+      mockNoDuplicate();
+      mockCandidates([
+        {
           ...mockActiveReservation,
           purchase_review_status: 'approved',
           purchase_event_sent_at: new Date('2026-10-15T11:23:50.758Z'),
-        } as any);
+        },
+      ]);
       const updateSpy = vi.spyOn(prisma.reservation, 'update').mockResolvedValueOnce({} as any);
       await attachCustomerPaymentProof({ tenantId, customerId, conversationId, mediaUrl, signal: validSignal, waMessageId: 'wam-approved' });
       expect(updateSpy.mock.calls[0][0].data.purchase_review_status).toBe('approved');
     });
 
     it('keeps pending for a fresh reservation without prior CAPI send', async () => {
-      vi.spyOn(prisma.reservation, 'findFirst')
-        .mockResolvedValueOnce(null)
-        .mockResolvedValueOnce(mockActiveReservation as any); // no sent_at
+      mockNoDuplicate();
+      mockCandidates([mockActiveReservation]); // no sent_at
       const updateSpy = vi.spyOn(prisma.reservation, 'update').mockResolvedValueOnce({} as any);
       await attachCustomerPaymentProof({ tenantId, customerId, conversationId, mediaUrl, signal: validSignal, waMessageId: 'wam-fresh' });
       expect(updateSpy.mock.calls[0][0].data.purchase_review_status).toBe('pending');
+    });
+  });
+
+  describe('jalur produksi findMany (Fase 2 — anti-fallback)', () => {
+    const day = 24 * 60 * 60 * 1000;
+    const validSignal: ReceiptSignal = {
+      isPaymentReceipt: true,
+      bankDestination: 'BCA',
+      amount: 250000,
+      transferDate: '2026-10-14',
+      referenceNumber: 'REF-BASE-01',
+      confidence: 0.95,
+    };
+
+    it('mengirim filter status, jendela tanggal, belum lunas, dan belum berbukti', async () => {
+      mockNoDuplicate();
+      const findManySpy = vi
+        .spyOn(prisma.reservation, 'findMany')
+        .mockResolvedValueOnce([mockActiveReservation] as any);
+      vi.spyOn(prisma.reservation, 'update').mockResolvedValueOnce({} as any);
+
+      const result = await attachCustomerPaymentProof({
+        tenantId,
+        customerId,
+        conversationId,
+        mediaUrl,
+        signal: { ...validSignal, referenceNumber: 'REF-FILTER-01' },
+        waMessageId: 'wam-filter-01',
+      });
+
+      expect(result.attached).toBe(true);
+      const where = findManySpy.mock.calls[0][0].where as any;
+      expect(where.tenant_id).toBe(tenantId);
+      expect(where.customer_id).toBe(customerId);
+      expect(where.purchase_occurred_at).toBeNull();
+      expect(where.proof_url).toBeNull();
+      expect(where.status.in).toEqual(expect.arrayContaining(['confirmed']));
+      // Jendela tanggal berada di dalam OR (kandidat bertanggal ATAU tanpa tanggal).
+      const bookingWindow = where.OR?.[0]?.booking_date;
+      expect(bookingWindow?.gte).toBeInstanceOf(Date);
+      expect(bookingWindow?.lte).toBeInstanceOf(Date);
+    });
+
+    it('kandidat kosong TIDAK memicu fallback findFirst kedua', async () => {
+      const findFirstSpy = vi
+        .spyOn(prisma.reservation, 'findFirst')
+        .mockResolvedValueOnce(null);
+      mockCandidates([]);
+
+      const result = await attachCustomerPaymentProof({
+        tenantId,
+        customerId,
+        conversationId,
+        mediaUrl,
+        signal: { ...validSignal, referenceNumber: 'REF-NO-CAND' },
+        waMessageId: 'wam-no-cand',
+      });
+
+      expect(result.attached).toBe(false);
+      expect(result.reason).toBe('NO_ACTIVE_RESERVATION');
+      expect(findFirstSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('menempel ke reservasi completed pasca-visit (dalam jendela)', async () => {
+      mockNoDuplicate();
+      mockCandidates([
+        {
+          ...mockActiveReservation,
+          status: 'completed',
+          booking_date: new Date(Date.now() - 3 * 60 * 60 * 1000),
+        },
+      ]);
+      vi.spyOn(prisma.reservation, 'update').mockResolvedValueOnce({} as any);
+
+      const result = await attachCustomerPaymentProof({
+        tenantId,
+        customerId,
+        conversationId,
+        mediaUrl,
+        signal: { ...validSignal, referenceNumber: 'REF-POST-VISIT' },
+        waMessageId: 'wam-post-visit',
+      });
+
+      expect(result.attached).toBe(true);
+      expect(result.reservationId).toBe('res-999');
+    });
+
+    it('menolak reservasi yang sudah lunas tanpa update', async () => {
+      mockNoDuplicate();
+      // Baris sudah lunas tetap dikirim mock untuk memastikan lapisan domain
+      // (bukan hanya query DB) yang menolaknya.
+      mockCandidates([
+        { ...mockActiveReservation, purchase_occurred_at: new Date() },
+      ]);
+      const updateSpy = vi.spyOn(prisma.reservation, 'update');
+
+      const result = await attachCustomerPaymentProof({
+        tenantId,
+        customerId,
+        conversationId,
+        mediaUrl,
+        signal: { ...validSignal, referenceNumber: 'REF-ALREADY-PAID' },
+        waMessageId: 'wam-already-paid',
+      });
+
+      expect(result.attached).toBe(false);
+      expect(result.reason).toBe('NO_ACTIVE_RESERVATION');
+      expect(updateSpy).not.toHaveBeenCalled();
+    });
+
+    it('error database pada findMany menjadi INTERNAL_ERROR (fail-closed)', async () => {
+      mockNoDuplicate();
+      vi.spyOn(prisma.reservation, 'findMany').mockRejectedValueOnce(new Error('db down'));
+      const updateSpy = vi.spyOn(prisma.reservation, 'update');
+
+      const result = await attachCustomerPaymentProof({
+        tenantId,
+        customerId,
+        conversationId,
+        mediaUrl,
+        signal: { ...validSignal, referenceNumber: 'REF-DB-DOWN' },
+        waMessageId: 'wam-db-down',
+      });
+
+      expect(result.attached).toBe(false);
+      expect(result.reason).toBe('INTERNAL_ERROR');
+      expect(updateSpy).not.toHaveBeenCalled();
+    });
+
+    it('nominal kembar memilih reservasi dengan tanggal terdekat dari transferDate', async () => {
+      const transferDate = new Date();
+      mockNoDuplicate();
+      mockCandidates([
+        {
+          ...mockActiveReservation,
+          id: 'res-far',
+          booking_date: new Date(transferDate.getTime() + 5 * day),
+        },
+        {
+          ...mockActiveReservation,
+          id: 'res-near',
+          booking_date: new Date(transferDate.getTime() + 1 * day),
+        },
+      ]);
+      vi.spyOn(prisma.reservation, 'update').mockResolvedValueOnce({} as any);
+
+      const result = await attachCustomerPaymentProof({
+        tenantId,
+        customerId,
+        conversationId,
+        mediaUrl,
+        signal: {
+          ...validSignal,
+          amount: 250000,
+          transferDate: transferDate.toISOString().slice(0, 10),
+          referenceNumber: 'REF-TIE',
+        },
+        waMessageId: 'wam-tie',
+      });
+
+      expect(result.attached).toBe(true);
+      expect(result.reservationId).toBe('res-near');
     });
   });
 
@@ -345,9 +513,9 @@ describe('CustomerPaymentProofService (TDD Unit Tests)', () => {
         confidence: 0.95,
       });
 
-      vi.spyOn(prisma.reservation, 'findFirst')
-        .mockResolvedValueOnce(null) // no duplicate
-        .mockResolvedValueOnce({
+      mockNoDuplicate();
+      mockCandidates([
+        {
           id: 'res-auto-inbound',
           tenant_id: tenantId,
           customer_id: 'cust-inbound',
@@ -360,7 +528,8 @@ describe('CustomerPaymentProofService (TDD Unit Tests)', () => {
           receipt_reference: null,
           raw_text: '',
           purchase_review_status: 'pending',
-        } as any);
+        },
+      ]);
 
       const updateSpy = vi.spyOn(prisma.reservation, 'update').mockResolvedValueOnce({} as any);
 
@@ -376,9 +545,124 @@ describe('CustomerPaymentProofService (TDD Unit Tests)', () => {
 
       expect(updateSpy).toHaveBeenCalled();
       const updateData = updateSpy.mock.calls[0][0].data;
-      expect(updateData.proof_url).toBe('/media/inbound/receipt.jpg');
+      expect(updateData.proof_url).toMatch(/^\/media\/payment-proofs\/default-tenant\/[a-f0-9]{32}\.jpe?g$/);
       expect(updateData.payment_method).toBe('Transfer BCA');
       expect(updateData.receipt_reference).toBe('REF-INBOUND-001');
+    });
+
+    it('Fase 1 T1.2: melepaskan klaim idempotensi bila gagal sehingga bisa di-retry', async () => {
+      const retryMsgId = 'wam-retry-123';
+      const validSignal: ReceiptSignal = {
+        isPaymentReceipt: true,
+        bankDestination: 'BCA',
+        amount: 250000,
+        transferDate: '2026-10-14',
+        referenceNumber: 'REF-RETRY-001',
+        confidence: 0.95,
+      };
+
+      // Percobaan 1: Belum ada reservasi aktif -> Gagal NO_ACTIVE_RESERVATION
+      mockNoDuplicate();
+      mockCandidates([]);
+
+      const attempt1 = await attachCustomerPaymentProof({
+        tenantId,
+        customerId,
+        conversationId,
+        mediaUrl,
+        signal: validSignal,
+        waMessageId: retryMsgId,
+      });
+
+      expect(attempt1.attached).toBe(false);
+      expect(attempt1.reason).toBe('NO_ACTIVE_RESERVATION');
+
+      // Percobaan 2: Admin sudah buat reservasi -> Retry dengan message ID yang sama HARUS berhasil (tidak terblokir ALREADY_PROCESSED)
+      mockNoDuplicate();
+      mockCandidates([mockActiveReservation]); // reservasi sudah ada!
+
+      vi.spyOn(prisma.reservation, 'update').mockResolvedValueOnce({} as any);
+
+      const attempt2 = await attachCustomerPaymentProof({
+        tenantId,
+        customerId,
+        conversationId,
+        mediaUrl,
+        signal: validSignal,
+        waMessageId: retryMsgId,
+      });
+
+      expect(attempt2.attached).toBe(true);
+      expect(attempt2.reason).toBe('PROOF_ATTACHED');
+    });
+
+    it('Fase 1 T1.2: menolak bukti bila proof_url sudah tercatat di database reservasi lain (Dedup DB)', async () => {
+      const dupUrlSignal: ReceiptSignal = {
+        isPaymentReceipt: true,
+        bankDestination: 'BCA',
+        amount: 250000,
+        transferDate: '2026-10-14',
+        referenceNumber: null, // tanpa ref number
+        confidence: 0.95,
+      };
+
+      // Mock duplicate check menemukan reservasi lain dengan proof_url yang sama
+      vi.spyOn(prisma.reservation, 'findFirst').mockResolvedValueOnce({
+        id: 'res-existing-proof',
+        tenant_id: tenantId,
+        proof_url: mediaUrl,
+        created_at: new Date(),
+      } as any);
+
+      const updateSpy = vi.spyOn(prisma.reservation, 'update');
+
+      const result = await attachCustomerPaymentProof({
+        tenantId,
+        customerId,
+        conversationId,
+        mediaUrl,
+        signal: dupUrlSignal,
+        waMessageId: 'wam-dup-url',
+      });
+
+      expect(result.attached).toBe(false);
+      expect(result.reason).toBe('DUPLICATE_PROOF_URL');
+      expect(result.reservationId).toBe('res-existing-proof');
+      expect(updateSpy).not.toHaveBeenCalled();
+    });
+
+    it('Fase 1 T1.1: menyimpan berkas ke storage permanen saat buffer diberikan', async () => {
+      const bufferSignal: ReceiptSignal = {
+        isPaymentReceipt: true,
+        bankDestination: 'QRIS',
+        amount: 155000,
+        transferDate: '2026-11-16',
+        referenceNumber: '0115001SZHJ7',
+        confidence: 0.95,
+      };
+
+      mockNoDuplicate();
+      mockCandidates([mockActiveReservation]);
+
+      const updateSpy = vi.spyOn(prisma.reservation, 'update').mockResolvedValueOnce({} as any);
+
+      const dummyBuffer = Buffer.from('dummy-image-bytes-nida');
+      const result = await attachCustomerPaymentProof({
+        tenantId,
+        customerId,
+        conversationId,
+        mediaUrl: '/media/inbound/temp.jpg',
+        signal: bufferSignal,
+        waMessageId: 'wam-buffer-test',
+        buffer: dummyBuffer,
+        mimeType: 'image/jpeg',
+      });
+
+      expect(result.attached).toBe(true);
+      expect(updateSpy).toHaveBeenCalled();
+      const updateData = updateSpy.mock.calls[0][0].data;
+      expect(updateData.proof_url).toMatch(/^\/media\/payment-proofs\/default-tenant\/[a-f0-9]{32}\.jpe?g$/);
+      expect(updateData.payment_method).toBe('QRIS');
     });
   });
 });

@@ -10,6 +10,12 @@ export const PAUSED_STATUS = 'paused';
 /** Status reservasi yang dihitung sebagai "jadwal aktif" (menjadwalkan pasien). */
 export const ACTIVE_RESERVATION_STATUSES: string[] = ['confirmed', 'en_route', 'pending', 'hold'];
 
+/**
+ * Status terminal: reservasi yang sudah dibatalkan/ditolak TIDAK boleh menerima
+ * bukti pembayaran otomatis (uang tidak boleh menempel ke jadwal yang batal).
+ */
+export const TERMINAL_RESERVATION_STATUSES: string[] = ['cancelled', 'rejected'];
+
 export type ActiveReservationStatus = 'confirmed' | 'en_route' | 'pending' | 'hold';
 
 /**

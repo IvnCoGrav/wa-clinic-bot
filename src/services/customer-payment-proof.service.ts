@@ -8,6 +8,10 @@ import { detectReceipt, type ReceiptSignal } from './payment-receipt-vision.serv
 import { customerService } from './customer.service';
 import { conversationService } from './conversation.service';
 import { resolveNextPurchaseReviewStatus } from './capi-review-status';
+import { ACTIVE_RESERVATION_STATUSES } from '../domain/reservation-status';
+import { resolvePaymentProofPolicy } from './payment-proof-config.service';
+import { selectPaymentProofCandidate } from '../domain/select-payment-proof-candidate';
+import { resolveReservationBilling } from './reservation-billing.service';
 
 const auditService = new AuditService();
 
@@ -17,11 +21,13 @@ const auditService = new AuditService();
 const processedWaMessageIds = new Set<string>();
 
 /**
- * Helper untuk membersihkan cache idempoten agar tidak terjadi memory leak.
+ * Klaim pemrosesan waMessageId secara idempoten.
+ * Mengembalikan true bila pesan berhasil diklaim (belum pernah diproses),
+ * atau false bila pesan sedang/sudah diproses.
  */
-function recordProcessedWaMessage(waMessageId: string): boolean {
-  if (!waMessageId) return false;
-  if (processedWaMessageIds.has(waMessageId)) return true;
+function claimProcessedWaMessage(waMessageId: string): boolean {
+  if (!waMessageId) return true;
+  if (processedWaMessageIds.has(waMessageId)) return false;
   processedWaMessageIds.add(waMessageId);
   if (processedWaMessageIds.size > 2000) {
     const it = processedWaMessageIds.values();
@@ -29,7 +35,16 @@ function recordProcessedWaMessage(waMessageId: string): boolean {
       processedWaMessageIds.delete(it.next().value!);
     }
   }
-  return false;
+  return true;
+}
+
+/**
+ * Melepas klaim waMessageId bila pemrosesan gagal (mis. NO_ACTIVE_RESERVATION),
+ * agar webhook retry atau pengiriman ulang dapat diproses kembali.
+ */
+function releaseProcessedWaMessage(waMessageId: string): void {
+  if (!waMessageId) return;
+  processedWaMessageIds.delete(waMessageId);
 }
 
 export function _clearProcessedCacheForTesting(): void {
@@ -101,83 +116,159 @@ export async function attachCustomerPaymentProof(params: {
   mediaUrl: string;
   signal: ReceiptSignal;
   waMessageId: string;
+  buffer?: Buffer;
+  mimeType?: string;
 }): Promise<{ attached: boolean; reason: string; reservationId?: string; isMismatch?: boolean; receiptAmount?: number | null }> {
-  const { tenantId, customerId, conversationId, mediaUrl, signal, waMessageId } = params;
+  const { tenantId, customerId, conversationId, mediaUrl, signal, waMessageId, buffer, mimeType } = params;
 
   try {
     // 1. Guard Idempotensi pesan
-    if (waMessageId && recordProcessedWaMessage(waMessageId)) {
+    if (waMessageId && !claimProcessedWaMessage(waMessageId)) {
       return { attached: false, reason: 'ALREADY_PROCESSED' };
     }
 
-    // 2. Guard Duplikat Referensi (Anti-Fraud) dalam 30 hari terakhir
-    if (signal.referenceNumber && signal.referenceNumber.trim()) {
-      const ref = signal.referenceNumber.trim();
+    // 2. Guard Duplikat Referensi / Bukti (Anti-Fraud & Dedup) dalam 30 hari terakhir
+    const ref = signal.referenceNumber?.trim();
+    if (ref || (mediaUrl && mediaUrl.trim())) {
       const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+      const orConditions: any[] = [];
+      if (ref) {
+        orConditions.push({ receipt_reference: ref });
+        orConditions.push({ raw_text: { contains: `[RECEIPT_REF:${ref}]` } });
+      }
+      if (mediaUrl && mediaUrl.trim()) {
+        orConditions.push({ proof_url: mediaUrl.trim() });
+      }
 
       const existingDuplicate = await prisma.reservation.findFirst({
         where: {
           tenant_id: tenantId,
           created_at: { gte: thirtyDaysAgo },
-          OR: [
-            { receipt_reference: ref },
-            { raw_text: { contains: `[RECEIPT_REF:${ref}]` } },
-          ],
+          OR: orConditions,
         },
-        select: { id: true, receipt_reference: true },
+        select: { id: true, receipt_reference: true, proof_url: true },
       });
 
       if (existingDuplicate) {
+        if (waMessageId) releaseProcessedWaMessage(waMessageId);
+        const isUrlDup = Boolean(mediaUrl && existingDuplicate.proof_url === mediaUrl.trim());
+        const reason = isUrlDup ? 'DUPLICATE_PROOF_URL' : 'DUPLICATE_REFERENCE';
         console.warn(
-          `[PAYMENT PROOF FRAUD GUARD] Bukti transfer duplikat terdeteksi (ref: ${ref}, existing reservation: ${existingDuplicate.id}).`
+          `[PAYMENT PROOF FRAUD GUARD] Bukti transfer duplikat terdeteksi (${reason}, existing reservation: ${existingDuplicate.id}).`
         );
-        return { attached: false, reason: 'DUPLICATE_REFERENCE', reservationId: existingDuplicate.id };
+        return { attached: false, reason, reservationId: existingDuplicate.id };
       }
     }
 
-    // 3. Cari reservasi aktif: status IN confirmed/hold/pending/en_route + window H-7..H+1
+    // 3. Cari reservasi kandidat: status aktif / completed, belum lunas, belum ada bukti
     const now = new Date();
-    const minBookingDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-    const maxBookingDate = new Date(now.getTime() + 1 * 24 * 60 * 60 * 1000);
+    const policy = await resolvePaymentProofPolicy(tenantId);
+    const minBookingDate = new Date(now.getTime() - policy.windowBeforeDays * 24 * 60 * 60 * 1000);
+    const maxBookingDate = new Date(now.getTime() + policy.windowAfterDays * 24 * 60 * 60 * 1000);
 
-    const activeStatuses = ['confirmed', 'hold', 'pending', 'en_route', 'CONFIRMED', 'HOLD', 'PENDING', 'EN_ROUTE'];
+    const matchStatuses = Array.from(
+      new Set([
+        ...ACTIVE_RESERVATION_STATUSES,
+        ...ACTIVE_RESERVATION_STATUSES.map((s) => s.toUpperCase()),
+        'completed',
+        'COMPLETED',
+      ])
+    );
 
-    let reservation = await prisma.reservation.findFirst({
-      where: {
-        customer_id: customerId,
-        tenant_id: tenantId,
-        status: { in: activeStatuses },
-        booking_date: {
-          gte: minBookingDate,
-          lte: maxBookingDate,
-        },
-      },
-      orderBy: { booking_date: 'desc' },
-      include: { customer: true },
-    });
-
-    // Fallback jika booking_date kosong (mis. reservasi pending tanpa slot fix)
-    if (!reservation) {
-      reservation = await prisma.reservation.findFirst({
+    let rawCandidates: any[] = [];
+    try {
+      const res = await prisma.reservation.findMany({
         where: {
           customer_id: customerId,
           tenant_id: tenantId,
-          status: { in: activeStatuses },
-          booking_date: null,
+          status: { in: matchStatuses },
+          purchase_occurred_at: null,
+          proof_url: null,
+          OR: [
+            {
+              booking_date: {
+                gte: minBookingDate,
+                lte: maxBookingDate,
+              },
+            },
+            { booking_date: null },
+          ],
         },
-        orderBy: { created_at: 'desc' },
-        include: { customer: true },
+        orderBy: [{ booking_date: 'asc' }, { created_at: 'desc' }],
+        include: { customer: true, items: { select: { price: true } } },
       });
+      if (Array.isArray(res)) {
+        rawCandidates = res;
+      }
+    } catch (err: any) {
+      // Fail-closed: kegagalan query TIDAK boleh diperlakukan sebagai "tidak ada
+      // kandidat" (dulu memicu fallback tanpa filter status/tanggal).
+      if (waMessageId) releaseProcessedWaMessage(waMessageId);
+      console.error(`[PAYMENT PROOF] Gagal query kandidat: ${err?.message || err}`);
+      return { attached: false, reason: 'INTERNAL_ERROR' };
     }
 
+    const enrichedCandidates = await Promise.all(
+      (rawCandidates || []).map(async (c) => {
+        const billing = await resolveReservationBilling(c, tenantId).catch(() => null);
+        const expectedTotal = billing
+          ? billing.totalFee
+          : (Number(c.purchase_value) || 0) + resolveDeliveryFeeSnapshot(c as any);
+        return {
+          ...c,
+          expectedTotal,
+        };
+      })
+    );
+
+    const selection = selectPaymentProofCandidate({
+      candidates: enrichedCandidates,
+      signalAmount: signal.amount ?? null,
+      transferDate: signal.transferDate ? new Date(signal.transferDate) : null,
+      now,
+    });
+
+    console.log(
+      `[PAYMENT PROOF] kandidat=${enrichedCandidates.length} terpilih=${selection.candidate?.id || '-'} exact=${selection.isExactAmountMatch}`
+    );
+
+    const reservation = selection.candidate;
+
     if (!reservation) {
+      if (waMessageId) releaseProcessedWaMessage(waMessageId);
       return { attached: false, reason: 'NO_ACTIVE_RESERVATION' };
     }
 
-    // 4. Resolve label pembayaran dari database
+    if (reservation.purchase_occurred_at) {
+      if (waMessageId) releaseProcessedWaMessage(waMessageId);
+      return { attached: false, reason: 'ALREADY_PAID', reservationId: reservation.id };
+    }
+
+    // 4. Simpan ke storage bukti bayar permanen bila buffer tersedia (kebal retensi chat)
+    let finalProofUrl = mediaUrl;
+    if (buffer && buffer.length > 0) {
+      try {
+        const { mediaService } = await import('./media.service');
+        const saved = await mediaService.savePaymentProof({
+          tenantId,
+          buffer,
+          mimeType,
+        });
+        if (saved?.hdUrl) {
+          finalProofUrl = saved.hdUrl;
+        }
+      } catch (saveErr: any) {
+        console.warn(
+          `[PAYMENT PROOF] Gagal menyimpan ke payment-proofs permanen, fallback ke mediaUrl: ${saveErr?.message || saveErr}`
+        );
+        finalProofUrl = mediaUrl;
+      }
+    }
+
+    // 5. Resolve label pembayaran dari database
     const methodInfo = await resolvePaymentMethodLabel(tenantId, signal.bankDestination);
 
-    // 5. Downside Protection Guard: proteksi purchase_value resmi dari timpaan nominal kecil
+    // 6. Downside Protection Guard: proteksi purchase_value resmi dari timpaan nominal kecil
     const deliveryFee = resolveDeliveryFeeSnapshot(reservation as any);
     const existingPurchaseValue = Number((reservation as any).purchase_value) || 0;
     const payment = resolveExpectedPayment({
@@ -202,14 +293,35 @@ export async function attachCustomerPaymentProof(params: {
       }
     }
 
-    // Flag staff review jika rekening asing, nominal di bawah tagihan, atau nominal tidak sesuai
-    const shouldVerify = !methodInfo.isOfficialDestination || isUnderpaid || isMismatch || reservation.needs_staff_verification;
+    // 7. Verifikasi tanggal transfer & tentukan flag review staf
+    let purchaseOccurredAt = now;
+    let isTransferDateSuspicious = false;
 
-    // 6. Pertahankan 'approved' bila CAPI sudah pernah terkirim (kontrak kanonik).
+    if (signal.transferDate) {
+      const parsedDate = new Date(signal.transferDate);
+      if (!isNaN(parsedDate.getTime())) {
+        const diffFuture = parsedDate.getTime() - now.getTime();
+        if (diffFuture > 24 * 60 * 60 * 1000) {
+          isTransferDateSuspicious = true;
+          purchaseOccurredAt = now;
+        } else {
+          purchaseOccurredAt = parsedDate;
+        }
+      }
+    }
+
+    const shouldVerify =
+      !methodInfo.isOfficialDestination ||
+      isUnderpaid ||
+      isMismatch ||
+      isTransferDateSuspicious ||
+      Boolean(reservation.needs_staff_verification);
+
+    // 8. Pertahankan 'approved' bila CAPI sudah pernah terkirim (kontrak kanonik).
     const updateData: any = {
-      proof_url: mediaUrl,
+      proof_url: finalProofUrl,
       payment_method: methodInfo.label,
-      purchase_occurred_at: signal.transferDate ? new Date(signal.transferDate) : now,
+      purchase_occurred_at: purchaseOccurredAt,
       purchase_review_status: resolveNextPurchaseReviewStatus(reservation as any),
       needs_staff_verification: shouldVerify,
       purchase_value: finalPurchaseValue,
@@ -252,12 +364,12 @@ export async function attachCustomerPaymentProof(params: {
       data: updateData,
     });
 
-    // 7. Sheets sync enqueue (best effort, akan di-skip oleh sheetsSyncService sampai completed)
+    // 8. Sheets sync enqueue (best effort, akan di-skip oleh sheetsSyncService sampai completed)
     sheetsSyncService.enqueue(reservation.id, tenantId).catch((err: any) => {
       console.warn(`[PAYMENT PROOF] Sheets enqueue deferred/skipped: ${err?.message || err}`);
     });
 
-    // 8. Audit log admin action
+    // 9. Audit log admin action
     try {
       await auditService.logAdminAction({
         apiKey: process.env.ADMIN_API_KEY || 'system-auto-proof',
@@ -276,7 +388,7 @@ export async function attachCustomerPaymentProof(params: {
           paymentStatus: payment.status,
           isMismatch,
           reference: signal.referenceNumber,
-          mediaUrl,
+          mediaUrl: finalProofUrl,
           isOfficialDestination: methodInfo.isOfficialDestination,
           needsVerification: shouldVerify,
         },
@@ -285,7 +397,7 @@ export async function attachCustomerPaymentProof(params: {
       console.warn(`[PAYMENT PROOF] Audit log skipped: ${auditErr?.message || auditErr}`);
     }
 
-    // 9. LiveChatHub SSE broadcast
+    // 10. LiveChatHub SSE broadcast
     try {
       const { getLiveChatHub } = await import('./live-chat-hub.service');
       getLiveChatHub()
@@ -296,7 +408,7 @@ export async function attachCustomerPaymentProof(params: {
             conversationId,
             event: 'payment_proof_attached',
             reservationId: reservation.id,
-            mediaUrl,
+            mediaUrl: finalProofUrl,
             paymentMethod: methodInfo.label,
             receiptAmount: signal.amount ?? null,
             totalExpected,
@@ -310,6 +422,7 @@ export async function attachCustomerPaymentProof(params: {
 
     return { attached: true, reason: 'PROOF_ATTACHED', reservationId: reservation.id, isMismatch, receiptAmount: signal.amount ?? null };
   } catch (err: any) {
+    if (waMessageId) releaseProcessedWaMessage(waMessageId);
     console.error(`[PAYMENT PROOF ERROR] Gagal menempelkan bukti bayar: ${err?.message || err}`);
     return { attached: false, reason: 'INTERNAL_ERROR' };
   }
@@ -353,6 +466,8 @@ export async function attachFromInbound(params: {
       mediaUrl,
       signal,
       waMessageId,
+      buffer,
+      mimeType,
     });
 
     if (attachResult.attached) {
