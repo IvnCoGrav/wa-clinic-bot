@@ -33,8 +33,7 @@ export interface StaffScorecardPolicyModel {
   is_fallback?: boolean;
 }
 
-const DEFAULT_STAFF_SCORECARD_POLICY: StaffScorecardPolicyModel = {
-  tenant_id: DEFAULT_TENANT_ID,
+const DEFAULT_STAFF_SCORECARD_POLICY: Omit<StaffScorecardPolicyModel, 'tenant_id'> = {
   weight_punctuality: 50,
   weight_retention: 30,
   weight_volume: 20,
