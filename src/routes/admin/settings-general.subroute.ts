@@ -455,10 +455,16 @@ export async function settingsGeneralRoutes(fastify: FastifyInstance) {
     try {
       const tenantId = resolveTenantId(request);
       const { StaffReservationService } = await import('../../services/staff-reservation.service');
+      const { resolvePaymentProofPolicy } = await import('../../services/payment-proof-config.service');
       const paymentInfo = await StaffReservationService.getPaymentInfo(tenantId);
+      const policy = await resolvePaymentProofPolicy(tenantId);
       return reply.status(200).send({
         success: true,
-        data: paymentInfo,
+        data: {
+          ...paymentInfo,
+          paymentProofWindowDaysBefore: policy.windowBeforeDays,
+          paymentProofWindowDaysAfter: policy.windowAfterDays,
+        },
       });
     } catch (err: any) {
       return reply.status(500).send({ success: false, error: err.message });
@@ -483,12 +489,24 @@ export async function settingsGeneralRoutes(fastify: FastifyInstance) {
           bankAccounts?: Array<{ bank: string; accountNumber: string; accountName: string }>;
           instructions?: string;
           customTemplate?: string | null;
+          paymentProofWindowDaysBefore?: number;
+          paymentProofWindowDaysAfter?: number;
         };
       }>,
       reply: FastifyReply
     ) => {
       const tenantId = requireTenantId(request);
-      const { qrisImageUrl, imageB64, mimeType, fileName, bankAccounts, instructions, customTemplate } = request.body || {};
+      const {
+        qrisImageUrl,
+        imageB64,
+        mimeType,
+        fileName,
+        bankAccounts,
+        instructions,
+        customTemplate,
+        paymentProofWindowDaysBefore,
+        paymentProofWindowDaysAfter,
+      } = request.body || {};
 
       try {
         let finalQrisUrl: string | null | undefined = undefined;
@@ -508,8 +526,38 @@ export async function settingsGeneralRoutes(fastify: FastifyInstance) {
         }
 
         let updatedPaymentInfo: any;
+        let windowBeforeDays = 7;
+        let windowAfterDays = 7;
+
+        const { clampPaymentProofWindowDays } = await import('../../domain/payment-proof-window');
+        let previousWindow = { before: 7, after: 7 };
+
         await updateTenantSettingsSafely(prisma, tenantId, (currentSettings) => {
           const existingPaymentInfo = currentSettings.paymentInfo || {};
+
+          previousWindow = {
+            before: clampPaymentProofWindowDays(
+              currentSettings.paymentProofWindowDaysBefore ??
+                existingPaymentInfo.paymentProofWindowDaysBefore,
+              7
+            ),
+            after: clampPaymentProofWindowDays(
+              currentSettings.paymentProofWindowDaysAfter ??
+                existingPaymentInfo.paymentProofWindowDaysAfter,
+              7
+            ),
+          };
+
+          windowBeforeDays =
+            paymentProofWindowDaysBefore !== undefined
+              ? clampPaymentProofWindowDays(paymentProofWindowDaysBefore, previousWindow.before)
+              : previousWindow.before;
+
+          windowAfterDays =
+            paymentProofWindowDaysAfter !== undefined
+              ? clampPaymentProofWindowDays(paymentProofWindowDaysAfter, previousWindow.after)
+              : previousWindow.after;
+
           updatedPaymentInfo = {
             qrisImageUrl: finalQrisUrl !== undefined
               ? finalQrisUrl
@@ -527,10 +575,14 @@ export async function settingsGeneralRoutes(fastify: FastifyInstance) {
             customTemplate: customTemplate !== undefined
               ? (typeof customTemplate === 'string' && customTemplate.trim() ? customTemplate : null)
               : (existingPaymentInfo.customTemplate ?? null),
+            paymentProofWindowDaysBefore: windowBeforeDays,
+            paymentProofWindowDaysAfter: windowAfterDays,
           };
 
           return {
             ...currentSettings,
+            paymentProofWindowDaysBefore: windowBeforeDays,
+            paymentProofWindowDaysAfter: windowAfterDays,
             paymentInfo: updatedPaymentInfo,
           };
         });
@@ -543,6 +595,8 @@ export async function settingsGeneralRoutes(fastify: FastifyInstance) {
           // Cfg-009: audit tidak menyimpan nomor rekening mentah.
           payload: {
             ...updatedPaymentInfo,
+            paymentProofWindowBefore: previousWindow,
+            paymentProofWindowAfter: { before: windowBeforeDays, after: windowAfterDays },
             bankAccounts: (updatedPaymentInfo.bankAccounts || []).map((b: any) => ({
               ...b,
               accountNumber: b?.accountNumber ? `***${String(b.accountNumber).slice(-4)}` : null,

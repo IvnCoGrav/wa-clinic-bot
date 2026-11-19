@@ -57,9 +57,10 @@ describe('Payment Receipt Mismatch Detection & Red Badge Data Layer (Unit Tests)
         confidence: 0.96,
       };
 
-      vi.spyOn(prisma.reservation, 'findFirst')
-        .mockResolvedValueOnce(null) // no duplicate ref
-        .mockResolvedValueOnce(baseActiveReservation as any);
+      vi.spyOn(prisma.reservation, 'findFirst').mockResolvedValueOnce(null);
+      vi.spyOn(prisma.reservation, 'findMany').mockResolvedValueOnce([
+        baseActiveReservation as any,
+      ]);
 
       const updateSpy = vi.spyOn(prisma.reservation, 'update').mockResolvedValueOnce({
         ...baseActiveReservation,
@@ -97,9 +98,10 @@ describe('Payment Receipt Mismatch Detection & Red Badge Data Layer (Unit Tests)
         confidence: 0.95,
       };
 
-      vi.spyOn(prisma.reservation, 'findFirst')
-        .mockResolvedValueOnce(null)
-        .mockResolvedValueOnce(baseActiveReservation as any);
+      vi.spyOn(prisma.reservation, 'findFirst').mockResolvedValueOnce(null);
+      vi.spyOn(prisma.reservation, 'findMany').mockResolvedValueOnce([
+        baseActiveReservation as any,
+      ]);
 
       const updateSpy = vi.spyOn(prisma.reservation, 'update').mockResolvedValueOnce({
         ...baseActiveReservation,
@@ -139,9 +141,10 @@ describe('Payment Receipt Mismatch Detection & Red Badge Data Layer (Unit Tests)
         confidence: 0.97,
       };
 
-      vi.spyOn(prisma.reservation, 'findFirst')
-        .mockResolvedValueOnce(null)
-        .mockResolvedValueOnce(baseActiveReservation as any);
+      vi.spyOn(prisma.reservation, 'findFirst').mockResolvedValueOnce(null);
+      vi.spyOn(prisma.reservation, 'findMany').mockResolvedValueOnce([
+        baseActiveReservation as any,
+      ]);
 
       const updateSpy = vi.spyOn(prisma.reservation, 'update').mockResolvedValueOnce({
         ...baseActiveReservation,
@@ -179,9 +182,10 @@ describe('Payment Receipt Mismatch Detection & Red Badge Data Layer (Unit Tests)
         confidence: 0.72,
       };
 
-      vi.spyOn(prisma.reservation, 'findFirst')
-        .mockResolvedValueOnce(null)
-        .mockResolvedValueOnce(baseActiveReservation as any);
+      vi.spyOn(prisma.reservation, 'findFirst').mockResolvedValueOnce(null);
+      vi.spyOn(prisma.reservation, 'findMany').mockResolvedValueOnce([
+        baseActiveReservation as any,
+      ]);
 
       const updateSpy = vi.spyOn(prisma.reservation, 'update').mockResolvedValueOnce({
         ...baseActiveReservation,
@@ -223,9 +227,10 @@ describe('Payment Receipt Mismatch Detection & Red Badge Data Layer (Unit Tests)
         delivery_fee: 20000,
       };
 
-      vi.spyOn(prisma.reservation, 'findFirst')
-        .mockResolvedValueOnce(null) // no duplicate ref
-        .mockResolvedValueOnce(resWithDiscount as any);
+      vi.spyOn(prisma.reservation, 'findFirst').mockResolvedValueOnce(null);
+      vi.spyOn(prisma.reservation, 'findMany').mockResolvedValueOnce([
+        resWithDiscount as any,
+      ]);
 
       const updateSpy = vi.spyOn(prisma.reservation, 'update').mockResolvedValue({
         ...resWithDiscount,
@@ -269,9 +274,10 @@ describe('Payment Receipt Mismatch Detection & Red Badge Data Layer (Unit Tests)
         delivery_fee: 25000,
       };
 
-      vi.spyOn(prisma.reservation, 'findFirst')
-        .mockResolvedValueOnce(null) // no duplicate ref
-        .mockResolvedValueOnce(resZero as any);
+      vi.spyOn(prisma.reservation, 'findFirst').mockResolvedValueOnce(null);
+      vi.spyOn(prisma.reservation, 'findMany').mockResolvedValueOnce([
+        resZero as any,
+      ]);
 
       const updateSpy = vi.spyOn(prisma.reservation, 'update').mockResolvedValue({
         ...resZero,

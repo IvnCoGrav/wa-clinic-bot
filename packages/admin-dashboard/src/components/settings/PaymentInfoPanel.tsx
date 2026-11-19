@@ -16,6 +16,8 @@ interface PaymentInfoData {
   bankAccounts: BankAccount[];
   instructions?: string;
   customTemplate?: string | null;
+  paymentProofWindowDaysBefore?: number;
+  paymentProofWindowDaysAfter?: number;
 }
 
 const STANDARD_PAYMENT_TEMPLATE = `Halo Bunda {nama_pasien}, berikut informasi pembayaran resmi klinik:
@@ -55,6 +57,8 @@ export const PaymentInfoPanel: React.FC = () => {
   const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
   const [instructions, setInstructions] = useState<string>('');
   const [customTemplate, setCustomTemplate] = useState<string>('');
+  const [windowDaysBefore, setWindowDaysBefore] = useState<number>(7);
+  const [windowDaysAfter, setWindowDaysAfter] = useState<number>(7);
   const [lightboxOpen, setLightboxOpen] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -70,6 +74,8 @@ export const PaymentInfoPanel: React.FC = () => {
         setBankAccounts(Array.isArray(data.bankAccounts) ? data.bankAccounts : []);
         setInstructions(data.instructions || '');
         setCustomTemplate(typeof data.customTemplate === 'string' ? data.customTemplate : '');
+        setWindowDaysBefore(data.paymentProofWindowDaysBefore ?? 7);
+        setWindowDaysAfter(data.paymentProofWindowDaysAfter ?? 7);
       }
     } catch (err: any) {
       console.warn('Gagal memuat info pembayaran:', err.message);
@@ -185,7 +191,7 @@ export const PaymentInfoPanel: React.FC = () => {
   };
 
   const { dirty: unsavedDraft } = useSnapshotDirty(
-    [bankAccounts, instructions, customTemplate],
+    [bankAccounts, instructions, customTemplate, windowDaysBefore, windowDaysAfter],
     !loading
   );
   useReportDirty(unsavedDraft);
@@ -216,6 +222,8 @@ export const PaymentInfoPanel: React.FC = () => {
         bankAccounts: validAccounts,
         instructions: instructions.trim() || undefined,
         customTemplate: customTemplate.trim() ? customTemplate : null,
+        paymentProofWindowDaysBefore: Number(windowDaysBefore) >= 0 ? Number(windowDaysBefore) : 7,
+        paymentProofWindowDaysAfter: Number(windowDaysAfter) >= 0 ? Number(windowDaysAfter) : 7,
       };
 
       if (imageB64) {
@@ -509,6 +517,58 @@ export const PaymentInfoPanel: React.FC = () => {
           <pre className="w-full p-3 bg-surface-2 border border-divider rounded-xl text-xs text-ink whitespace-pre-wrap break-words leading-relaxed font-sans max-h-[320px] overflow-auto">
             {buildPreview(customTemplate)}
           </pre>
+        </div>
+      </div>
+
+      {/* Jendela Otomasi Bukti Pembayaran */}
+      <div className="bg-surface border border-divider rounded-2xl p-5 shadow-xs space-y-3">
+        <div>
+          <h4 className="font-bold text-sm text-ink flex items-center space-x-2">
+            <span>Jendela Otomasi Pencocokan Bukti Transfer</span>
+          </h4>
+          <p className="text-xs text-ink-3 mt-0.5">
+            Batas toleransi hari untuk mencocokkan bukti transfer WhatsApp dengan reservasi secara otomatis.
+          </p>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
+          <div className="p-3 bg-surface-2 rounded-xl border border-divider space-y-1">
+            <label className="text-xs font-semibold text-ink block">
+              Jendela Mundur (Pelunasan Pasca-Visit)
+            </label>
+            <p className="text-[11px] text-ink-3">
+              Maksimal hari ke belakang reservasi berstatus selesai yang masih boleh menerima bukti bayar otomatis.
+            </p>
+            <div className="flex items-center space-x-2 pt-1">
+              <input
+                type="number"
+                min={1}
+                max={30}
+                value={windowDaysBefore}
+                onChange={(e) => setWindowDaysBefore(Math.max(1, parseInt(e.target.value, 10) || 1))}
+                className="w-24 px-3 py-1.5 bg-surface border border-divider rounded-lg text-xs text-ink font-semibold focus:outline-none focus:border-accent"
+              />
+              <span className="text-xs text-ink-3">hari (H-X)</span>
+            </div>
+          </div>
+          <div className="p-3 bg-surface-2 rounded-xl border border-divider space-y-1">
+            <label className="text-xs font-semibold text-ink block">
+              Jendela Maju (Advance Booking)
+            </label>
+            <p className="text-[11px] text-ink-3">
+              Maksimal hari ke depan jadwal booking yang boleh menerima bukti transfer di muka.
+            </p>
+            <div className="flex items-center space-x-2 pt-1">
+              <input
+                type="number"
+                min={1}
+                max={30}
+                value={windowDaysAfter}
+                onChange={(e) => setWindowDaysAfter(Math.max(1, parseInt(e.target.value, 10) || 1))}
+                className="w-24 px-3 py-1.5 bg-surface border border-divider rounded-lg text-xs text-ink font-semibold focus:outline-none focus:border-accent"
+              />
+              <span className="text-xs text-ink-3">hari (H+X)</span>
+            </div>
+          </div>
         </div>
       </div>
 

@@ -1,0 +1,3230 @@
+{
+  "generatedAt": "2026-11-19T01:38:27.257Z",
+  "tenantId": "default-tenant",
+  "windowDays": 30,
+  "limit": 1000,
+  "summary": {
+    "total": 152,
+    "bySeverity": {
+      "NONE": 0,
+      "LOW": 12,
+      "MEDIUM": 74,
+      "HIGH": 66
+    },
+    "byCode": {
+      "MISSING_PROOF": 67,
+      "PROOF_FILE_MISSING": 52,
+      "PROOF_IN_PRUNABLE_STORAGE": 54,
+      "AMOUNT_MISMATCH": 34,
+      "PAID_WITHOUT_PROOF": 19
+    }
+  },
+  "rows": [
+    {
+      "reservationId": "1a20e5c6-9bb5-4cdb-8a54-6e46af354266",
+      "customerId": "8d421d91-fdc8-451c-b548-d567087161ce",
+      "customerName": "Bunda Paw",
+      "customerPhone": "6285121907558",
+      "status": "completed",
+      "bookingDate": "2026-10-20T02:00:00.000Z",
+      "proofUrl": null,
+      "proofFileExists": null,
+      "purchaseOccurredAt": null,
+      "receiptAmount": null,
+      "expectedTotal": 210000,
+      "paymentMethod": null,
+      "severity": "MEDIUM",
+      "codes": [
+        "MISSING_PROOF"
+      ],
+      "notes": []
+    },
+    {
+      "reservationId": "a1a25975-ebcd-4124-90d7-5075f9fa4194",
+      "customerId": "f16e88c9-56f6-498a-bbdb-3c26a8a552da",
+      "customerName": "Bunda Tri Yuli Astutik",
+      "customerPhone": "6285731679991",
+      "status": "completed",
+      "bookingDate": "2026-10-20T02:30:00.000Z",
+      "proofUrl": "/media/outbound/default-tenant/fb0a2878ceab4608a7f7083fc7d5ecd4.jpg",
+      "proofFileExists": false,
+      "purchaseOccurredAt": "2026-10-20T06:01:33.047Z",
+      "receiptAmount": null,
+      "expectedTotal": 175000,
+      "paymentMethod": "QRIS",
+      "severity": "HIGH",
+      "codes": [
+        "PROOF_FILE_MISSING"
+      ],
+      "notes": [
+        "Berkas bukti tidak ditemukan di storage."
+      ]
+    },
+    {
+      "reservationId": "a039a535-91db-4d45-82da-0525f2b1423b",
+      "customerId": "320d5302-3271-4b04-ad0d-55cc3029c8ec",
+      "customerName": "Bunda Retno",
+      "customerPhone": "6282132249740",
+      "status": "completed",
+      "bookingDate": "2026-10-20T05:00:00.000Z",
+      "proofUrl": "/media/outbound/default-tenant/66a19543c10949f98b6db8843127b6e3.jpg",
+      "proofFileExists": false,
+      "purchaseOccurredAt": "2026-10-20T07:06:16.579Z",
+      "receiptAmount": null,
+      "expectedTotal": 95000,
+      "paymentMethod": "QRIS",
+      "severity": "HIGH",
+      "codes": [
+        "PROOF_FILE_MISSING"
+      ],
+      "notes": [
+        "Berkas bukti tidak ditemukan di storage."
+      ]
+    },
+    {
+      "reservationId": "0bbe5c1d-8978-480a-999b-07a84cce1ef4",
+      "customerId": "d81d9a44-2670-422d-9ea3-e6dba8969e72",
+      "customerName": "Bunda Hilda",
+      "customerPhone": "6281938252933",
+      "status": "completed",
+      "bookingDate": "2026-10-20T23:30:00.000Z",
+      "proofUrl": null,
+      "proofFileExists": null,
+      "purchaseOccurredAt": null,
+      "receiptAmount": null,
+      "expectedTotal": 925000,
+      "paymentMethod": null,
+      "severity": "MEDIUM",
+      "codes": [
+        "MISSING_PROOF"
+      ],
+      "notes": []
+    },
+    {
+      "reservationId": "71f7eddc-1c7e-45b0-a0f7-f4ad772bdbd3",
+      "customerId": "770a5fe6-66d5-48f1-bef7-33e9bf175aa5",
+      "customerName": "Bunda Tere",
+      "customerPhone": "6281233138008",
+      "status": "completed",
+      "bookingDate": "2026-10-21T03:00:00.000Z",
+      "proofUrl": "/media/inbound/default-tenant/4594183df3fc47af9f7df20de0164182.jpg",
+      "proofFileExists": false,
+      "purchaseOccurredAt": "2026-10-21T00:00:00.000Z",
+      "receiptAmount": null,
+      "expectedTotal": 95000,
+      "paymentMethod": "Transfer",
+      "severity": "HIGH",
+      "codes": [
+        "PROOF_FILE_MISSING",
+        "PROOF_IN_PRUNABLE_STORAGE"
+      ],
+      "notes": [
+        "Berkas bukti tidak ditemukan di storage.",
+        "Bukti berada di folder inbound (retensi media chat, default 30 hari)."
+      ]
+    },
+    {
+      "reservationId": "73a5af7b-fbdf-4964-b738-7955a2d98bcd",
+      "customerId": "9a63c3b8-67d0-4bf0-a8dd-138a2f6c0fd8",
+      "customerName": "Bunda Leliy",
+      "customerPhone": "628113099991",
+      "status": "completed",
+      "bookingDate": "2026-10-21T08:00:00.000Z",
+      "proofUrl": "/media/inbound/default-tenant/01fef3a6faf04350a39a4eba86e69e55.jpg",
+      "proofFileExists": false,
+      "purchaseOccurredAt": "2026-10-22T00:00:00.000Z",
+      "receiptAmount": null,
+      "expectedTotal": 75000,
+      "paymentMethod": "QRIS",
+      "severity": "HIGH",
+      "codes": [
+        "PROOF_FILE_MISSING",
+        "PROOF_IN_PRUNABLE_STORAGE"
+      ],
+      "notes": [
+        "Berkas bukti tidak ditemukan di storage.",
+        "Bukti berada di folder inbound (retensi media chat, default 30 hari)."
+      ]
+    },
+    {
+      "reservationId": "ed46bee3-580d-4a28-80fe-6c655b6f6f9c",
+      "customerId": "063a3e04-2185-4cec-994e-22dbaec78528",
+      "customerName": "Bunda Savira",
+      "customerPhone": "6285646819945",
+      "status": "completed",
+      "bookingDate": "2026-10-21T09:30:00.000Z",
+      "proofUrl": "/media/inbound/default-tenant/0ebacf6e1c564b6894734766b0a4a929.jpg",
+      "proofFileExists": false,
+      "purchaseOccurredAt": "2026-10-21T00:00:00.000Z",
+      "receiptAmount": null,
+      "expectedTotal": 175000,
+      "paymentMethod": "QRIS",
+      "severity": "HIGH",
+      "codes": [
+        "PROOF_FILE_MISSING",
+        "PROOF_IN_PRUNABLE_STORAGE"
+      ],
+      "notes": [
+        "Berkas bukti tidak ditemukan di storage.",
+        "Bukti berada di folder inbound (retensi media chat, default 30 hari)."
+      ]
+    },
+    {
+      "reservationId": "17bec206-436e-4932-85f2-4df51ab62618",
+      "customerId": "dba2a8f8-9917-4aab-bf36-fe7b38b71cfe",
+      "customerName": "Bunda Nurul Hidayati",
+      "customerPhone": "6282146540499",
+      "status": "completed",
+      "bookingDate": "2026-10-22T01:00:00.000Z",
+      "proofUrl": "/media/inbound/default-tenant/c4fbbfc664be411e8e510d29282ceafc.jpg",
+      "proofFileExists": false,
+      "purchaseOccurredAt": "2026-10-22T00:00:00.000Z",
+      "receiptAmount": null,
+      "expectedTotal": 90000,
+      "paymentMethod": "QRIS",
+      "severity": "HIGH",
+      "codes": [
+        "PROOF_FILE_MISSING",
+        "PROOF_IN_PRUNABLE_STORAGE"
+      ],
+      "notes": [
+        "Berkas bukti tidak ditemukan di storage.",
+        "Bukti berada di folder inbound (retensi media chat, default 30 hari)."
+      ]
+    },
+    {
+      "reservationId": "ba90c013-8fa4-4b7b-ab12-b2785bccb1af",
+      "customerId": "20554572-d8ee-4481-a71a-574f1d758ce6",
+      "customerName": "Bunda Jasmine",
+      "customerPhone": "628133313187",
+      "status": "completed",
+      "bookingDate": "2026-10-22T03:00:00.000Z",
+      "proofUrl": "/media/inbound/default-tenant/bb72e9a0269f489d8cd13c37dcddf596.jpg",
+      "proofFileExists": false,
+      "purchaseOccurredAt": "2026-10-22T00:00:00.000Z",
+      "receiptAmount": null,
+      "expectedTotal": 110000,
+      "paymentMethod": "QRIS",
+      "severity": "HIGH",
+      "codes": [
+        "PROOF_FILE_MISSING",
+        "PROOF_IN_PRUNABLE_STORAGE"
+      ],
+      "notes": [
+        "Berkas bukti tidak ditemukan di storage.",
+        "Bukti berada di folder inbound (retensi media chat, default 30 hari)."
+      ]
+    },
+    {
+      "reservationId": "99e53bb2-94b5-4c6b-94c5-6edd253834a1",
+      "customerId": "a4da5347-8c49-4db0-a1f3-c25ba2092a85",
+      "customerName": "Bunda Pamela",
+      "customerPhone": "6281230755794",
+      "status": "completed",
+      "bookingDate": "2026-10-22T04:00:00.000Z",
+      "proofUrl": "/media/inbound/default-tenant/343162c95f814ae284b1741ff2e5d7fc.jpg",
+      "proofFileExists": false,
+      "purchaseOccurredAt": "2026-10-21T00:00:00.000Z",
+      "receiptAmount": null,
+      "expectedTotal": 155000,
+      "paymentMethod": "QRIS",
+      "severity": "HIGH",
+      "codes": [
+        "PROOF_FILE_MISSING",
+        "PROOF_IN_PRUNABLE_STORAGE"
+      ],
+      "notes": [
+        "Berkas bukti tidak ditemukan di storage.",
+        "Bukti berada di folder inbound (retensi media chat, default 30 hari)."
+      ]
+    },
+    {
+      "reservationId": "86624d70-8946-4124-b340-9decd3863f26",
+      "customerId": "8d77b054-8907-4986-80d4-c6de9fac8e6d",
+      "customerName": "Bunda Devi",
+      "customerPhone": "6285640652774",
+      "status": "completed",
+      "bookingDate": "2026-10-22T06:30:00.000Z",
+      "proofUrl": "/media/outbound/default-tenant/8df02e57f5fa4c63aefd0cf3d43d29b9.jpg",
+      "proofFileExists": false,
+      "purchaseOccurredAt": "2026-10-22T09:16:01.197Z",
+      "receiptAmount": null,
+      "expectedTotal": 170000,
+      "paymentMethod": "QRIS",
+      "severity": "HIGH",
+      "codes": [
+        "PROOF_FILE_MISSING"
+      ],
+      "notes": [
+        "Berkas bukti tidak ditemukan di storage."
+      ]
+    },
+    {
+      "reservationId": "26c4fc8f-c236-4514-8db3-fb387a707754",
+      "customerId": "3159f0fb-6a73-402c-9dcf-881e31974a40",
+      "customerName": "Bunda Fellicia",
+      "customerPhone": "6287852674363",
+      "status": "completed",
+      "bookingDate": "2026-10-22T09:00:00.000Z",
+      "proofUrl": "/media/inbound/default-tenant/5158c3adcfcc4c8d99e4e42d422011f0.jpg",
+      "proofFileExists": false,
+      "purchaseOccurredAt": "2026-10-22T00:00:00.000Z",
+      "receiptAmount": null,
+      "expectedTotal": 115000,
+      "paymentMethod": "QRIS",
+      "severity": "HIGH",
+      "codes": [
+        "PROOF_FILE_MISSING",
+        "PROOF_IN_PRUNABLE_STORAGE"
+      ],
+      "notes": [
+        "Berkas bukti tidak ditemukan di storage.",
+        "Bukti berada di folder inbound (retensi media chat, default 30 hari)."
+      ]
+    },
+    {
+      "reservationId": "6dd463c6-5ab9-4502-8593-cffe9aeccc63",
+      "customerId": "7677e1d8-6cc1-4a34-9ebf-2f71e00d8c3a",
+      "customerName": "Bunda Firda",
+      "customerPhone": "628816336788",
+      "status": "completed",
+      "bookingDate": "2026-10-22T09:30:00.000Z",
+      "proofUrl": "/media/inbound/default-tenant/d622397bdaa043dda96decbd1321bf77.jpg",
+      "proofFileExists": false,
+      "purchaseOccurredAt": "2026-10-22T00:00:00.000Z",
+      "receiptAmount": null,
+      "expectedTotal": 80000,
+      "paymentMethod": "QRIS",
+      "severity": "HIGH",
+      "codes": [
+        "PROOF_FILE_MISSING",
+        "PROOF_IN_PRUNABLE_STORAGE"
+      ],
+      "notes": [
+        "Berkas bukti tidak ditemukan di storage.",
+        "Bukti berada di folder inbound (retensi media chat, default 30 hari)."
+      ]
+    },
+    {
+      "reservationId": "549215ae-079e-4576-bb41-d3b34f5b668d",
+      "customerId": "7ea0f9e7-a075-49d0-9ed0-0708bcae8108",
+      "customerName": "Bunda Mareta",
+      "customerPhone": "6282136569840",
+      "status": "completed",
+      "bookingDate": "2026-10-23T02:00:00.000Z",
+      "proofUrl": null,
+      "proofFileExists": null,
+      "purchaseOccurredAt": null,
+      "receiptAmount": null,
+      "expectedTotal": 100000,
+      "paymentMethod": null,
+      "severity": "MEDIUM",
+      "codes": [
+        "MISSING_PROOF"
+      ],
+      "notes": []
+    },
+    {
+      "reservationId": "1727eacc-81ef-4637-9631-1bcbb99727b4",
+      "customerId": "3844d3ee-c021-4714-b482-73781fe6529d",
+      "customerName": "Bunda Suciani",
+      "customerPhone": "6285878033569",
+      "status": "completed",
+      "bookingDate": "2026-10-23T02:00:00.000Z",
+      "proofUrl": "/media/inbound/default-tenant/86120ba5574146fcb9742c1a2a1df539.jpg",
+      "proofFileExists": false,
+      "purchaseOccurredAt": "2026-10-23T00:00:00.000Z",
+      "receiptAmount": null,
+      "expectedTotal": 95000,
+      "paymentMethod": "QRIS",
+      "severity": "HIGH",
+      "codes": [
+        "PROOF_FILE_MISSING",
+        "PROOF_IN_PRUNABLE_STORAGE"
+      ],
+      "notes": [
+        "Berkas bukti tidak ditemukan di storage.",
+        "Bukti berada di folder inbound (retensi media chat, default 30 hari)."
+      ]
+    },
+    {
+      "reservationId": "304b881f-6076-423e-a123-a5122f7e76c9",
+      "customerId": "e4ba2011-aa55-4d33-b4e5-c373f033df44",
+      "customerName": "Bunda Rafisa",
+      "customerPhone": "6281234510381",
+      "status": "completed",
+      "bookingDate": "2026-10-23T03:30:00.000Z",
+      "proofUrl": null,
+      "proofFileExists": null,
+      "purchaseOccurredAt": null,
+      "receiptAmount": null,
+      "expectedTotal": 80000,
+      "paymentMethod": null,
+      "severity": "MEDIUM",
+      "codes": [
+        "MISSING_PROOF"
+      ],
+      "notes": []
+    },
+    {
+      "reservationId": "882eb7f7-fc5f-45fc-b2f0-8fa137a08e0d",
+      "customerId": "d0f4e80a-4a01-4401-a20c-e468ca67555c",
+      "customerName": "Bunda Wulan",
+      "customerPhone": "6287766559795",
+      "status": "completed",
+      "bookingDate": "2026-10-23T04:30:00.000Z",
+      "proofUrl": null,
+      "proofFileExists": null,
+      "purchaseOccurredAt": null,
+      "receiptAmount": null,
+      "expectedTotal": 160000,
+      "paymentMethod": null,
+      "severity": "MEDIUM",
+      "codes": [
+        "MISSING_PROOF"
+      ],
+      "notes": []
+    },
+    {
+      "reservationId": "83c4ea0a-ab18-4a3e-a8bf-296ab09dd56a",
+      "customerId": "65c3ed3c-c17d-457c-b514-846bc9814d4b",
+      "customerName": "Bunda Megga",
+      "customerPhone": "6281280800021",
+      "status": "completed",
+      "bookingDate": "2026-10-23T06:30:00.000Z",
+      "proofUrl": null,
+      "proofFileExists": null,
+      "purchaseOccurredAt": null,
+      "receiptAmount": null,
+      "expectedTotal": 60000,
+      "paymentMethod": null,
+      "severity": "MEDIUM",
+      "codes": [
+        "MISSING_PROOF"
+      ],
+      "notes": []
+    },
+    {
+      "reservationId": "7272a340-86ac-4ecd-8a73-4e2448ce430d",
+      "customerId": "8f9e6124-2246-49b5-b2e4-4def488e5738",
+      "customerName": "Bunda Mia",
+      "customerPhone": "6282140706880",
+      "status": "completed",
+      "bookingDate": "2026-10-23T08:00:00.000Z",
+      "proofUrl": null,
+      "proofFileExists": null,
+      "purchaseOccurredAt": null,
+      "receiptAmount": null,
+      "expectedTotal": 95000,
+      "paymentMethod": null,
+      "severity": "MEDIUM",
+      "codes": [
+        "MISSING_PROOF"
+      ],
+      "notes": []
+    },
+    {
+      "reservationId": "e473497b-b1ad-4155-97f9-b290481e0615",
+      "customerId": "cd5a2895-4fcb-4c2e-9b45-daf1625ffcc2",
+      "customerName": "Bunda Cynthia",
+      "customerPhone": "6287757017472",
+      "status": "completed",
+      "bookingDate": "2026-10-23T10:00:00.000Z",
+      "proofUrl": null,
+      "proofFileExists": null,
+      "purchaseOccurredAt": null,
+      "receiptAmount": null,
+      "expectedTotal": 65000,
+      "paymentMethod": null,
+      "severity": "MEDIUM",
+      "codes": [
+        "MISSING_PROOF"
+      ],
+      "notes": []
+    },
+    {
+      "reservationId": "3b1d9592-2cc9-4806-8569-7a2cbdda5c75",
+      "customerId": "68541a5c-6aff-46e1-a862-537bfb5d169e",
+      "customerName": "Bunda Dita",
+      "customerPhone": "6285726099317",
+      "status": "completed",
+      "bookingDate": "2026-10-24T02:00:00.000Z",
+      "proofUrl": "/media/inbound/default-tenant/35532b0268114c5ebdbc5da9a6801c84.jpg",
+      "proofFileExists": false,
+      "purchaseOccurredAt": "2026-10-24T00:00:00.000Z",
+      "receiptAmount": 10000,
+      "expectedTotal": 90000,
+      "paymentMethod": "QRIS",
+      "severity": "HIGH",
+      "codes": [
+        "PROOF_FILE_MISSING",
+        "PROOF_IN_PRUNABLE_STORAGE",
+        "AMOUNT_MISMATCH"
+      ],
+      "notes": [
+        "Berkas bukti tidak ditemukan di storage.",
+        "Bukti berada di folder inbound (retensi media chat, default 30 hari).",
+        "Nominal bukti Rp 10000 != tagihan Rp 90000."
+      ]
+    },
+    {
+      "reservationId": "4429b24f-b048-460c-b55a-68c14c7bac5d",
+      "customerId": "31369b32-3d08-41f3-84af-70eea71cbd1f",
+      "customerName": "Bunda Suami Bunda Luluk",
+      "customerPhone": "6281216169496",
+      "status": "completed",
+      "bookingDate": "2026-10-24T02:30:00.000Z",
+      "proofUrl": null,
+      "proofFileExists": null,
+      "purchaseOccurredAt": "2026-10-24T05:09:09.656Z",
+      "receiptAmount": null,
+      "expectedTotal": 100000,
+      "paymentMethod": "CASH",
+      "severity": "LOW",
+      "codes": [
+        "PAID_WITHOUT_PROOF"
+      ],
+      "notes": [
+        "Pembayaran tunai tanpa bukti transfer (wajar)."
+      ]
+    },
+    {
+      "reservationId": "9bf7cd7f-829e-4b0a-a9d8-ce287d79b059",
+      "customerId": "c677b211-7be2-495d-9178-f78e548ffdfa",
+      "customerName": "Bunda Marisa",
+      "customerPhone": "6285238124143",
+      "status": "completed",
+      "bookingDate": "2026-10-24T05:30:00.000Z",
+      "proofUrl": "/media/outbound/default-tenant/45d2b21938d743a5b6ba52a43f93a563.jpg",
+      "proofFileExists": false,
+      "purchaseOccurredAt": "2026-10-24T06:56:00.908Z",
+      "receiptAmount": null,
+      "expectedTotal": 75000,
+      "paymentMethod": "QRIS",
+      "severity": "HIGH",
+      "codes": [
+        "PROOF_FILE_MISSING"
+      ],
+      "notes": [
+        "Berkas bukti tidak ditemukan di storage."
+      ]
+    },
+    {
+      "reservationId": "a417630b-904e-414c-b73d-4b925ef50304",
+      "customerId": "aca1875d-4f10-4879-bee1-ba353ff87b9a",
+      "customerName": "Bunda Jennifer",
+      "customerPhone": "628113399397",
+      "status": "completed",
+      "bookingDate": "2026-10-24T06:30:00.000Z",
+      "proofUrl": "/media/inbound/default-tenant/f3d09811d7b5407d95d06308894fb5bb.jpg",
+      "proofFileExists": false,
+      "purchaseOccurredAt": "2026-10-24T00:00:00.000Z",
+      "receiptAmount": 95000,
+      "expectedTotal": 120000,
+      "paymentMethod": "Transfer",
+      "severity": "HIGH",
+      "codes": [
+        "PROOF_FILE_MISSING",
+        "PROOF_IN_PRUNABLE_STORAGE",
+        "AMOUNT_MISMATCH"
+      ],
+      "notes": [
+        "Berkas bukti tidak ditemukan di storage.",
+        "Bukti berada di folder inbound (retensi media chat, default 30 hari).",
+        "Nominal bukti Rp 95000 != tagihan Rp 120000."
+      ]
+    },
+    {
+      "reservationId": "661ce39e-b456-4239-8b7a-aa140f0636db",
+      "customerId": "a726f9a8-902c-42bc-8e53-9eda84db2cac",
+      "customerName": "Bunda Sheilly",
+      "customerPhone": "6285749345805",
+      "status": "completed",
+      "bookingDate": "2026-10-24T08:30:00.000Z",
+      "proofUrl": "/media/inbound/default-tenant/e23feaa7595a4edcbd0f2dcf1f0e69cc.jpg",
+      "proofFileExists": false,
+      "purchaseOccurredAt": "2026-10-24T00:00:00.000Z",
+      "receiptAmount": 235000,
+      "expectedTotal": 250000,
+      "paymentMethod": "QRIS",
+      "severity": "HIGH",
+      "codes": [
+        "PROOF_FILE_MISSING",
+        "PROOF_IN_PRUNABLE_STORAGE",
+        "AMOUNT_MISMATCH"
+      ],
+      "notes": [
+        "Berkas bukti tidak ditemukan di storage.",
+        "Bukti berada di folder inbound (retensi media chat, default 30 hari).",
+        "Nominal bukti Rp 235000 != tagihan Rp 250000."
+      ]
+    },
+    {
+      "reservationId": "a045f0e1-9a2d-410d-a599-f8ecd16fc499",
+      "customerId": "dbd3961b-ff79-463b-a302-63bc8af47428",
+      "customerName": "Bunda Ayu",
+      "customerPhone": "6281216571787",
+      "status": "completed",
+      "bookingDate": "2026-10-25T02:00:00.000Z",
+      "proofUrl": "/media/inbound/default-tenant/599edb79746b4535b2243166bd7799a7.jpg",
+      "proofFileExists": false,
+      "purchaseOccurredAt": "2026-10-25T00:00:00.000Z",
+      "receiptAmount": 79000,
+      "expectedTotal": 100000,
+      "paymentMethod": "Transfer",
+      "severity": "HIGH",
+      "codes": [
+        "PROOF_FILE_MISSING",
+        "PROOF_IN_PRUNABLE_STORAGE",
+        "AMOUNT_MISMATCH"
+      ],
+      "notes": [
+        "Berkas bukti tidak ditemukan di storage.",
+        "Bukti berada di folder inbound (retensi media chat, default 30 hari).",
+        "Nominal bukti Rp 79000 != tagihan Rp 100000."
+      ]
+    },
+    {
+      "reservationId": "2df19ab4-fa20-46ce-99b2-3255bebf0037",
+      "customerId": "14e8b527-652b-4ae4-866b-89b2c980ede6",
+      "customerName": "Bunda Ririn",
+      "customerPhone": "6281332636818",
+      "status": "completed",
+      "bookingDate": "2026-10-25T07:30:00.000Z",
+      "proofUrl": null,
+      "proofFileExists": null,
+      "purchaseOccurredAt": null,
+      "receiptAmount": null,
+      "expectedTotal": 80000,
+      "paymentMethod": null,
+      "severity": "MEDIUM",
+      "codes": [
+        "MISSING_PROOF"
+      ],
+      "notes": []
+    },
+    {
+      "reservationId": "8bcb3d9e-f41e-4b83-8432-2609613bd801",
+      "customerId": "36420880-4812-40ba-b9a0-b49832d3acc1",
+      "customerName": "Bunda Sherly Mayshita",
+      "customerPhone": "6285931048086",
+      "status": "completed",
+      "bookingDate": "2026-10-25T11:30:00.000Z",
+      "proofUrl": "/media/inbound/default-tenant/d92696b2c8bf44569ef68573c7d5be37.jpg",
+      "proofFileExists": false,
+      "purchaseOccurredAt": "2026-10-25T00:00:00.000Z",
+      "receiptAmount": 165000,
+      "expectedTotal": 170000,
+      "paymentMethod": "QRIS",
+      "severity": "HIGH",
+      "codes": [
+        "PROOF_FILE_MISSING",
+        "PROOF_IN_PRUNABLE_STORAGE",
+        "AMOUNT_MISMATCH"
+      ],
+      "notes": [
+        "Berkas bukti tidak ditemukan di storage.",
+        "Bukti berada di folder inbound (retensi media chat, default 30 hari).",
+        "Nominal bukti Rp 165000 != tagihan Rp 170000."
+      ]
+    },
+    {
+      "reservationId": "aed61ebe-5041-4f56-997b-93d066b7dff3",
+      "customerId": "fa1ec752-7855-4048-8c62-bd2545e46bdc",
+      "customerName": "Bunda briella",
+      "customerPhone": "6283856165785",
+      "status": "completed",
+      "bookingDate": "2026-10-26T02:00:00.000Z",
+      "proofUrl": null,
+      "proofFileExists": null,
+      "purchaseOccurredAt": null,
+      "receiptAmount": null,
+      "expectedTotal": 110000,
+      "paymentMethod": null,
+      "severity": "MEDIUM",
+      "codes": [
+        "MISSING_PROOF"
+      ],
+      "notes": []
+    },
+    {
+      "reservationId": "520e44f2-1c40-4f94-bd8f-f63f4d2210f1",
+      "customerId": "f313e381-f0d9-401b-b381-97028a89565a",
+      "customerName": "Bunda Mia Rachmawati",
+      "customerPhone": "6281332478233",
+      "status": "completed",
+      "bookingDate": "2026-10-26T03:30:00.000Z",
+      "proofUrl": null,
+      "proofFileExists": null,
+      "purchaseOccurredAt": "2026-10-26T06:05:03.024Z",
+      "receiptAmount": null,
+      "expectedTotal": 205000,
+      "paymentMethod": "CASH",
+      "severity": "LOW",
+      "codes": [
+        "PAID_WITHOUT_PROOF"
+      ],
+      "notes": [
+        "Pembayaran tunai tanpa bukti transfer (wajar)."
+      ]
+    },
+    {
+      "reservationId": "4ff5a218-9ee9-4433-8319-e8f54fe35dae",
+      "customerId": "987c1fac-e13e-4a32-962b-2e80d307331f",
+      "customerName": "Bunda Suami Eprill",
+      "customerPhone": "62895368703065",
+      "status": "completed",
+      "bookingDate": "2026-10-26T06:30:00.000Z",
+      "proofUrl": null,
+      "proofFileExists": null,
+      "purchaseOccurredAt": null,
+      "receiptAmount": null,
+      "expectedTotal": 95000,
+      "paymentMethod": null,
+      "severity": "MEDIUM",
+      "codes": [
+        "MISSING_PROOF"
+      ],
+      "notes": []
+    },
+    {
+      "reservationId": "20e4e2f9-f82d-4eeb-9426-c69967e1a446",
+      "customerId": "c6e10f57-40d8-4d24-9a7c-4abb103fe29e",
+      "customerName": "Bunda Okta",
+      "customerPhone": "6285158879339",
+      "status": "completed",
+      "bookingDate": "2026-10-26T08:00:00.000Z",
+      "proofUrl": null,
+      "proofFileExists": null,
+      "purchaseOccurredAt": "2026-10-26T07:23:32.854Z",
+      "receiptAmount": null,
+      "expectedTotal": 80000,
+      "paymentMethod": "CASH",
+      "severity": "LOW",
+      "codes": [
+        "PAID_WITHOUT_PROOF"
+      ],
+      "notes": [
+        "Pembayaran tunai tanpa bukti transfer (wajar)."
+      ]
+    },
+    {
+      "reservationId": "8d2de9ba-1631-4f62-acf6-9f05f96a5515",
+      "customerId": "33f3da66-0a24-4c1b-b19d-7d8fd9301738",
+      "customerName": "Bunda Shendi Kharisma",
+      "customerPhone": "6285725700714",
+      "status": "completed",
+      "bookingDate": "2026-10-27T02:00:00.000Z",
+      "proofUrl": "/media/outbound/default-tenant/7f741e3c775749caa0cfdcd991d5e0c6.jpg",
+      "proofFileExists": false,
+      "purchaseOccurredAt": "2026-10-27T03:56:51.389Z",
+      "receiptAmount": null,
+      "expectedTotal": 155000,
+      "paymentMethod": "QRIS",
+      "severity": "HIGH",
+      "codes": [
+        "PROOF_FILE_MISSING"
+      ],
+      "notes": [
+        "Berkas bukti tidak ditemukan di storage."
+      ]
+    },
+    {
+      "reservationId": "ba6670bd-2d12-4612-bc58-ed713c2c032f",
+      "customerId": "da9cf8b2-a44b-49b2-acf4-d044d3c619a4",
+      "customerName": "Bunda Dina",
+      "customerPhone": "6285816071628",
+      "status": "completed",
+      "bookingDate": "2026-10-27T02:00:00.000Z",
+      "proofUrl": null,
+      "proofFileExists": null,
+      "purchaseOccurredAt": null,
+      "receiptAmount": null,
+      "expectedTotal": 95000,
+      "paymentMethod": null,
+      "severity": "MEDIUM",
+      "codes": [
+        "MISSING_PROOF"
+      ],
+      "notes": []
+    },
+    {
+      "reservationId": "8690eec1-3e14-4b12-92ab-e66e9b971dd1",
+      "customerId": "05628f5a-6eaf-494c-a073-38511df8737f",
+      "customerName": "Bunda Ella",
+      "customerPhone": "6282234593428",
+      "status": "completed",
+      "bookingDate": "2026-10-27T04:00:00.000Z",
+      "proofUrl": "/media/inbound/default-tenant/e500b1ec0a81436f8599d9d9476bb223.jpg",
+      "proofFileExists": false,
+      "purchaseOccurredAt": "2026-10-27T00:00:00.000Z",
+      "receiptAmount": 75000,
+      "expectedTotal": 90000,
+      "paymentMethod": "QRIS",
+      "severity": "HIGH",
+      "codes": [
+        "PROOF_FILE_MISSING",
+        "PROOF_IN_PRUNABLE_STORAGE",
+        "AMOUNT_MISMATCH"
+      ],
+      "notes": [
+        "Berkas bukti tidak ditemukan di storage.",
+        "Bukti berada di folder inbound (retensi media chat, default 30 hari).",
+        "Nominal bukti Rp 75000 != tagihan Rp 90000."
+      ]
+    },
+    {
+      "reservationId": "fb150e10-b2df-4394-b808-fe1b65a4e935",
+      "customerId": "30bf725f-43ea-4876-a516-eda4c6a6b254",
+      "customerName": "Linov",
+      "customerPhone": "6281358343158",
+      "status": "completed",
+      "bookingDate": "2026-10-27T05:00:00.000Z",
+      "proofUrl": "/media/outbound/default-tenant/b7ea3415f0b84c10abd43d30149066be.jpg",
+      "proofFileExists": false,
+      "purchaseOccurredAt": "2026-10-27T05:14:08.373Z",
+      "receiptAmount": null,
+      "expectedTotal": 115000,
+      "paymentMethod": "QRIS",
+      "severity": "HIGH",
+      "codes": [
+        "PROOF_FILE_MISSING"
+      ],
+      "notes": [
+        "Berkas bukti tidak ditemukan di storage."
+      ]
+    },
+    {
+      "reservationId": "77491eb6-74d2-4b60-a1de-5cffa36f6842",
+      "customerId": "ff056127-cb96-4171-b12e-87c9b68aafab",
+      "customerName": "Bunda Anggi Zulfika",
+      "customerPhone": "6285604494724",
+      "status": "completed",
+      "bookingDate": "2026-10-28T02:00:00.000Z",
+      "proofUrl": null,
+      "proofFileExists": null,
+      "purchaseOccurredAt": null,
+      "receiptAmount": null,
+      "expectedTotal": 75000,
+      "paymentMethod": null,
+      "severity": "MEDIUM",
+      "codes": [
+        "MISSING_PROOF"
+      ],
+      "notes": []
+    },
+    {
+      "reservationId": "6b6e7243-cec7-470e-a57f-c61ab2ba8e83",
+      "customerId": "58784b40-3a2f-41af-8f4a-7b32ea83526b",
+      "customerName": "Bunda Ayu",
+      "customerPhone": "6281330708293",
+      "status": "completed",
+      "bookingDate": "2026-10-28T02:30:00.000Z",
+      "proofUrl": "/media/inbound/default-tenant/34e42592baa84e0f8a6090ba09da2312.jpg",
+      "proofFileExists": false,
+      "purchaseOccurredAt": "2026-10-28T00:00:00.000Z",
+      "receiptAmount": 85000,
+      "expectedTotal": 100000,
+      "paymentMethod": "Transfer",
+      "severity": "HIGH",
+      "codes": [
+        "PROOF_FILE_MISSING",
+        "PROOF_IN_PRUNABLE_STORAGE",
+        "AMOUNT_MISMATCH"
+      ],
+      "notes": [
+        "Berkas bukti tidak ditemukan di storage.",
+        "Bukti berada di folder inbound (retensi media chat, default 30 hari).",
+        "Nominal bukti Rp 85000 != tagihan Rp 100000."
+      ]
+    },
+    {
+      "reservationId": "671bc648-73c3-40bd-84b0-109e4656ac7d",
+      "customerId": "5f563276-a547-4b37-9f99-3da2da1ca7fe",
+      "customerName": "Bunda Annisa Radearilla",
+      "customerPhone": "6281224281507",
+      "status": "completed",
+      "bookingDate": "2026-10-28T03:30:00.000Z",
+      "proofUrl": null,
+      "proofFileExists": null,
+      "purchaseOccurredAt": null,
+      "receiptAmount": null,
+      "expectedTotal": 75000,
+      "paymentMethod": null,
+      "severity": "MEDIUM",
+      "codes": [
+        "MISSING_PROOF"
+      ],
+      "notes": []
+    },
+    {
+      "reservationId": "82868c35-fada-4de6-92dc-d0b72ea9375d",
+      "customerId": "0e879c99-3289-43e6-9f65-c4897da9603c",
+      "customerName": "Bunda Inna",
+      "customerPhone": "6282132995805",
+      "status": "completed",
+      "bookingDate": "2026-10-28T04:00:00.000Z",
+      "proofUrl": "/media/outbound/default-tenant/ddab73aa92324316b4db67d399ac641a.jpg",
+      "proofFileExists": false,
+      "purchaseOccurredAt": "2026-10-28T05:38:39.717Z",
+      "receiptAmount": null,
+      "expectedTotal": 90000,
+      "paymentMethod": "QRIS",
+      "severity": "HIGH",
+      "codes": [
+        "PROOF_FILE_MISSING"
+      ],
+      "notes": [
+        "Berkas bukti tidak ditemukan di storage."
+      ]
+    },
+    {
+      "reservationId": "e6d057e5-83b5-433b-bb30-8dcb9f1c5a03",
+      "customerId": "dddf1f65-053b-4c8c-a903-1a7b54732e60",
+      "customerName": "Bunda Arum",
+      "customerPhone": "6282111428977",
+      "status": "completed",
+      "bookingDate": "2026-10-28T07:00:00.000Z",
+      "proofUrl": null,
+      "proofFileExists": null,
+      "purchaseOccurredAt": null,
+      "receiptAmount": null,
+      "expectedTotal": 160000,
+      "paymentMethod": null,
+      "severity": "MEDIUM",
+      "codes": [
+        "MISSING_PROOF"
+      ],
+      "notes": []
+    },
+    {
+      "reservationId": "1c8fcda2-0a99-4d81-8a6c-030ea7bec953",
+      "customerId": "3c8e4d5b-d147-4d14-8927-a0ea8238529e",
+      "customerName": "Bunda Ervina",
+      "customerPhone": "628815532550",
+      "status": "completed",
+      "bookingDate": "2026-10-29T02:30:00.000Z",
+      "proofUrl": null,
+      "proofFileExists": null,
+      "purchaseOccurredAt": "2026-10-24T22:30:13.127Z",
+      "receiptAmount": null,
+      "expectedTotal": 80000,
+      "paymentMethod": null,
+      "severity": "MEDIUM",
+      "codes": [
+        "PAID_WITHOUT_PROOF"
+      ],
+      "notes": [
+        "Tercatat lunas non-tunai tetapi tidak ada berkas bukti."
+      ]
+    },
+    {
+      "reservationId": "cc6996dc-1b73-4eac-8b8e-6e6b88144a68",
+      "customerId": "ea665fdf-ca38-4293-bb15-d3e122d333d2",
+      "customerName": "Bunda Nandawulan",
+      "customerPhone": "6285755934855",
+      "status": "completed",
+      "bookingDate": "2026-10-29T02:30:00.000Z",
+      "proofUrl": null,
+      "proofFileExists": null,
+      "purchaseOccurredAt": "2026-10-29T05:13:26.103Z",
+      "receiptAmount": null,
+      "expectedTotal": 95000,
+      "paymentMethod": "CASH",
+      "severity": "LOW",
+      "codes": [
+        "PAID_WITHOUT_PROOF"
+      ],
+      "notes": [
+        "Pembayaran tunai tanpa bukti transfer (wajar)."
+      ]
+    },
+    {
+      "reservationId": "e96f929c-4969-410d-9b6e-538ac5d36eb0",
+      "customerId": "a3c90004-8f0a-4b10-90c5-37bf4a94a9ea",
+      "customerName": "ulfiana",
+      "customerPhone": "6289515768807",
+      "status": "completed",
+      "bookingDate": "2026-10-29T05:30:00.000Z",
+      "proofUrl": null,
+      "proofFileExists": null,
+      "purchaseOccurredAt": null,
+      "receiptAmount": null,
+      "expectedTotal": 115000,
+      "paymentMethod": null,
+      "severity": "MEDIUM",
+      "codes": [
+        "MISSING_PROOF"
+      ],
+      "notes": []
+    },
+    {
+      "reservationId": "ec3395b4-5588-4acc-9240-47be5af5d85c",
+      "customerId": "1be828dc-aae0-495b-969d-48b7d28c3072",
+      "customerName": "Azima",
+      "customerPhone": "6285856479479",
+      "status": "completed",
+      "bookingDate": "2026-10-29T06:00:00.000Z",
+      "proofUrl": null,
+      "proofFileExists": null,
+      "purchaseOccurredAt": "2026-10-29T08:35:13.984Z",
+      "receiptAmount": null,
+      "expectedTotal": 105000,
+      "paymentMethod": "CASH",
+      "severity": "LOW",
+      "codes": [
+        "PAID_WITHOUT_PROOF"
+      ],
+      "notes": [
+        "Pembayaran tunai tanpa bukti transfer (wajar)."
+      ]
+    },
+    {
+      "reservationId": "065b17af-5e3f-4948-8471-7bc9a14f0f95",
+      "customerId": "674b3c80-fef3-43bb-b360-531dd8b7202f",
+      "customerName": "Bunda Gina",
+      "customerPhone": "6285194925518",
+      "status": "completed",
+      "bookingDate": "2026-10-29T08:00:00.000Z",
+      "proofUrl": "/media/outbound/default-tenant/e4d8a64c25c64568bbc4cdb1d5b86a4d.jpg",
+      "proofFileExists": false,
+      "purchaseOccurredAt": "2026-10-29T09:43:46.256Z",
+      "receiptAmount": null,
+      "expectedTotal": 70000,
+      "paymentMethod": "QRIS",
+      "severity": "HIGH",
+      "codes": [
+        "PROOF_FILE_MISSING"
+      ],
+      "notes": [
+        "Berkas bukti tidak ditemukan di storage."
+      ]
+    },
+    {
+      "reservationId": "0d688caa-9927-4e8d-abc4-d5616c757f55",
+      "customerId": "0059a06e-ea8e-48ee-b818-d546bb3b2219",
+      "customerName": "Giscka Fadhilla",
+      "customerPhone": "6281238738441",
+      "status": "completed",
+      "bookingDate": "2026-10-29T08:00:00.000Z",
+      "proofUrl": null,
+      "proofFileExists": null,
+      "purchaseOccurredAt": null,
+      "receiptAmount": null,
+      "expectedTotal": 85000,
+      "paymentMethod": null,
+      "severity": "MEDIUM",
+      "codes": [
+        "MISSING_PROOF"
+      ],
+      "notes": []
+    },
+    {
+      "reservationId": "14176965-d7e6-4e38-8b20-5099acfb9f00",
+      "customerId": "7f7ab22d-51af-4615-a7be-209ee44a3857",
+      "customerName": "Bunda Agnes",
+      "customerPhone": "6288805704503",
+      "status": "completed",
+      "bookingDate": "2026-10-30T02:00:00.000Z",
+      "proofUrl": null,
+      "proofFileExists": null,
+      "purchaseOccurredAt": null,
+      "receiptAmount": null,
+      "expectedTotal": 75000,
+      "paymentMethod": null,
+      "severity": "MEDIUM",
+      "codes": [
+        "MISSING_PROOF"
+      ],
+      "notes": []
+    },
+    {
+      "reservationId": "6456461d-d039-4b20-82f6-bb55f190978d",
+      "customerId": "c659eba2-14bd-4f8f-9b6f-5ae7a4eceb32",
+      "customerName": "Bunda Vita",
+      "customerPhone": "6282140771756",
+      "status": "completed",
+      "bookingDate": "2026-10-30T03:30:00.000Z",
+      "proofUrl": "/media/inbound/default-tenant/5ae408ad535c40da8314615839873b17.jpg",
+      "proofFileExists": false,
+      "purchaseOccurredAt": "2026-10-30T00:00:00.000Z",
+      "receiptAmount": 175000,
+      "expectedTotal": 85000,
+      "paymentMethod": "QRIS",
+      "severity": "HIGH",
+      "codes": [
+        "PROOF_FILE_MISSING",
+        "PROOF_IN_PRUNABLE_STORAGE",
+        "AMOUNT_MISMATCH"
+      ],
+      "notes": [
+        "Berkas bukti tidak ditemukan di storage.",
+        "Bukti berada di folder inbound (retensi media chat, default 30 hari).",
+        "Nominal bukti Rp 175000 != tagihan Rp 85000."
+      ]
+    },
+    {
+      "reservationId": "fa3949a3-a588-4498-9f31-74f03b636f82",
+      "customerId": "bed09f6c-5877-4dfd-bf1c-4d970d1603d9",
+      "customerName": "Bunda Kinnas Sofia Amaranggana",
+      "customerPhone": "628133718453",
+      "status": "completed",
+      "bookingDate": "2026-10-30T05:00:00.000Z",
+      "proofUrl": null,
+      "proofFileExists": null,
+      "purchaseOccurredAt": null,
+      "receiptAmount": null,
+      "expectedTotal": 105000,
+      "paymentMethod": null,
+      "severity": "MEDIUM",
+      "codes": [
+        "MISSING_PROOF"
+      ],
+      "notes": []
+    },
+    {
+      "reservationId": "32a9b102-af68-4de8-8b1e-c092a69f9600",
+      "customerId": "320d5302-3271-4b04-ad0d-55cc3029c8ec",
+      "customerName": "Bunda Retno",
+      "customerPhone": "6282132249740",
+      "status": "completed",
+      "bookingDate": "2026-10-30T07:00:00.000Z",
+      "proofUrl": "/media/outbound/default-tenant/9f951bb381584c8484d3f3127660ea4a.jpg",
+      "proofFileExists": false,
+      "purchaseOccurredAt": "2026-10-30T08:31:25.444Z",
+      "receiptAmount": null,
+      "expectedTotal": 60000,
+      "paymentMethod": "QRIS",
+      "severity": "HIGH",
+      "codes": [
+        "PROOF_FILE_MISSING"
+      ],
+      "notes": [
+        "Berkas bukti tidak ditemukan di storage."
+      ]
+    },
+    {
+      "reservationId": "78e99dd5-8918-4bc4-a626-a54441fd83a6",
+      "customerId": "b0dffc8f-703a-4464-94d8-37d37548044c",
+      "customerName": "Bunda Tita",
+      "customerPhone": "6281703396371",
+      "status": "completed",
+      "bookingDate": "2026-10-31T02:00:00.000Z",
+      "proofUrl": "/media/inbound/default-tenant/1a2825e5472a42fabceb4d968f5c8949.jpg",
+      "proofFileExists": false,
+      "purchaseOccurredAt": "2026-10-31T00:00:00.000Z",
+      "receiptAmount": 75000,
+      "expectedTotal": 65000,
+      "paymentMethod": "Transfer",
+      "severity": "HIGH",
+      "codes": [
+        "PROOF_FILE_MISSING",
+        "PROOF_IN_PRUNABLE_STORAGE",
+        "AMOUNT_MISMATCH"
+      ],
+      "notes": [
+        "Berkas bukti tidak ditemukan di storage.",
+        "Bukti berada di folder inbound (retensi media chat, default 30 hari).",
+        "Nominal bukti Rp 75000 != tagihan Rp 65000."
+      ]
+    },
+    {
+      "reservationId": "9ee18ee2-e333-4d58-a0d9-bf553e75e85f",
+      "customerId": "f274493d-7173-4f91-be5c-5805f0c72efb",
+      "customerName": "Bunda Haniyyah",
+      "customerPhone": "6287788800765",
+      "status": "completed",
+      "bookingDate": "2026-10-31T02:30:00.000Z",
+      "proofUrl": "/media/inbound/default-tenant/64f749c447fe4e12ad5b180dd8416e08.jpg",
+      "proofFileExists": false,
+      "purchaseOccurredAt": "2026-10-30T00:00:00.000Z",
+      "receiptAmount": 20000,
+      "expectedTotal": 110000,
+      "paymentMethod": "QRIS",
+      "severity": "HIGH",
+      "codes": [
+        "PROOF_FILE_MISSING",
+        "PROOF_IN_PRUNABLE_STORAGE",
+        "AMOUNT_MISMATCH"
+      ],
+      "notes": [
+        "Berkas bukti tidak ditemukan di storage.",
+        "Bukti berada di folder inbound (retensi media chat, default 30 hari).",
+        "Nominal bukti Rp 20000 != tagihan Rp 110000."
+      ]
+    },
+    {
+      "reservationId": "1415fdc3-240a-476b-b644-de9ae127c920",
+      "customerId": "17a9853e-972e-4d52-8cd0-9eb8aea7e5b9",
+      "customerName": "Bunda Agnes Noor Octavia Mulki Ridho",
+      "customerPhone": "6289501211791",
+      "status": "completed",
+      "bookingDate": "2026-10-31T03:30:00.000Z",
+      "proofUrl": null,
+      "proofFileExists": null,
+      "purchaseOccurredAt": null,
+      "receiptAmount": null,
+      "expectedTotal": 190000,
+      "paymentMethod": null,
+      "severity": "MEDIUM",
+      "codes": [
+        "MISSING_PROOF"
+      ],
+      "notes": []
+    },
+    {
+      "reservationId": "f87928bb-81eb-4dc3-a673-7906a221cee1",
+      "customerId": "d46fad6f-d2dc-4cf5-8490-8053483c7bcb",
+      "customerName": "Bunda Feriyal",
+      "customerPhone": "6281217442171",
+      "status": "completed",
+      "bookingDate": "2026-10-31T04:00:00.000Z",
+      "proofUrl": null,
+      "proofFileExists": null,
+      "purchaseOccurredAt": null,
+      "receiptAmount": null,
+      "expectedTotal": 85000,
+      "paymentMethod": null,
+      "severity": "MEDIUM",
+      "codes": [
+        "MISSING_PROOF"
+      ],
+      "notes": []
+    },
+    {
+      "reservationId": "94ff7219-a6ef-4607-8335-eb788b4f7d94",
+      "customerId": "662ff401-4984-47fb-8263-22a11714bd22",
+      "customerName": "Bunda Maisya",
+      "customerPhone": "628980887940",
+      "status": "completed",
+      "bookingDate": "2026-10-31T06:00:00.000Z",
+      "proofUrl": "/media/inbound/default-tenant/789f18ddd1e14ee1824bf2250b9017b8.jpg",
+      "proofFileExists": false,
+      "purchaseOccurredAt": "2026-10-30T00:00:00.000Z",
+      "receiptAmount": 50000,
+      "expectedTotal": 70000,
+      "paymentMethod": "QRIS",
+      "severity": "HIGH",
+      "codes": [
+        "PROOF_FILE_MISSING",
+        "PROOF_IN_PRUNABLE_STORAGE",
+        "AMOUNT_MISMATCH"
+      ],
+      "notes": [
+        "Berkas bukti tidak ditemukan di storage.",
+        "Bukti berada di folder inbound (retensi media chat, default 30 hari).",
+        "Nominal bukti Rp 50000 != tagihan Rp 70000."
+      ]
+    },
+    {
+      "reservationId": "656fd1fc-77ba-40f1-9158-a16e95bffd76",
+      "customerId": "c45865ab-70c4-4a14-b50d-b4b41334e16c",
+      "customerName": "Bunda Mutiara",
+      "customerPhone": "6285117415425",
+      "status": "completed",
+      "bookingDate": "2026-10-31T08:00:00.000Z",
+      "proofUrl": null,
+      "proofFileExists": null,
+      "purchaseOccurredAt": null,
+      "receiptAmount": null,
+      "expectedTotal": 170000,
+      "paymentMethod": null,
+      "severity": "MEDIUM",
+      "codes": [
+        "MISSING_PROOF"
+      ],
+      "notes": []
+    },
+    {
+      "reservationId": "7020aa14-3ed0-4e11-8937-7b2b5709c526",
+      "customerId": "4f4e18eb-657f-4dbf-9bcc-44814c9ff0e8",
+      "customerName": "Hidayatus Sholikhah",
+      "customerPhone": "6289677431351",
+      "status": "completed",
+      "bookingDate": "2026-11-01T02:00:00.000Z",
+      "proofUrl": null,
+      "proofFileExists": null,
+      "purchaseOccurredAt": "2026-11-05T14:55:13.983Z",
+      "receiptAmount": null,
+      "expectedTotal": 115000,
+      "paymentMethod": "CASH",
+      "severity": "LOW",
+      "codes": [
+        "PAID_WITHOUT_PROOF"
+      ],
+      "notes": [
+        "Pembayaran tunai tanpa bukti transfer (wajar)."
+      ]
+    },
+    {
+      "reservationId": "3bc46713-ab02-4f39-88f2-37b293fc1e81",
+      "customerId": "3a817599-1c4b-4036-8651-05ed49d04575",
+      "customerName": "Bunda Hindah",
+      "customerPhone": "6287862784881",
+      "status": "completed",
+      "bookingDate": "2026-11-01T02:00:00.000Z",
+      "proofUrl": null,
+      "proofFileExists": null,
+      "purchaseOccurredAt": null,
+      "receiptAmount": null,
+      "expectedTotal": 90000,
+      "paymentMethod": null,
+      "severity": "MEDIUM",
+      "codes": [
+        "MISSING_PROOF"
+      ],
+      "notes": []
+    },
+    {
+      "reservationId": "ad587990-f70d-43b9-9573-94732538ef5c",
+      "customerId": "9bb64e7b-b92b-46b7-8fc0-b10d3f1ce340",
+      "customerName": "Susi Setyowati",
+      "customerPhone": "6285730657340",
+      "status": "completed",
+      "bookingDate": "2026-11-01T02:00:00.000Z",
+      "proofUrl": null,
+      "proofFileExists": null,
+      "purchaseOccurredAt": null,
+      "receiptAmount": null,
+      "expectedTotal": 105000,
+      "paymentMethod": null,
+      "severity": "MEDIUM",
+      "codes": [
+        "MISSING_PROOF"
+      ],
+      "notes": []
+    },
+    {
+      "reservationId": "528891ad-2d4f-4015-93cf-ea717182976b",
+      "customerId": "3455bec1-335d-4928-9281-9e3dbadc5648",
+      "customerName": "Bunda Meta",
+      "customerPhone": "6287855873973",
+      "status": "completed",
+      "bookingDate": "2026-11-01T04:00:00.000Z",
+      "proofUrl": null,
+      "proofFileExists": null,
+      "purchaseOccurredAt": null,
+      "receiptAmount": null,
+      "expectedTotal": 75000,
+      "paymentMethod": null,
+      "severity": "MEDIUM",
+      "codes": [
+        "MISSING_PROOF"
+      ],
+      "notes": []
+    },
+    {
+      "reservationId": "2b07ecd4-ffca-4b74-b2ea-7b3461e2fa41",
+      "customerId": "afd9b0ec-9820-43fb-b320-aa5b4f5bc19e",
+      "customerName": "Bunda Mutia",
+      "customerPhone": "6288994572210",
+      "status": "completed",
+      "bookingDate": "2026-11-01T05:30:00.000Z",
+      "proofUrl": null,
+      "proofFileExists": null,
+      "purchaseOccurredAt": null,
+      "receiptAmount": null,
+      "expectedTotal": 85000,
+      "paymentMethod": null,
+      "severity": "MEDIUM",
+      "codes": [
+        "MISSING_PROOF"
+      ],
+      "notes": []
+    },
+    {
+      "reservationId": "7b972a30-fc03-428c-a07b-810408d96596",
+      "customerId": "8898acfe-73fd-4aa8-a53a-10be1862b04f",
+      "customerName": "Bunda Ananda",
+      "customerPhone": "6285755550968",
+      "status": "completed",
+      "bookingDate": "2026-11-01T06:00:00.000Z",
+      "proofUrl": "/media/inbound/default-tenant/9db6bb45b79e47c79ba29285c6fecb00.jpg",
+      "proofFileExists": false,
+      "purchaseOccurredAt": "2026-11-01T00:00:00.000Z",
+      "receiptAmount": 75000,
+      "expectedTotal": 75000,
+      "paymentMethod": "QRIS",
+      "severity": "HIGH",
+      "codes": [
+        "PROOF_FILE_MISSING",
+        "PROOF_IN_PRUNABLE_STORAGE"
+      ],
+      "notes": [
+        "Berkas bukti tidak ditemukan di storage.",
+        "Bukti berada di folder inbound (retensi media chat, default 30 hari)."
+      ]
+    },
+    {
+      "reservationId": "35785421-dcfb-4d6d-a43a-982eef338473",
+      "customerId": "b7590497-e5d3-4b16-a8e0-47788eaa86e9",
+      "customerName": "Bunda Tety",
+      "customerPhone": "62881081022666",
+      "status": "completed",
+      "bookingDate": "2026-11-01T08:30:00.000Z",
+      "proofUrl": null,
+      "proofFileExists": null,
+      "purchaseOccurredAt": null,
+      "receiptAmount": null,
+      "expectedTotal": 90000,
+      "paymentMethod": null,
+      "severity": "MEDIUM",
+      "codes": [
+        "MISSING_PROOF"
+      ],
+      "notes": []
+    },
+    {
+      "reservationId": "278fe76c-53af-4488-977c-ca23b8f83939",
+      "customerId": "09e631e2-7f3a-4de8-8b60-5e945ffa8ed7",
+      "customerName": "Bunda Zelikadewi",
+      "customerPhone": "62881026768099",
+      "status": "completed",
+      "bookingDate": "2026-11-02T02:00:00.000Z",
+      "proofUrl": null,
+      "proofFileExists": null,
+      "purchaseOccurredAt": null,
+      "receiptAmount": null,
+      "expectedTotal": 105000,
+      "paymentMethod": null,
+      "severity": "MEDIUM",
+      "codes": [
+        "MISSING_PROOF"
+      ],
+      "notes": []
+    },
+    {
+      "reservationId": "b603d8d7-13ad-41b2-b309-3075af41508a",
+      "customerId": "ab22e3c0-24a6-4d8a-9f15-ad1c3b437bc4",
+      "customerName": "Bunda Raras",
+      "customerPhone": "628563277980",
+      "status": "completed",
+      "bookingDate": "2026-11-02T03:30:00.000Z",
+      "proofUrl": null,
+      "proofFileExists": null,
+      "purchaseOccurredAt": null,
+      "receiptAmount": null,
+      "expectedTotal": 70000,
+      "paymentMethod": null,
+      "severity": "MEDIUM",
+      "codes": [
+        "MISSING_PROOF"
+      ],
+      "notes": []
+    },
+    {
+      "reservationId": "d47551d9-a8d3-4a9e-a3f9-5a0c0d373601",
+      "customerId": "c779005d-f4c6-4390-9322-403d775dcd38",
+      "customerName": "Bunda Nisamahardilla",
+      "customerPhone": "6281330453185",
+      "status": "completed",
+      "bookingDate": "2026-11-02T06:00:00.000Z",
+      "proofUrl": null,
+      "proofFileExists": null,
+      "purchaseOccurredAt": null,
+      "receiptAmount": null,
+      "expectedTotal": 75000,
+      "paymentMethod": null,
+      "severity": "MEDIUM",
+      "codes": [
+        "MISSING_PROOF"
+      ],
+      "notes": []
+    },
+    {
+      "reservationId": "d5a28a02-188d-4506-893f-13912acba54b",
+      "customerId": "aca1875d-4f10-4879-bee1-ba353ff87b9a",
+      "customerName": "Bunda Jennifer",
+      "customerPhone": "628113399397",
+      "status": "completed",
+      "bookingDate": "2026-11-02T07:30:00.000Z",
+      "proofUrl": null,
+      "proofFileExists": null,
+      "purchaseOccurredAt": null,
+      "receiptAmount": null,
+      "expectedTotal": 95000,
+      "paymentMethod": null,
+      "severity": "MEDIUM",
+      "codes": [
+        "MISSING_PROOF"
+      ],
+      "notes": []
+    },
+    {
+      "reservationId": "6afa71c2-e281-459e-8d7d-67c01fe8963a",
+      "customerId": "dcbbf821-bd5d-477a-a10d-280c5d9f8db8",
+      "customerName": "Bunda Devia",
+      "customerPhone": "6285850166929",
+      "status": "completed",
+      "bookingDate": "2026-11-03T01:30:00.000Z",
+      "proofUrl": null,
+      "proofFileExists": null,
+      "purchaseOccurredAt": "2026-11-03T03:34:00.000Z",
+      "receiptAmount": 120000,
+      "expectedTotal": 119000,
+      "paymentMethod": "TRANSFER",
+      "severity": "MEDIUM",
+      "codes": [
+        "PAID_WITHOUT_PROOF",
+        "AMOUNT_MISMATCH"
+      ],
+      "notes": [
+        "Tercatat lunas non-tunai tetapi tidak ada berkas bukti.",
+        "Nominal bukti Rp 120000 != tagihan Rp 119000."
+      ]
+    },
+    {
+      "reservationId": "0eebb2ef-cbdf-4fd0-beda-037cbca98992",
+      "customerId": "a1b21405-c26c-4919-9217-f93ae6dce90d",
+      "customerName": "Fiko",
+      "customerPhone": "62895364920260",
+      "status": "completed",
+      "bookingDate": "2026-11-03T02:00:00.000Z",
+      "proofUrl": null,
+      "proofFileExists": null,
+      "purchaseOccurredAt": "2026-11-05T14:54:57.094Z",
+      "receiptAmount": null,
+      "expectedTotal": 120000,
+      "paymentMethod": "CASH",
+      "severity": "LOW",
+      "codes": [
+        "PAID_WITHOUT_PROOF"
+      ],
+      "notes": [
+        "Pembayaran tunai tanpa bukti transfer (wajar)."
+      ]
+    },
+    {
+      "reservationId": "2e186b28-1616-4da4-8346-4ecc0e44fc1a",
+      "customerId": "e9fd670f-6f04-4a02-b079-321e74853d66",
+      "customerName": "Bunda Threesa",
+      "customerPhone": "6282272440944",
+      "status": "completed",
+      "bookingDate": "2026-11-03T04:00:00.000Z",
+      "proofUrl": null,
+      "proofFileExists": null,
+      "purchaseOccurredAt": null,
+      "receiptAmount": null,
+      "expectedTotal": 235000,
+      "paymentMethod": null,
+      "severity": "MEDIUM",
+      "codes": [
+        "MISSING_PROOF"
+      ],
+      "notes": []
+    },
+    {
+      "reservationId": "80110511-726b-4b97-929b-b0b4b6cab142",
+      "customerId": "436a4785-23ea-4b1b-834d-d1a1d68df1cf",
+      "customerName": "Bunda Yanti",
+      "customerPhone": "6281803059159",
+      "status": "completed",
+      "bookingDate": "2026-11-03T04:30:00.000Z",
+      "proofUrl": "/media/outbound/default-tenant/f3f332d6bf67453e8e9d69da4dcccf34.jpg",
+      "proofFileExists": false,
+      "purchaseOccurredAt": "2026-11-03T04:57:33.820Z",
+      "receiptAmount": null,
+      "expectedTotal": 105000,
+      "paymentMethod": "QRIS",
+      "severity": "HIGH",
+      "codes": [
+        "PROOF_FILE_MISSING"
+      ],
+      "notes": [
+        "Berkas bukti tidak ditemukan di storage."
+      ]
+    },
+    {
+      "reservationId": "a5328509-e022-4627-9850-0701a48a7c7c",
+      "customerId": "9a63c3b8-67d0-4bf0-a8dd-138a2f6c0fd8",
+      "customerName": "Bunda Leliy",
+      "customerPhone": "628113099991",
+      "status": "completed",
+      "bookingDate": "2026-11-03T08:00:00.000Z",
+      "proofUrl": null,
+      "proofFileExists": null,
+      "purchaseOccurredAt": "2026-11-03T03:22:00.000Z",
+      "receiptAmount": 80000,
+      "expectedTotal": 80000,
+      "paymentMethod": "QRIS",
+      "severity": "MEDIUM",
+      "codes": [
+        "PAID_WITHOUT_PROOF"
+      ],
+      "notes": [
+        "Tercatat lunas non-tunai tetapi tidak ada berkas bukti."
+      ]
+    },
+    {
+      "reservationId": "0d7ade08-d8f6-46f5-81a6-13615401c1b6",
+      "customerId": "27b690e8-3be3-44d9-9848-017fb4a836a6",
+      "customerName": "Bunda Risma Kurnia Ramadhani",
+      "customerPhone": "6285731569105",
+      "status": "completed",
+      "bookingDate": "2026-11-03T09:30:00.000Z",
+      "proofUrl": null,
+      "proofFileExists": null,
+      "purchaseOccurredAt": "2026-11-05T14:54:46.812Z",
+      "receiptAmount": null,
+      "expectedTotal": 95000,
+      "paymentMethod": "CASH",
+      "severity": "LOW",
+      "codes": [
+        "PAID_WITHOUT_PROOF"
+      ],
+      "notes": [
+        "Pembayaran tunai tanpa bukti transfer (wajar)."
+      ]
+    },
+    {
+      "reservationId": "7d4f4f5f-b032-4c2b-a28f-3304424f1314",
+      "customerId": "3b36d4f9-c0d8-40fb-95f2-79dba935ba77",
+      "customerName": "Bunda Rika",
+      "customerPhone": "6281336055967",
+      "status": "completed",
+      "bookingDate": "2026-11-04T02:30:00.000Z",
+      "proofUrl": null,
+      "proofFileExists": null,
+      "purchaseOccurredAt": null,
+      "receiptAmount": null,
+      "expectedTotal": 85000,
+      "paymentMethod": null,
+      "severity": "MEDIUM",
+      "codes": [
+        "MISSING_PROOF"
+      ],
+      "notes": []
+    },
+    {
+      "reservationId": "acbcf0cb-08cd-4a19-a963-e0dc85953c2b",
+      "customerId": "a4d72b31-4e25-4317-b26d-8a4c79db11df",
+      "customerName": "Bunda ifa",
+      "customerPhone": "6281233771911",
+      "status": "completed",
+      "bookingDate": "2026-11-04T04:00:00.000Z",
+      "proofUrl": "/media/inbound/default-tenant/6fc2a5ab99c94ade986b4677accc67bd.jpg",
+      "proofFileExists": false,
+      "purchaseOccurredAt": "2026-11-04T00:00:00.000Z",
+      "receiptAmount": 145000,
+      "expectedTotal": 145000,
+      "paymentMethod": "QRIS",
+      "severity": "HIGH",
+      "codes": [
+        "PROOF_FILE_MISSING",
+        "PROOF_IN_PRUNABLE_STORAGE"
+      ],
+      "notes": [
+        "Berkas bukti tidak ditemukan di storage.",
+        "Bukti berada di folder inbound (retensi media chat, default 30 hari)."
+      ]
+    },
+    {
+      "reservationId": "37241b88-46f6-4227-980f-ac5460428bc5",
+      "customerId": "1e752b81-2a44-4396-868a-96e5f31eeac9",
+      "customerName": "Bunda Fanni",
+      "customerPhone": "6281357033354",
+      "status": "completed",
+      "bookingDate": "2026-11-04T05:00:00.000Z",
+      "proofUrl": null,
+      "proofFileExists": null,
+      "purchaseOccurredAt": "2026-11-04T06:34:52.437Z",
+      "receiptAmount": null,
+      "expectedTotal": 180000,
+      "paymentMethod": "CASH",
+      "severity": "LOW",
+      "codes": [
+        "PAID_WITHOUT_PROOF"
+      ],
+      "notes": [
+        "Pembayaran tunai tanpa bukti transfer (wajar)."
+      ]
+    },
+    {
+      "reservationId": "187412f1-0b4a-401c-b72a-1ba3cd1b3d3e",
+      "customerId": "4afb0f3e-1ea8-41ab-a24e-8bc0d633970a",
+      "customerName": "Bunda Chris",
+      "customerPhone": "6281390541340",
+      "status": "completed",
+      "bookingDate": "2026-11-04T08:00:00.000Z",
+      "proofUrl": null,
+      "proofFileExists": null,
+      "purchaseOccurredAt": null,
+      "receiptAmount": null,
+      "expectedTotal": 210000,
+      "paymentMethod": null,
+      "severity": "MEDIUM",
+      "codes": [
+        "MISSING_PROOF"
+      ],
+      "notes": []
+    },
+    {
+      "reservationId": "1ded09e1-7ef9-49ae-8fc5-31d981b874b9",
+      "customerId": "8a458aa4-0048-4af1-862a-9bec7b2f971f",
+      "customerName": "Bunda putri",
+      "customerPhone": "6281336693856",
+      "status": "completed",
+      "bookingDate": "2026-11-04T08:30:00.000Z",
+      "proofUrl": "/media/inbound/default-tenant/2adadb69c3f647e7b98bb348ae8330af.jpg",
+      "proofFileExists": false,
+      "purchaseOccurredAt": "2026-11-04T00:00:00.000Z",
+      "receiptAmount": 85000,
+      "expectedTotal": 85000,
+      "paymentMethod": "QRIS",
+      "severity": "HIGH",
+      "codes": [
+        "PROOF_FILE_MISSING",
+        "PROOF_IN_PRUNABLE_STORAGE"
+      ],
+      "notes": [
+        "Berkas bukti tidak ditemukan di storage.",
+        "Bukti berada di folder inbound (retensi media chat, default 30 hari)."
+      ]
+    },
+    {
+      "reservationId": "5e3bfd2e-3319-4810-8db6-87e24ef3a161",
+      "customerId": "ac5a784b-dc4e-4530-8600-d0b4ab8fe2cb",
+      "customerName": "Bunda anjani",
+      "customerPhone": "6281554555621",
+      "status": "completed",
+      "bookingDate": "2026-11-04T10:00:00.000Z",
+      "proofUrl": "/media/outbound/default-tenant/4e229210f39442c09bf68ef1daa709f4.jpg",
+      "proofFileExists": false,
+      "purchaseOccurredAt": "2026-11-04T11:18:01.110Z",
+      "receiptAmount": null,
+      "expectedTotal": 115000,
+      "paymentMethod": "QRIS",
+      "severity": "HIGH",
+      "codes": [
+        "PROOF_FILE_MISSING"
+      ],
+      "notes": [
+        "Berkas bukti tidak ditemukan di storage."
+      ]
+    },
+    {
+      "reservationId": "6c8b70d1-4e9d-44af-96b9-ed3317a96501",
+      "customerId": "a4da5347-8c49-4db0-a1f3-c25ba2092a85",
+      "customerName": "Bunda Pamela",
+      "customerPhone": "6281230755794",
+      "status": "completed",
+      "bookingDate": "2026-11-05T03:30:00.000Z",
+      "proofUrl": null,
+      "proofFileExists": null,
+      "purchaseOccurredAt": "2026-11-05T03:30:00.000Z",
+      "receiptAmount": 90000,
+      "expectedTotal": 115000,
+      "paymentMethod": "Transfer",
+      "severity": "MEDIUM",
+      "codes": [
+        "PAID_WITHOUT_PROOF",
+        "AMOUNT_MISMATCH"
+      ],
+      "notes": [
+        "Tercatat lunas non-tunai tetapi tidak ada berkas bukti.",
+        "Nominal bukti Rp 90000 != tagihan Rp 115000."
+      ]
+    },
+    {
+      "reservationId": "a8623bdf-acaa-4099-9a00-fc1db77552af",
+      "customerId": "a2655f24-49d5-4347-86c6-78797123ab4b",
+      "customerName": "Bunda Izza",
+      "customerPhone": "6281210717420",
+      "status": "completed",
+      "bookingDate": "2026-11-05T04:00:00.000Z",
+      "proofUrl": null,
+      "proofFileExists": null,
+      "purchaseOccurredAt": null,
+      "receiptAmount": null,
+      "expectedTotal": 270000,
+      "paymentMethod": null,
+      "severity": "MEDIUM",
+      "codes": [
+        "MISSING_PROOF"
+      ],
+      "notes": []
+    },
+    {
+      "reservationId": "3efa0479-41dc-4ee7-a0a1-c37689b2308c",
+      "customerId": "1f6d05f9-0083-4cb0-9f25-9b64b8eff7cd",
+      "customerName": "Bunda Misri",
+      "customerPhone": "6282125207280",
+      "status": "completed",
+      "bookingDate": "2026-11-05T05:30:00.000Z",
+      "proofUrl": "/media/inbound/default-tenant/69d34b619ce640fcb0cd158f189ca184.jpg",
+      "proofFileExists": false,
+      "purchaseOccurredAt": "2026-11-05T05:30:00.000Z",
+      "receiptAmount": 100000,
+      "expectedTotal": 100000,
+      "paymentMethod": "Transfer",
+      "severity": "HIGH",
+      "codes": [
+        "PROOF_FILE_MISSING",
+        "PROOF_IN_PRUNABLE_STORAGE"
+      ],
+      "notes": [
+        "Berkas bukti tidak ditemukan di storage.",
+        "Bukti berada di folder inbound (retensi media chat, default 30 hari)."
+      ]
+    },
+    {
+      "reservationId": "b1fbe39f-82e5-4d4b-900f-619f4a4769e1",
+      "customerId": "71dc89f3-28aa-4b1a-8aeb-b3c2ab50b352",
+      "customerName": "Bunda eren",
+      "customerPhone": "6285825061999",
+      "status": "completed",
+      "bookingDate": "2026-11-05T07:30:00.000Z",
+      "proofUrl": "/media/inbound/default-tenant/61265b6a1de54464ac62172931533f98.jpg",
+      "proofFileExists": false,
+      "purchaseOccurredAt": "2026-11-05T07:30:00.000Z",
+      "receiptAmount": 70000,
+      "expectedTotal": 75000,
+      "paymentMethod": "Transfer BCA",
+      "severity": "HIGH",
+      "codes": [
+        "PROOF_FILE_MISSING",
+        "PROOF_IN_PRUNABLE_STORAGE",
+        "AMOUNT_MISMATCH"
+      ],
+      "notes": [
+        "Berkas bukti tidak ditemukan di storage.",
+        "Bukti berada di folder inbound (retensi media chat, default 30 hari).",
+        "Nominal bukti Rp 70000 != tagihan Rp 75000."
+      ]
+    },
+    {
+      "reservationId": "0a2efa7f-58bc-4db1-994f-7adc1ec500cd",
+      "customerId": "cc255067-ac58-4ba1-a3d9-785ecc30a30c",
+      "customerName": "Ferlin",
+      "customerPhone": "628814362316",
+      "status": "completed",
+      "bookingDate": "2026-11-05T08:00:00.000Z",
+      "proofUrl": null,
+      "proofFileExists": null,
+      "purchaseOccurredAt": null,
+      "receiptAmount": null,
+      "expectedTotal": 85000,
+      "paymentMethod": null,
+      "severity": "MEDIUM",
+      "codes": [
+        "MISSING_PROOF"
+      ],
+      "notes": []
+    },
+    {
+      "reservationId": "fcd93804-e6fc-45a0-a9d2-5997fbefd83f",
+      "customerId": "0acdfd95-178f-4540-8ebb-925dc7844b51",
+      "customerName": "Bunda Nabila",
+      "customerPhone": "6281336710270",
+      "status": "completed",
+      "bookingDate": "2026-11-05T09:00:00.000Z",
+      "proofUrl": null,
+      "proofFileExists": null,
+      "purchaseOccurredAt": "2026-11-05T09:00:00.000Z",
+      "receiptAmount": 75000,
+      "expectedTotal": 75000,
+      "paymentMethod": "QRIS",
+      "severity": "MEDIUM",
+      "codes": [
+        "PAID_WITHOUT_PROOF"
+      ],
+      "notes": [
+        "Tercatat lunas non-tunai tetapi tidak ada berkas bukti."
+      ]
+    },
+    {
+      "reservationId": "6904b3ed-1a9b-40fc-8939-004e6abc4459",
+      "customerId": "ea1d154a-c367-4903-8238-035da8ef7258",
+      "customerName": "Bunda anisa♡",
+      "customerPhone": "6285790558616",
+      "status": "completed",
+      "bookingDate": "2026-11-05T09:30:00.000Z",
+      "proofUrl": "/media/outbound/default-tenant/5f8d8c4c2660439d81d16d7c08970042.jpg",
+      "proofFileExists": false,
+      "purchaseOccurredAt": "2026-11-05T09:56:03.897Z",
+      "receiptAmount": null,
+      "expectedTotal": 65000,
+      "paymentMethod": "QRIS",
+      "severity": "HIGH",
+      "codes": [
+        "PROOF_FILE_MISSING"
+      ],
+      "notes": [
+        "Berkas bukti tidak ditemukan di storage."
+      ]
+    },
+    {
+      "reservationId": "bed87c13-727b-4cd7-910e-b530e891c466",
+      "customerId": "0e0244e0-a40d-4f8e-90de-64ea25720624",
+      "customerName": "Bunda Khusnul",
+      "customerPhone": "6285707077085",
+      "status": "completed",
+      "bookingDate": "2026-11-06T01:30:00.000Z",
+      "proofUrl": "/media/inbound/default-tenant/8cd6893554e94e6bbd9b470d5f442a96.jpg",
+      "proofFileExists": false,
+      "purchaseOccurredAt": "2026-11-05T00:00:00.000Z",
+      "receiptAmount": 90000,
+      "expectedTotal": 90000,
+      "paymentMethod": "QRIS",
+      "severity": "HIGH",
+      "codes": [
+        "PROOF_FILE_MISSING",
+        "PROOF_IN_PRUNABLE_STORAGE"
+      ],
+      "notes": [
+        "Berkas bukti tidak ditemukan di storage.",
+        "Bukti berada di folder inbound (retensi media chat, default 30 hari)."
+      ]
+    },
+    {
+      "reservationId": "b14afb4f-6c35-4b6b-a727-45e17ea64154",
+      "customerId": "fa1ec752-7855-4048-8c62-bd2545e46bdc",
+      "customerName": "Bunda briella",
+      "customerPhone": "6283856165785",
+      "status": "completed",
+      "bookingDate": "2026-11-06T02:00:00.000Z",
+      "proofUrl": "/media/inbound/default-tenant/a88969e446fb4c0a8e42a65736f6f4d1.jpg",
+      "proofFileExists": false,
+      "purchaseOccurredAt": "2026-11-06T00:00:00.000Z",
+      "receiptAmount": 75000,
+      "expectedTotal": 75000,
+      "paymentMethod": "QRIS",
+      "severity": "HIGH",
+      "codes": [
+        "PROOF_FILE_MISSING",
+        "PROOF_IN_PRUNABLE_STORAGE"
+      ],
+      "notes": [
+        "Berkas bukti tidak ditemukan di storage.",
+        "Bukti berada di folder inbound (retensi media chat, default 30 hari)."
+      ]
+    },
+    {
+      "reservationId": "ba4443dc-b574-4e18-be13-725953513b1f",
+      "customerId": "fd175afe-436e-4ca2-8cc7-80aae20a64ae",
+      "customerName": "Bunda Dani",
+      "customerPhone": "6281230771399",
+      "status": "completed",
+      "bookingDate": "2026-11-06T02:30:00.000Z",
+      "proofUrl": "/media/inbound/default-tenant/8a1a39603600471b9605ce56ceac38e1.jpg",
+      "proofFileExists": false,
+      "purchaseOccurredAt": "2026-11-06T00:00:00.000Z",
+      "receiptAmount": 185000,
+      "expectedTotal": 220000,
+      "paymentMethod": "QRIS",
+      "severity": "HIGH",
+      "codes": [
+        "PROOF_FILE_MISSING",
+        "PROOF_IN_PRUNABLE_STORAGE",
+        "AMOUNT_MISMATCH"
+      ],
+      "notes": [
+        "Berkas bukti tidak ditemukan di storage.",
+        "Bukti berada di folder inbound (retensi media chat, default 30 hari).",
+        "Nominal bukti Rp 185000 != tagihan Rp 220000."
+      ]
+    },
+    {
+      "reservationId": "887a499c-d44f-4385-b1ca-7d2aaed8844a",
+      "customerId": "ee62e956-2d09-4107-81b5-fcb7ffebfa9c",
+      "customerName": "Bunda Diana",
+      "customerPhone": "6282230422079",
+      "status": "completed",
+      "bookingDate": "2026-11-06T03:00:00.000Z",
+      "proofUrl": null,
+      "proofFileExists": null,
+      "purchaseOccurredAt": null,
+      "receiptAmount": null,
+      "expectedTotal": 85000,
+      "paymentMethod": null,
+      "severity": "MEDIUM",
+      "codes": [
+        "MISSING_PROOF"
+      ],
+      "notes": []
+    },
+    {
+      "reservationId": "ae9deb7d-0712-4128-8bdf-0c0fdcc90493",
+      "customerId": "703a0f9f-6d05-438f-904d-4bbf840256ac",
+      "customerName": "Bunda marthinasaaffira",
+      "customerPhone": "6281249993675",
+      "status": "completed",
+      "bookingDate": "2026-11-06T04:15:00.000Z",
+      "proofUrl": "/media/inbound/default-tenant/6446d8b67b0d4c58936cd7088a80eadc.jpg",
+      "proofFileExists": false,
+      "purchaseOccurredAt": "2026-11-06T00:00:00.000Z",
+      "receiptAmount": 75000,
+      "expectedTotal": 75000,
+      "paymentMethod": "QRIS",
+      "severity": "HIGH",
+      "codes": [
+        "PROOF_FILE_MISSING",
+        "PROOF_IN_PRUNABLE_STORAGE"
+      ],
+      "notes": [
+        "Berkas bukti tidak ditemukan di storage.",
+        "Bukti berada di folder inbound (retensi media chat, default 30 hari)."
+      ]
+    },
+    {
+      "reservationId": "873f6311-a6b2-4abd-b1bb-f17e0c77d76d",
+      "customerId": "7ea9e532-b09c-46b0-a3c3-a59a1b283fc8",
+      "customerName": "Bunda Laila",
+      "customerPhone": "6289639926367",
+      "status": "completed",
+      "bookingDate": "2026-11-06T05:00:00.000Z",
+      "proofUrl": null,
+      "proofFileExists": null,
+      "purchaseOccurredAt": null,
+      "receiptAmount": null,
+      "expectedTotal": 170000,
+      "paymentMethod": null,
+      "severity": "MEDIUM",
+      "codes": [
+        "MISSING_PROOF"
+      ],
+      "notes": []
+    },
+    {
+      "reservationId": "9e18cf6d-3942-4d3b-8ecc-163ebcdc130b",
+      "customerId": "9d5b7e1f-a87b-4bab-a8b2-7bce74708a2b",
+      "customerName": "Bunda Hida",
+      "customerPhone": "6287815918787",
+      "status": "completed",
+      "bookingDate": "2026-11-06T08:00:00.000Z",
+      "proofUrl": null,
+      "proofFileExists": null,
+      "purchaseOccurredAt": null,
+      "receiptAmount": null,
+      "expectedTotal": 90000,
+      "paymentMethod": null,
+      "severity": "MEDIUM",
+      "codes": [
+        "MISSING_PROOF"
+      ],
+      "notes": []
+    },
+    {
+      "reservationId": "a52ac303-038a-4638-bec3-860fedce9ff5",
+      "customerId": "4f6bfd57-0ad4-4d57-bdc5-eb5e91e821ee",
+      "customerName": "Nurmaya Dwi Fatmawati",
+      "customerPhone": "6285645586423",
+      "status": "completed",
+      "bookingDate": "2026-11-07T02:00:00.000Z",
+      "proofUrl": "/media/inbound/default-tenant/931618f773ae480aa258adc8be4d9e6f.jpg",
+      "proofFileExists": false,
+      "purchaseOccurredAt": "2026-11-07T00:00:00.000Z",
+      "receiptAmount": 95000,
+      "expectedTotal": 85000,
+      "paymentMethod": "QRIS",
+      "severity": "HIGH",
+      "codes": [
+        "PROOF_FILE_MISSING",
+        "PROOF_IN_PRUNABLE_STORAGE",
+        "AMOUNT_MISMATCH"
+      ],
+      "notes": [
+        "Berkas bukti tidak ditemukan di storage.",
+        "Bukti berada di folder inbound (retensi media chat, default 30 hari).",
+        "Nominal bukti Rp 95000 != tagihan Rp 85000."
+      ]
+    },
+    {
+      "reservationId": "2fff70f5-4fa9-4a9a-b5d7-ed7a89aace03",
+      "customerId": "1dc2b246-f6f1-4190-837e-7564f01fd3f3",
+      "customerName": "Bunda Devita",
+      "customerPhone": "6282231861906",
+      "status": "completed",
+      "bookingDate": "2026-11-07T03:00:00.000Z",
+      "proofUrl": "/media/inbound/default-tenant/b09cbb49cfcb4e66b79e564f8e0b2023.jpg",
+      "proofFileExists": false,
+      "purchaseOccurredAt": "2026-11-07T00:00:00.000Z",
+      "receiptAmount": 95000,
+      "expectedTotal": 100000,
+      "paymentMethod": "QRIS",
+      "severity": "HIGH",
+      "codes": [
+        "PROOF_FILE_MISSING",
+        "PROOF_IN_PRUNABLE_STORAGE",
+        "AMOUNT_MISMATCH"
+      ],
+      "notes": [
+        "Berkas bukti tidak ditemukan di storage.",
+        "Bukti berada di folder inbound (retensi media chat, default 30 hari).",
+        "Nominal bukti Rp 95000 != tagihan Rp 100000."
+      ]
+    },
+    {
+      "reservationId": "9c7f67c1-ce22-4c97-a59e-959b75f3f8cc",
+      "customerId": "0c2bf0e4-ddc5-418b-a283-d114cb9dd5f9",
+      "customerName": "Bunda Nana",
+      "customerPhone": "6282140090072",
+      "status": "completed",
+      "bookingDate": "2026-11-07T03:00:00.000Z",
+      "proofUrl": null,
+      "proofFileExists": null,
+      "purchaseOccurredAt": null,
+      "receiptAmount": null,
+      "expectedTotal": 65000,
+      "paymentMethod": null,
+      "severity": "MEDIUM",
+      "codes": [
+        "MISSING_PROOF"
+      ],
+      "notes": []
+    },
+    {
+      "reservationId": "e02ffbf7-9c97-4bf5-a19d-f184ac4d6e00",
+      "customerId": "7ba12d75-d58a-428b-9b59-65b1d8deb7d7",
+      "customerName": "Bunda Nanda Aisyah S",
+      "customerPhone": "6281216664076",
+      "status": "completed",
+      "bookingDate": "2026-11-07T04:00:00.000Z",
+      "proofUrl": "/media/inbound/default-tenant/9ba0172bc214420899a4d641c300dc86.jpg",
+      "proofFileExists": false,
+      "purchaseOccurredAt": "2026-11-07T00:00:00.000Z",
+      "receiptAmount": 95000,
+      "expectedTotal": 80000,
+      "paymentMethod": "QRIS",
+      "severity": "HIGH",
+      "codes": [
+        "PROOF_FILE_MISSING",
+        "PROOF_IN_PRUNABLE_STORAGE",
+        "AMOUNT_MISMATCH"
+      ],
+      "notes": [
+        "Berkas bukti tidak ditemukan di storage.",
+        "Bukti berada di folder inbound (retensi media chat, default 30 hari).",
+        "Nominal bukti Rp 95000 != tagihan Rp 80000."
+      ]
+    },
+    {
+      "reservationId": "cc89ac4e-1d8a-48cb-872e-8f5b02715619",
+      "customerId": "1aa5bc61-329d-4447-9bd2-2116246929b3",
+      "customerName": "Bunda Binti",
+      "customerPhone": "6281228420441",
+      "status": "completed",
+      "bookingDate": "2026-11-07T04:30:00.000Z",
+      "proofUrl": null,
+      "proofFileExists": null,
+      "purchaseOccurredAt": null,
+      "receiptAmount": null,
+      "expectedTotal": 80000,
+      "paymentMethod": null,
+      "severity": "MEDIUM",
+      "codes": [
+        "MISSING_PROOF"
+      ],
+      "notes": []
+    },
+    {
+      "reservationId": "3a22ffe0-8078-41d0-910c-ce877ea58b87",
+      "customerId": "df49d28c-0482-4c2b-a756-9c96157f9f78",
+      "customerName": "Bunda Dian",
+      "customerPhone": "6283849908005",
+      "status": "completed",
+      "bookingDate": "2026-11-07T08:00:00.000Z",
+      "proofUrl": null,
+      "proofFileExists": null,
+      "purchaseOccurredAt": null,
+      "receiptAmount": null,
+      "expectedTotal": 170000,
+      "paymentMethod": null,
+      "severity": "MEDIUM",
+      "codes": [
+        "MISSING_PROOF"
+      ],
+      "notes": []
+    },
+    {
+      "reservationId": "47f2b70e-cc0f-4819-adef-858327dc21af",
+      "customerId": "b0d7aafa-712a-4372-b5d8-cfeb1ea80224",
+      "customerName": "Bunda Irlandia Sahara",
+      "customerPhone": "6287855852002",
+      "status": "completed",
+      "bookingDate": "2026-11-08T02:00:00.000Z",
+      "proofUrl": "/media/inbound/default-tenant/eeb6bb47326843bcb9e96a0758a50fcd.jpg",
+      "proofFileExists": false,
+      "purchaseOccurredAt": "2026-11-07T00:00:00.000Z",
+      "receiptAmount": 64000,
+      "expectedTotal": 70000,
+      "paymentMethod": "Transfer BCA",
+      "severity": "HIGH",
+      "codes": [
+        "PROOF_FILE_MISSING",
+        "PROOF_IN_PRUNABLE_STORAGE",
+        "AMOUNT_MISMATCH"
+      ],
+      "notes": [
+        "Berkas bukti tidak ditemukan di storage.",
+        "Bukti berada di folder inbound (retensi media chat, default 30 hari).",
+        "Nominal bukti Rp 64000 != tagihan Rp 70000."
+      ]
+    },
+    {
+      "reservationId": "330b4cc4-e33b-4329-b1a6-dce83c579783",
+      "customerId": "565f581b-f6f2-47b3-affe-4f44c145fc76",
+      "customerName": "Bunda Maria Ulfa",
+      "customerPhone": "6282142041699",
+      "status": "completed",
+      "bookingDate": "2026-11-08T08:00:00.000Z",
+      "proofUrl": "/media/inbound/default-tenant/f024badfa1cf46aeaf923b72edf75b58.jpg",
+      "proofFileExists": false,
+      "purchaseOccurredAt": "2026-11-08T00:00:00.000Z",
+      "receiptAmount": 85000,
+      "expectedTotal": 80000,
+      "paymentMethod": "QRIS",
+      "severity": "HIGH",
+      "codes": [
+        "PROOF_FILE_MISSING",
+        "PROOF_IN_PRUNABLE_STORAGE",
+        "AMOUNT_MISMATCH"
+      ],
+      "notes": [
+        "Berkas bukti tidak ditemukan di storage.",
+        "Bukti berada di folder inbound (retensi media chat, default 30 hari).",
+        "Nominal bukti Rp 85000 != tagihan Rp 80000."
+      ]
+    },
+    {
+      "reservationId": "1885892d-29fa-4d32-b88c-d5fa6ac60c1c",
+      "customerId": "1d9f96ab-c733-4bc0-9a74-2d9ac78a7a35",
+      "customerName": "Bunda Bella",
+      "customerPhone": "6289670370062",
+      "status": "completed",
+      "bookingDate": "2026-11-08T09:30:00.000Z",
+      "proofUrl": null,
+      "proofFileExists": null,
+      "purchaseOccurredAt": null,
+      "receiptAmount": null,
+      "expectedTotal": 80000,
+      "paymentMethod": null,
+      "severity": "MEDIUM",
+      "codes": [
+        "MISSING_PROOF"
+      ],
+      "notes": []
+    },
+    {
+      "reservationId": "c716315e-4fed-4c9f-bba1-18e47f5debc1",
+      "customerId": "fe57b465-1a57-46f4-9328-c81c431a7ea6",
+      "customerName": "Bunda Rizkaa",
+      "customerPhone": "62881027627346",
+      "status": "completed",
+      "bookingDate": "2026-11-09T02:00:00.000Z",
+      "proofUrl": null,
+      "proofFileExists": null,
+      "purchaseOccurredAt": null,
+      "receiptAmount": null,
+      "expectedTotal": 75000,
+      "paymentMethod": null,
+      "severity": "MEDIUM",
+      "codes": [
+        "MISSING_PROOF"
+      ],
+      "notes": []
+    },
+    {
+      "reservationId": "96d8d797-45dd-4e0d-9888-65227cad6718",
+      "customerId": "6ac8d887-6cc8-40c6-98d5-82ce46da5eba",
+      "customerName": "Bunda Riskaamana",
+      "customerPhone": "6285238460006",
+      "status": "completed",
+      "bookingDate": "2026-11-09T03:00:00.000Z",
+      "proofUrl": null,
+      "proofFileExists": null,
+      "purchaseOccurredAt": null,
+      "receiptAmount": null,
+      "expectedTotal": 95000,
+      "paymentMethod": null,
+      "severity": "MEDIUM",
+      "codes": [
+        "MISSING_PROOF"
+      ],
+      "notes": []
+    },
+    {
+      "reservationId": "f42fdc64-480f-4ba5-b50f-c892a202b704",
+      "customerId": "20554572-d8ee-4481-a71a-574f1d758ce6",
+      "customerName": "Bunda Jasmine",
+      "customerPhone": "628133313187",
+      "status": "completed",
+      "bookingDate": "2026-11-09T04:00:00.000Z",
+      "proofUrl": null,
+      "proofFileExists": null,
+      "purchaseOccurredAt": null,
+      "receiptAmount": null,
+      "expectedTotal": 110000,
+      "paymentMethod": null,
+      "severity": "MEDIUM",
+      "codes": [
+        "MISSING_PROOF"
+      ],
+      "notes": []
+    },
+    {
+      "reservationId": "8532d9f5-045e-4a16-9a1b-a48cb7a35141",
+      "customerId": "8d6fd1c0-b41e-4810-a7be-7d0c8b05cef4",
+      "customerName": "Bunda erriza ayu sasqia n",
+      "customerPhone": "6287752268149",
+      "status": "completed",
+      "bookingDate": "2026-11-09T05:00:00.000Z",
+      "proofUrl": "/media/inbound/default-tenant/6c33230301e547998b5c54109a57b2a9.jpg",
+      "proofFileExists": false,
+      "purchaseOccurredAt": "2026-11-09T00:00:00.000Z",
+      "receiptAmount": 90000,
+      "expectedTotal": 95000,
+      "paymentMethod": "Transfer BCA",
+      "severity": "HIGH",
+      "codes": [
+        "PROOF_FILE_MISSING",
+        "PROOF_IN_PRUNABLE_STORAGE",
+        "AMOUNT_MISMATCH"
+      ],
+      "notes": [
+        "Berkas bukti tidak ditemukan di storage.",
+        "Bukti berada di folder inbound (retensi media chat, default 30 hari).",
+        "Nominal bukti Rp 90000 != tagihan Rp 95000."
+      ]
+    },
+    {
+      "reservationId": "efa35e22-8e4f-45ab-b464-25ce6aae3f2b",
+      "customerId": "21b81fe9-5a39-46bd-a0c3-7837c478fa59",
+      "customerName": "Bunda Santiap",
+      "customerPhone": "6289647551724",
+      "status": "completed",
+      "bookingDate": "2026-11-09T06:00:00.000Z",
+      "proofUrl": null,
+      "proofFileExists": null,
+      "purchaseOccurredAt": "2026-11-07T09:54:50.644Z",
+      "receiptAmount": null,
+      "expectedTotal": 120000,
+      "paymentMethod": null,
+      "severity": "MEDIUM",
+      "codes": [
+        "PAID_WITHOUT_PROOF"
+      ],
+      "notes": [
+        "Tercatat lunas non-tunai tetapi tidak ada berkas bukti."
+      ]
+    },
+    {
+      "reservationId": "fcc0b916-3b7d-4644-aa52-03093db37b49",
+      "customerId": "5f0564d7-e541-4f38-b8a9-e93427c92f06",
+      "customerName": "Bunda Indah",
+      "customerPhone": "6285235657521",
+      "status": "completed",
+      "bookingDate": "2026-11-09T06:30:00.000Z",
+      "proofUrl": "/media/inbound/default-tenant/60c07c54199f44beaae56a87185987d4.jpg",
+      "proofFileExists": false,
+      "purchaseOccurredAt": "2026-11-09T00:00:00.000Z",
+      "receiptAmount": 85000,
+      "expectedTotal": 105000,
+      "paymentMethod": "QRIS",
+      "severity": "HIGH",
+      "codes": [
+        "PROOF_FILE_MISSING",
+        "PROOF_IN_PRUNABLE_STORAGE",
+        "AMOUNT_MISMATCH"
+      ],
+      "notes": [
+        "Berkas bukti tidak ditemukan di storage.",
+        "Bukti berada di folder inbound (retensi media chat, default 30 hari).",
+        "Nominal bukti Rp 85000 != tagihan Rp 105000."
+      ]
+    },
+    {
+      "reservationId": "06b48248-1ee4-4e0a-b776-9a18510082a4",
+      "customerId": "66741a46-f430-4a44-9bae-e0b8bda58f31",
+      "customerName": "Bunda aden",
+      "customerPhone": "6281333548004",
+      "status": "completed",
+      "bookingDate": "2026-11-10T02:00:00.000Z",
+      "proofUrl": null,
+      "proofFileExists": null,
+      "purchaseOccurredAt": "2026-11-10T04:16:35.943Z",
+      "receiptAmount": null,
+      "expectedTotal": 80000,
+      "paymentMethod": "CASH",
+      "severity": "LOW",
+      "codes": [
+        "PAID_WITHOUT_PROOF"
+      ],
+      "notes": [
+        "Pembayaran tunai tanpa bukti transfer (wajar)."
+      ]
+    },
+    {
+      "reservationId": "f1082a30-c8bc-4ddf-8b61-6202ef3153ba",
+      "customerId": "ed07abdf-2d27-439a-b8d8-49f4a4da78bc",
+      "customerName": "Bunda Nina",
+      "customerPhone": "6282246417630",
+      "status": "completed",
+      "bookingDate": "2026-11-10T02:00:00.000Z",
+      "proofUrl": null,
+      "proofFileExists": null,
+      "purchaseOccurredAt": null,
+      "receiptAmount": null,
+      "expectedTotal": 80000,
+      "paymentMethod": null,
+      "severity": "MEDIUM",
+      "codes": [
+        "MISSING_PROOF"
+      ],
+      "notes": []
+    },
+    {
+      "reservationId": "cdf47e6d-026f-446d-88ec-bafb385493ce",
+      "customerId": "bc68832e-cf3d-463c-a1fa-f41b2de7e65f",
+      "customerName": "Bunda Ayu Wulansari",
+      "customerPhone": "6285792185307",
+      "status": "completed",
+      "bookingDate": "2026-11-10T04:00:00.000Z",
+      "proofUrl": null,
+      "proofFileExists": null,
+      "purchaseOccurredAt": "2026-11-10T12:05:27.999Z",
+      "receiptAmount": null,
+      "expectedTotal": 80000,
+      "paymentMethod": "CASH",
+      "severity": "LOW",
+      "codes": [
+        "PAID_WITHOUT_PROOF"
+      ],
+      "notes": [
+        "Pembayaran tunai tanpa bukti transfer (wajar)."
+      ]
+    },
+    {
+      "reservationId": "c613d959-30e7-4922-ab40-b35aadb3d6c6",
+      "customerId": "65c3ed3c-c17d-457c-b514-846bc9814d4b",
+      "customerName": "Bunda Megga",
+      "customerPhone": "6281280800021",
+      "status": "completed",
+      "bookingDate": "2026-11-10T04:00:00.000Z",
+      "proofUrl": null,
+      "proofFileExists": null,
+      "purchaseOccurredAt": null,
+      "receiptAmount": null,
+      "expectedTotal": 75000,
+      "paymentMethod": null,
+      "severity": "MEDIUM",
+      "codes": [
+        "MISSING_PROOF"
+      ],
+      "notes": []
+    },
+    {
+      "reservationId": "38277548-d473-4e5a-a7f2-123229bf0dcc",
+      "customerId": "96f3aee6-ba9c-4079-8eac-f971ebcd24ee",
+      "customerName": "Bunda Alfina",
+      "customerPhone": "62895326778213",
+      "status": "completed",
+      "bookingDate": "2026-11-10T06:30:00.000Z",
+      "proofUrl": "/media/inbound/default-tenant/928aac645cfc4a2586dad7f185c5fbde.jpg",
+      "proofFileExists": false,
+      "purchaseOccurredAt": "2026-11-10T00:00:00.000Z",
+      "receiptAmount": 70000,
+      "expectedTotal": 70000,
+      "paymentMethod": "QRIS",
+      "severity": "HIGH",
+      "codes": [
+        "PROOF_FILE_MISSING",
+        "PROOF_IN_PRUNABLE_STORAGE"
+      ],
+      "notes": [
+        "Berkas bukti tidak ditemukan di storage.",
+        "Bukti berada di folder inbound (retensi media chat, default 30 hari)."
+      ]
+    },
+    {
+      "reservationId": "bfb9c900-98c6-4f60-b745-53027734736e",
+      "customerId": "674b3c80-fef3-43bb-b360-531dd8b7202f",
+      "customerName": "Bunda Gina",
+      "customerPhone": "6285194925518",
+      "status": "completed",
+      "bookingDate": "2026-11-10T08:00:00.000Z",
+      "proofUrl": "/media/inbound/default-tenant/207bf361a46f4210b6f63e7def7e16f6.jpg",
+      "proofFileExists": false,
+      "purchaseOccurredAt": "2026-11-10T00:00:00.000Z",
+      "receiptAmount": 65000,
+      "expectedTotal": 65000,
+      "paymentMethod": "QRIS",
+      "severity": "HIGH",
+      "codes": [
+        "PROOF_FILE_MISSING",
+        "PROOF_IN_PRUNABLE_STORAGE"
+      ],
+      "notes": [
+        "Berkas bukti tidak ditemukan di storage.",
+        "Bukti berada di folder inbound (retensi media chat, default 30 hari)."
+      ]
+    },
+    {
+      "reservationId": "e48e2b97-c24f-418b-aac6-2c898ffc33c3",
+      "customerId": "d28f3c27-bbdb-482a-b80a-bb813a0e835e",
+      "customerName": "Bunda Putri",
+      "customerPhone": "6282257242725",
+      "status": "completed",
+      "bookingDate": "2026-11-11T03:00:00.000Z",
+      "proofUrl": null,
+      "proofFileExists": null,
+      "purchaseOccurredAt": null,
+      "receiptAmount": null,
+      "expectedTotal": 135000,
+      "paymentMethod": null,
+      "severity": "MEDIUM",
+      "codes": [
+        "MISSING_PROOF"
+      ],
+      "notes": []
+    },
+    {
+      "reservationId": "d737b077-ee73-4ff2-a823-49cddbee3398",
+      "customerId": "5676019a-9906-4f9d-8921-41e2c18c9332",
+      "customerName": "Bunda Himatus Suroyyah",
+      "customerPhone": "6285733978283",
+      "status": "completed",
+      "bookingDate": "2026-11-11T06:30:00.000Z",
+      "proofUrl": null,
+      "proofFileExists": null,
+      "purchaseOccurredAt": null,
+      "receiptAmount": null,
+      "expectedTotal": 70000,
+      "paymentMethod": null,
+      "severity": "MEDIUM",
+      "codes": [
+        "MISSING_PROOF"
+      ],
+      "notes": []
+    },
+    {
+      "reservationId": "b66046d2-c7a7-4f0f-82f3-fa300704593a",
+      "customerId": "c8497a43-e6e6-4ccf-b67b-dd920864e8a9",
+      "customerName": "Bunda Nara Little Ummaya Daycare",
+      "customerPhone": "6281282572211",
+      "status": "completed",
+      "bookingDate": "2026-11-11T08:00:00.000Z",
+      "proofUrl": "/media/inbound/default-tenant/8452558bf6b242998645dd84f571e299.jpg",
+      "proofFileExists": false,
+      "purchaseOccurredAt": "2026-11-11T00:00:00.000Z",
+      "receiptAmount": 170000,
+      "expectedTotal": 170000,
+      "paymentMethod": "Transfer BCA",
+      "severity": "HIGH",
+      "codes": [
+        "PROOF_FILE_MISSING",
+        "PROOF_IN_PRUNABLE_STORAGE"
+      ],
+      "notes": [
+        "Berkas bukti tidak ditemukan di storage.",
+        "Bukti berada di folder inbound (retensi media chat, default 30 hari)."
+      ]
+    },
+    {
+      "reservationId": "277e1b1e-ce75-445d-9698-9fce9df1887f",
+      "customerId": "dc86b000-e09a-41a3-bc6d-2ee34a49c228",
+      "customerName": "Bunda vika",
+      "customerPhone": "6289614994536",
+      "status": "completed",
+      "bookingDate": "2026-11-12T02:30:00.000Z",
+      "proofUrl": "/media/inbound/default-tenant/58d96bd61bd349b4a84a8abb43203085.jpg",
+      "proofFileExists": false,
+      "purchaseOccurredAt": "2026-11-11T05:30:28.601Z",
+      "receiptAmount": 95000,
+      "expectedTotal": 115000,
+      "paymentMethod": "Transfer",
+      "severity": "HIGH",
+      "codes": [
+        "PROOF_FILE_MISSING",
+        "PROOF_IN_PRUNABLE_STORAGE",
+        "AMOUNT_MISMATCH"
+      ],
+      "notes": [
+        "Berkas bukti tidak ditemukan di storage.",
+        "Bukti berada di folder inbound (retensi media chat, default 30 hari).",
+        "Nominal bukti Rp 95000 != tagihan Rp 115000."
+      ]
+    },
+    {
+      "reservationId": "3c12b852-a06a-424a-8421-d5a92c3cb531",
+      "customerId": "86cf557d-8676-484c-bd9b-5ee816d1997b",
+      "customerName": "Bunda Intan",
+      "customerPhone": "6287755713475",
+      "status": "completed",
+      "bookingDate": "2026-11-13T00:00:00.000Z",
+      "proofUrl": null,
+      "proofFileExists": null,
+      "purchaseOccurredAt": null,
+      "receiptAmount": null,
+      "expectedTotal": 70000,
+      "paymentMethod": null,
+      "severity": "MEDIUM",
+      "codes": [
+        "MISSING_PROOF"
+      ],
+      "notes": []
+    },
+    {
+      "reservationId": "05f7f128-1b2f-4762-b091-46357baaa7d0",
+      "customerId": "78384435-451b-4b7c-beca-3f91c2068859",
+      "customerName": "Bunda Sifa",
+      "customerPhone": "6282245066027",
+      "status": "completed",
+      "bookingDate": "2026-11-14T02:00:00.000Z",
+      "proofUrl": null,
+      "proofFileExists": null,
+      "purchaseOccurredAt": "2026-11-14T04:14:53.015Z",
+      "receiptAmount": null,
+      "expectedTotal": 60000,
+      "paymentMethod": "CASH",
+      "severity": "LOW",
+      "codes": [
+        "PAID_WITHOUT_PROOF"
+      ],
+      "notes": [
+        "Pembayaran tunai tanpa bukti transfer (wajar)."
+      ]
+    },
+    {
+      "reservationId": "93756297-d2b2-4cec-9262-32f6e1f5029f",
+      "customerId": "3543c3af-7509-427f-9f99-0f1fc66418f2",
+      "customerName": "Bunda Herlina",
+      "customerPhone": "62895393651240",
+      "status": "completed",
+      "bookingDate": "2026-11-14T04:00:00.000Z",
+      "proofUrl": null,
+      "proofFileExists": null,
+      "purchaseOccurredAt": null,
+      "receiptAmount": null,
+      "expectedTotal": 100000,
+      "paymentMethod": null,
+      "severity": "MEDIUM",
+      "codes": [
+        "MISSING_PROOF"
+      ],
+      "notes": []
+    },
+    {
+      "reservationId": "ccd9888c-ce25-40f4-8dd5-274636202a6b",
+      "customerId": "571aa304-0c0f-4bc2-b65a-a8b08263408d",
+      "customerName": "Bunda Vivi Sefnilasari",
+      "customerPhone": "6281216792297",
+      "status": "completed",
+      "bookingDate": "2026-11-14T06:30:00.000Z",
+      "proofUrl": null,
+      "proofFileExists": null,
+      "purchaseOccurredAt": null,
+      "receiptAmount": null,
+      "expectedTotal": 90000,
+      "paymentMethod": null,
+      "severity": "MEDIUM",
+      "codes": [
+        "MISSING_PROOF"
+      ],
+      "notes": []
+    },
+    {
+      "reservationId": "bee0641d-a697-483c-9adf-c137e98ff802",
+      "customerId": "e3dd4dfc-73c2-4e86-a2a1-29841f93a557",
+      "customerName": "Bunda sintha erika",
+      "customerPhone": "6285852555576",
+      "status": "completed",
+      "bookingDate": "2026-11-14T11:30:00.000Z",
+      "proofUrl": "/media/inbound/default-tenant/f2d5db3e802b45a181c7c18a766b3019.jpg",
+      "proofFileExists": true,
+      "purchaseOccurredAt": "2026-11-14T00:00:00.000Z",
+      "receiptAmount": 60000,
+      "expectedTotal": 60000,
+      "paymentMethod": "QRIS",
+      "severity": "HIGH",
+      "codes": [
+        "PROOF_IN_PRUNABLE_STORAGE"
+      ],
+      "notes": [
+        "Bukti berada di folder inbound (retensi media chat, default 30 hari)."
+      ]
+    },
+    {
+      "reservationId": "37e511e5-9e6f-4421-a51e-2c3a7150ccec",
+      "customerId": "d0066fb4-f029-4e83-9a21-20db09659af9",
+      "customerName": "Bunda Kristi",
+      "customerPhone": "6281383839061",
+      "status": "completed",
+      "bookingDate": "2026-11-15T02:00:00.000Z",
+      "proofUrl": "/media/inbound/default-tenant/6a2f16ce71ee41ad9f17304645109101.jpg",
+      "proofFileExists": true,
+      "purchaseOccurredAt": "2026-11-15T00:00:00.000Z",
+      "receiptAmount": 200000,
+      "expectedTotal": 190000,
+      "paymentMethod": "QRIS",
+      "severity": "HIGH",
+      "codes": [
+        "PROOF_IN_PRUNABLE_STORAGE",
+        "AMOUNT_MISMATCH"
+      ],
+      "notes": [
+        "Bukti berada di folder inbound (retensi media chat, default 30 hari).",
+        "Nominal bukti Rp 200000 != tagihan Rp 190000."
+      ]
+    },
+    {
+      "reservationId": "7d63447f-3dfc-433b-b74b-fbe80e5d7631",
+      "customerId": "b7e1e9c9-d9ed-48e7-92ec-1b394ca17748",
+      "customerName": "Bunda azizah",
+      "customerPhone": "628175175696",
+      "status": "completed",
+      "bookingDate": "2026-11-15T02:30:00.000Z",
+      "proofUrl": "/media/inbound/default-tenant/393b53bf6de04eaf986a2a97b6de02d3.jpg",
+      "proofFileExists": true,
+      "purchaseOccurredAt": "2026-11-15T00:00:00.000Z",
+      "receiptAmount": 135000,
+      "expectedTotal": 155000,
+      "paymentMethod": "QRIS",
+      "severity": "HIGH",
+      "codes": [
+        "PROOF_IN_PRUNABLE_STORAGE",
+        "AMOUNT_MISMATCH"
+      ],
+      "notes": [
+        "Bukti berada di folder inbound (retensi media chat, default 30 hari).",
+        "Nominal bukti Rp 135000 != tagihan Rp 155000."
+      ]
+    },
+    {
+      "reservationId": "e1236d2f-5571-4941-b5fb-cdb93bc775d6",
+      "customerId": "86446e0c-c2d0-4968-8492-3d7aa2d1a9bd",
+      "customerName": "Bunda Eka",
+      "customerPhone": "6282331923962",
+      "status": "completed",
+      "bookingDate": "2026-11-15T05:30:00.000Z",
+      "proofUrl": "/media/inbound/default-tenant/8c0c2738af574ead9766d017ab029df7.jpg",
+      "proofFileExists": true,
+      "purchaseOccurredAt": "2026-11-15T00:00:00.000Z",
+      "receiptAmount": 180000,
+      "expectedTotal": 170000,
+      "paymentMethod": "Transfer",
+      "severity": "HIGH",
+      "codes": [
+        "PROOF_IN_PRUNABLE_STORAGE",
+        "AMOUNT_MISMATCH"
+      ],
+      "notes": [
+        "Bukti berada di folder inbound (retensi media chat, default 30 hari).",
+        "Nominal bukti Rp 180000 != tagihan Rp 170000."
+      ]
+    },
+    {
+      "reservationId": "bbd3b28f-8526-4d85-a580-72a65ba96bc2",
+      "customerId": "5a1e7846-c4e2-48cb-963f-45d97a729b04",
+      "customerName": "Bunda Dhea",
+      "customerPhone": "6282333353300",
+      "status": "completed",
+      "bookingDate": "2026-11-16T02:30:00.000Z",
+      "proofUrl": "/media/inbound/default-tenant/b3fba40045894863b733e5d823a297ae.pdf",
+      "proofFileExists": true,
+      "purchaseOccurredAt": "2026-11-16T07:25:55.691Z",
+      "receiptAmount": null,
+      "expectedTotal": 65000,
+      "paymentMethod": "TRANSFER",
+      "severity": "HIGH",
+      "codes": [
+        "PROOF_IN_PRUNABLE_STORAGE"
+      ],
+      "notes": [
+        "Bukti berada di folder inbound (retensi media chat, default 30 hari)."
+      ]
+    },
+    {
+      "reservationId": "88e9fdeb-2efd-4e14-a1a9-89fb9c704361",
+      "customerId": "662ff401-4984-47fb-8263-22a11714bd22",
+      "customerName": "Bunda Maisya",
+      "customerPhone": "628980887940",
+      "status": "completed",
+      "bookingDate": "2026-11-16T04:00:00.000Z",
+      "proofUrl": "/media/inbound/default-tenant/dc6e039330f04c73a944315e7294154e.jpg",
+      "proofFileExists": true,
+      "purchaseOccurredAt": "2026-11-16T00:00:00.000Z",
+      "receiptAmount": 90000,
+      "expectedTotal": 120000,
+      "paymentMethod": "Transfer BCA",
+      "severity": "HIGH",
+      "codes": [
+        "PROOF_IN_PRUNABLE_STORAGE",
+        "AMOUNT_MISMATCH"
+      ],
+      "notes": [
+        "Bukti berada di folder inbound (retensi media chat, default 30 hari).",
+        "Nominal bukti Rp 90000 != tagihan Rp 120000."
+      ]
+    },
+    {
+      "reservationId": "1bdced24-eac4-4f11-a219-9d2c01f9fa5b",
+      "customerId": "ba888316-9692-4f40-8793-5375f27b43f1",
+      "customerName": "Bunda Indy",
+      "customerPhone": "6282245776662",
+      "status": "completed",
+      "bookingDate": "2026-11-16T06:30:00.000Z",
+      "proofUrl": "/media/inbound/default-tenant/3655ce8e4f4341ddb5517a3e0b510f69.jpg",
+      "proofFileExists": true,
+      "purchaseOccurredAt": "2026-11-16T00:00:00.000Z",
+      "receiptAmount": 80000,
+      "expectedTotal": 45000,
+      "paymentMethod": "QRIS",
+      "severity": "HIGH",
+      "codes": [
+        "PROOF_IN_PRUNABLE_STORAGE",
+        "AMOUNT_MISMATCH"
+      ],
+      "notes": [
+        "Bukti berada di folder inbound (retensi media chat, default 30 hari).",
+        "Nominal bukti Rp 80000 != tagihan Rp 45000."
+      ]
+    },
+    {
+      "reservationId": "0975f422-4f19-43ef-b03e-7ee9d13d6f2c",
+      "customerId": "6632ba0c-d7c6-45f6-b59d-c8b835aa0b10",
+      "customerName": "Bunda Nida",
+      "customerPhone": "6285708211833",
+      "status": "completed",
+      "bookingDate": "2026-11-17T01:00:00.000Z",
+      "proofUrl": null,
+      "proofFileExists": null,
+      "purchaseOccurredAt": null,
+      "receiptAmount": null,
+      "expectedTotal": 140000,
+      "paymentMethod": null,
+      "severity": "MEDIUM",
+      "codes": [
+        "MISSING_PROOF"
+      ],
+      "notes": []
+    },
+    {
+      "reservationId": "ee4366ab-737a-4aaf-81f1-b28861af5db3",
+      "customerId": "c7957019-902d-46a8-b9d8-7aff8b3bee7c",
+      "customerName": "Bunda Ifa",
+      "customerPhone": "6289675128793",
+      "status": "completed",
+      "bookingDate": "2026-11-17T02:00:00.000Z",
+      "proofUrl": null,
+      "proofFileExists": null,
+      "purchaseOccurredAt": null,
+      "receiptAmount": null,
+      "expectedTotal": 65000,
+      "paymentMethod": null,
+      "severity": "MEDIUM",
+      "codes": [
+        "MISSING_PROOF"
+      ],
+      "notes": []
+    },
+    {
+      "reservationId": "8da1f7e0-26a2-4dcf-8069-71bcdd1ec601",
+      "customerId": "7f65209d-e912-4af5-a608-8b28aa377a43",
+      "customerName": "Bunda Lily",
+      "customerPhone": "628113339009",
+      "status": "completed",
+      "bookingDate": "2026-11-17T02:30:00.000Z",
+      "proofUrl": "/media/inbound/default-tenant/a228cf98984e41be8ec3f1c2110f3ec5.jpg",
+      "proofFileExists": true,
+      "purchaseOccurredAt": "2026-11-17T00:00:00.000Z",
+      "receiptAmount": 85000,
+      "expectedTotal": 90000,
+      "paymentMethod": "QRIS",
+      "severity": "HIGH",
+      "codes": [
+        "PROOF_IN_PRUNABLE_STORAGE",
+        "AMOUNT_MISMATCH"
+      ],
+      "notes": [
+        "Bukti berada di folder inbound (retensi media chat, default 30 hari).",
+        "Nominal bukti Rp 85000 != tagihan Rp 90000."
+      ]
+    },
+    {
+      "reservationId": "e1316705-05c3-4f98-9da5-ec045b285979",
+      "customerId": "b6487398-3897-4a03-ac33-215958251e65",
+      "customerName": "Bunda Intan",
+      "customerPhone": "6285609075420",
+      "status": "completed",
+      "bookingDate": "2026-11-17T04:00:00.000Z",
+      "proofUrl": "/media/inbound/default-tenant/e7871daaf53642d3bab8f83648816ef8.jpg",
+      "proofFileExists": true,
+      "purchaseOccurredAt": "2026-11-17T00:00:00.000Z",
+      "receiptAmount": 80000,
+      "expectedTotal": 90000,
+      "paymentMethod": "QRIS",
+      "severity": "HIGH",
+      "codes": [
+        "PROOF_IN_PRUNABLE_STORAGE",
+        "AMOUNT_MISMATCH"
+      ],
+      "notes": [
+        "Bukti berada di folder inbound (retensi media chat, default 30 hari).",
+        "Nominal bukti Rp 80000 != tagihan Rp 90000."
+      ]
+    },
+    {
+      "reservationId": "580d3cc7-9461-4682-8b2a-4b146c475604",
+      "customerId": "e4666bf9-8747-4d3f-8f49-c0041ae97d1e",
+      "customerName": "Bunda Amaliah Adnan",
+      "customerPhone": "6285646767371",
+      "status": "completed",
+      "bookingDate": "2026-11-17T04:00:00.000Z",
+      "proofUrl": "/media/inbound/default-tenant/b0388160ede44e6caf8a7af51f79cfc1.jpg",
+      "proofFileExists": true,
+      "purchaseOccurredAt": "2026-11-17T00:00:00.000Z",
+      "receiptAmount": 150000,
+      "expectedTotal": 145000,
+      "paymentMethod": "QRIS",
+      "severity": "HIGH",
+      "codes": [
+        "PROOF_IN_PRUNABLE_STORAGE",
+        "AMOUNT_MISMATCH"
+      ],
+      "notes": [
+        "Bukti berada di folder inbound (retensi media chat, default 30 hari).",
+        "Nominal bukti Rp 150000 != tagihan Rp 145000."
+      ]
+    },
+    {
+      "reservationId": "81281c04-8cd7-409b-9bb3-f1509de53d3e",
+      "customerId": "5fa236fb-c5af-429f-8734-3844a766c840",
+      "customerName": "Bunda Hera",
+      "customerPhone": "628113141111",
+      "status": "completed",
+      "bookingDate": "2026-11-17T08:00:00.000Z",
+      "proofUrl": "/media/inbound/default-tenant/16e5db7bb8f14a6185d9624ac2fa269d.jpg",
+      "proofFileExists": true,
+      "purchaseOccurredAt": "2026-11-17T00:00:00.000Z",
+      "receiptAmount": 60000,
+      "expectedTotal": 70000,
+      "paymentMethod": "QRIS",
+      "severity": "HIGH",
+      "codes": [
+        "PROOF_IN_PRUNABLE_STORAGE",
+        "AMOUNT_MISMATCH"
+      ],
+      "notes": [
+        "Bukti berada di folder inbound (retensi media chat, default 30 hari).",
+        "Nominal bukti Rp 60000 != tagihan Rp 70000."
+      ]
+    },
+    {
+      "reservationId": "cde6dc8b-7c9f-4390-a704-f59a47a4b8c2",
+      "customerId": "8add101e-856b-440b-9969-124a4dbb9b0a",
+      "customerName": "Bunda Gita",
+      "customerPhone": "62881027888488",
+      "status": "completed",
+      "bookingDate": "2026-11-18T02:00:00.000Z",
+      "proofUrl": null,
+      "proofFileExists": null,
+      "purchaseOccurredAt": null,
+      "receiptAmount": null,
+      "expectedTotal": 95000,
+      "paymentMethod": null,
+      "severity": "MEDIUM",
+      "codes": [
+        "MISSING_PROOF"
+      ],
+      "notes": []
+    },
+    {
+      "reservationId": "df740399-2817-410e-bfe7-d7d580e480ff",
+      "customerId": "20554572-d8ee-4481-a71a-574f1d758ce6",
+      "customerName": "Bunda Jasmine",
+      "customerPhone": "628133313187",
+      "status": "completed",
+      "bookingDate": "2026-11-18T04:00:00.000Z",
+      "proofUrl": "/media/inbound/default-tenant/97495a0978d84cf5bd7804b2dbecbddf.jpg",
+      "proofFileExists": true,
+      "purchaseOccurredAt": "2026-11-18T00:00:00.000Z",
+      "receiptAmount": 100000,
+      "expectedTotal": 105000,
+      "paymentMethod": "QRIS",
+      "severity": "HIGH",
+      "codes": [
+        "PROOF_IN_PRUNABLE_STORAGE",
+        "AMOUNT_MISMATCH"
+      ],
+      "notes": [
+        "Bukti berada di folder inbound (retensi media chat, default 30 hari).",
+        "Nominal bukti Rp 100000 != tagihan Rp 105000."
+      ]
+    },
+    {
+      "reservationId": "61114c10-8d43-4603-b0da-f500816d5969",
+      "customerId": "25c69283-6422-4b54-a6c5-98b58e7d2b17",
+      "customerName": "Bunda Mery",
+      "customerPhone": "6289667285350",
+      "status": "completed",
+      "bookingDate": "2026-11-18T05:00:00.000Z",
+      "proofUrl": "/media/inbound/default-tenant/0cec1da847284c4ab4f894c4aeefcf12.jpg",
+      "proofFileExists": true,
+      "purchaseOccurredAt": "2026-11-18T00:00:00.000Z",
+      "receiptAmount": 85000,
+      "expectedTotal": 75000,
+      "paymentMethod": "QRIS",
+      "severity": "HIGH",
+      "codes": [
+        "PROOF_IN_PRUNABLE_STORAGE",
+        "AMOUNT_MISMATCH"
+      ],
+      "notes": [
+        "Bukti berada di folder inbound (retensi media chat, default 30 hari).",
+        "Nominal bukti Rp 85000 != tagihan Rp 75000."
+      ]
+    },
+    {
+      "reservationId": "dcab31aa-54bb-4f55-83c1-fa6f8de5bd03",
+      "customerId": "a4fe1687-a01c-46e7-b3de-eedc36db5202",
+      "customerName": "Bunda sella",
+      "customerPhone": "6282143712732",
+      "status": "completed",
+      "bookingDate": "2026-11-18T06:00:00.000Z",
+      "proofUrl": null,
+      "proofFileExists": null,
+      "purchaseOccurredAt": null,
+      "receiptAmount": null,
+      "expectedTotal": 60000,
+      "paymentMethod": null,
+      "severity": "MEDIUM",
+      "codes": [
+        "MISSING_PROOF"
+      ],
+      "notes": []
+    },
+    {
+      "reservationId": "76f52ac9-e136-4033-9d07-556a7e045cc7",
+      "customerId": "8a320cc2-d935-4ed4-a885-fdee8b74a6d6",
+      "customerName": "Bunda Ikko Bella",
+      "customerPhone": "6282145430901",
+      "status": "confirmed",
+      "bookingDate": "2026-11-18T09:00:00.000Z",
+      "proofUrl": null,
+      "proofFileExists": null,
+      "purchaseOccurredAt": null,
+      "receiptAmount": null,
+      "expectedTotal": 95000,
+      "paymentMethod": null,
+      "severity": "MEDIUM",
+      "codes": [
+        "MISSING_PROOF"
+      ],
+      "notes": []
+    },
+    {
+      "reservationId": "b3eb2c5c-a043-48d7-9163-d1326d97ca84",
+      "customerId": "a6c62c0a-c064-4f8b-bf2f-5ab09adf49ea",
+      "customerName": "Bunda eryca",
+      "customerPhone": "628970425202",
+      "status": "confirmed",
+      "bookingDate": "2026-11-19T02:00:00.000Z",
+      "proofUrl": "/media/inbound/default-tenant/9cd7611178774d388b97cd9c31e5ede2.jpg",
+      "proofFileExists": true,
+      "purchaseOccurredAt": "2026-11-19T00:00:00.000Z",
+      "receiptAmount": 70000,
+      "expectedTotal": 70000,
+      "paymentMethod": "QRIS",
+      "severity": "HIGH",
+      "codes": [
+        "PROOF_IN_PRUNABLE_STORAGE"
+      ],
+      "notes": [
+        "Bukti berada di folder inbound (retensi media chat, default 30 hari)."
+      ]
+    },
+    {
+      "reservationId": "0d07ad75-3088-435d-a7bb-f60cee064642",
+      "customerId": "a2655f24-49d5-4347-86c6-78797123ab4b",
+      "customerName": "Bunda Izza",
+      "customerPhone": "6281210717420",
+      "status": "confirmed",
+      "bookingDate": "2026-11-19T02:30:00.000Z",
+      "proofUrl": null,
+      "proofFileExists": null,
+      "purchaseOccurredAt": null,
+      "receiptAmount": null,
+      "expectedTotal": 95000,
+      "paymentMethod": null,
+      "severity": "MEDIUM",
+      "codes": [
+        "MISSING_PROOF"
+      ],
+      "notes": []
+    },
+    {
+      "reservationId": "81a30b43-2ce7-4751-90df-8f558172cd07",
+      "customerId": "0886a60b-5438-466c-a308-b0948f8b1541",
+      "customerName": "Bunda Ayu",
+      "customerPhone": "6281555475917",
+      "status": "confirmed",
+      "bookingDate": "2026-11-19T03:30:00.000Z",
+      "proofUrl": null,
+      "proofFileExists": null,
+      "purchaseOccurredAt": null,
+      "receiptAmount": null,
+      "expectedTotal": 125000,
+      "paymentMethod": null,
+      "severity": "MEDIUM",
+      "codes": [
+        "MISSING_PROOF"
+      ],
+      "notes": []
+    },
+    {
+      "reservationId": "18e59296-f3f9-49b5-afb8-eef47294044d",
+      "customerId": "37cd67eb-b787-4a1f-bce0-e23ad98b444e",
+      "customerName": "Bunda Yenny",
+      "customerPhone": "6281336855888",
+      "status": "confirmed",
+      "bookingDate": "2026-11-19T05:00:00.000Z",
+      "proofUrl": null,
+      "proofFileExists": null,
+      "purchaseOccurredAt": null,
+      "receiptAmount": null,
+      "expectedTotal": 90000,
+      "paymentMethod": null,
+      "severity": "MEDIUM",
+      "codes": [
+        "MISSING_PROOF"
+      ],
+      "notes": []
+    },
+    {
+      "reservationId": "36a453ed-6839-4f23-8d33-96f2692976ba",
+      "customerId": "987c1fac-e13e-4a32-962b-2e80d307331f",
+      "customerName": "Bunda Suami Eprill",
+      "customerPhone": "62895368703065",
+      "status": "confirmed",
+      "bookingDate": "2026-11-19T06:30:00.000Z",
+      "proofUrl": null,
+      "proofFileExists": null,
+      "purchaseOccurredAt": null,
+      "receiptAmount": null,
+      "expectedTotal": 80000,
+      "paymentMethod": null,
+      "severity": "MEDIUM",
+      "codes": [
+        "MISSING_PROOF"
+      ],
+      "notes": []
+    },
+    {
+      "reservationId": "0719494f-17bc-40e9-b7a6-1c5b56136c01",
+      "customerId": "551fa9f9-71f4-420a-93e5-7b3a888336ba",
+      "customerName": "Bunda Nuris",
+      "customerPhone": "6285894174055",
+      "status": "confirmed",
+      "bookingDate": "2026-11-19T07:00:00.000Z",
+      "proofUrl": null,
+      "proofFileExists": null,
+      "purchaseOccurredAt": null,
+      "receiptAmount": null,
+      "expectedTotal": 55000,
+      "paymentMethod": null,
+      "severity": "MEDIUM",
+      "codes": [
+        "MISSING_PROOF"
+      ],
+      "notes": []
+    },
+    {
+      "reservationId": "4a248eb8-7b96-4a79-9576-d79e8e55f031",
+      "customerId": "4cbfe4bc-971d-4182-aa3c-0e0cf037b331",
+      "customerName": "Kristina",
+      "customerPhone": "6285236616268",
+      "status": "confirmed",
+      "bookingDate": "2026-11-20T05:00:00.000Z",
+      "proofUrl": null,
+      "proofFileExists": null,
+      "purchaseOccurredAt": null,
+      "receiptAmount": null,
+      "expectedTotal": 185000,
+      "paymentMethod": null,
+      "severity": "MEDIUM",
+      "codes": [
+        "MISSING_PROOF"
+      ],
+      "notes": []
+    },
+    {
+      "reservationId": "968d2104-74bc-4952-ad74-9d6bfc81d3d7",
+      "customerId": "8087ad89-e1af-4cbc-bd9d-467fd354da9b",
+      "customerName": "Bunda Maulida",
+      "customerPhone": "628881626616",
+      "status": "confirmed",
+      "bookingDate": "2026-11-21T02:30:00.000Z",
+      "proofUrl": null,
+      "proofFileExists": null,
+      "purchaseOccurredAt": null,
+      "receiptAmount": null,
+      "expectedTotal": 90000,
+      "paymentMethod": null,
+      "severity": "MEDIUM",
+      "codes": [
+        "MISSING_PROOF"
+      ],
+      "notes": []
+    },
+    {
+      "reservationId": "fd78dcf1-d54b-4f86-b76e-2f5444c8af5e",
+      "customerId": "66741a46-f430-4a44-9bae-e0b8bda58f31",
+      "customerName": "Bunda aden",
+      "customerPhone": "6281333548004",
+      "status": "confirmed",
+      "bookingDate": "2026-11-22T02:30:00.000Z",
+      "proofUrl": null,
+      "proofFileExists": null,
+      "purchaseOccurredAt": null,
+      "receiptAmount": null,
+      "expectedTotal": 110000,
+      "paymentMethod": null,
+      "severity": "MEDIUM",
+      "codes": [
+        "MISSING_PROOF"
+      ],
+      "notes": []
+    },
+    {
+      "reservationId": "ab0cb3ac-3134-4157-b441-35c1db6f8ed6",
+      "customerId": "a3c0917d-d677-4e26-a008-ec77085fde2e",
+      "customerName": "Bunda Kharisma Tria",
+      "customerPhone": "6285190663780",
+      "status": "confirmed",
+      "bookingDate": "2026-11-22T04:00:00.000Z",
+      "proofUrl": null,
+      "proofFileExists": null,
+      "purchaseOccurredAt": "2026-11-14T04:24:03.951Z",
+      "receiptAmount": null,
+      "expectedTotal": 170000,
+      "paymentMethod": null,
+      "severity": "MEDIUM",
+      "codes": [
+        "PAID_WITHOUT_PROOF"
+      ],
+      "notes": [
+        "Tercatat lunas non-tunai tetapi tidak ada berkas bukti."
+      ]
+    },
+    {
+      "reservationId": "de15ebda-689b-492c-b25a-af11546638e4",
+      "customerId": "5184c119-e189-49fe-82bb-d0055edd1158",
+      "customerName": "Bunda Azalia W",
+      "customerPhone": "6285230002359",
+      "status": "confirmed",
+      "bookingDate": "2026-11-22T09:00:00.000Z",
+      "proofUrl": null,
+      "proofFileExists": null,
+      "purchaseOccurredAt": null,
+      "receiptAmount": null,
+      "expectedTotal": 80000,
+      "paymentMethod": null,
+      "severity": "MEDIUM",
+      "codes": [
+        "MISSING_PROOF"
+      ],
+      "notes": []
+    }
+  ]
+}

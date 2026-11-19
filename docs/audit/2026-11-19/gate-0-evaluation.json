@@ -1,0 +1,476 @@
+[
+  {
+    "index": 1,
+    "logTs": "2026-10-20T01:50:46.981Z",
+    "customer": {
+      "id": "8d421d91-fdc8-451c-b548-d567087161ce",
+      "name": "Bunda Paw",
+      "phone": "62851***558"
+    },
+    "messageId": "c15b032b-f2a2-4580-b126-ab5af1048189",
+    "mediaContent": "[IMAGE: Done ya kak]",
+    "reservation": {
+      "id": "1a20e5c6-9bb5-4cdb-8a54-6e46af354266",
+      "status": "completed",
+      "bookingDate": "2026-10-20T02:00:00.000Z",
+      "createdAt": "2026-10-20T06:14:16.091Z",
+      "proofUrl": null,
+      "paymentMethod": null,
+      "purchaseOccurredAt": null,
+      "rawText": "[Admin Manual] BOTH: Kala Baby – Pijat Pulih Ceria Newborn +"
+    },
+    "classification": "PRE_RESERVATION",
+    "detailNote": "Reservasi dibuat admin 4.4 jam SETELAH bukti transfer"
+  },
+  {
+    "index": 2,
+    "logTs": "2026-10-20T07:06:25.129Z",
+    "customer": {
+      "id": "320d5302-3271-4b04-ad0d-55cc3029c8ec",
+      "name": "Bunda Retno",
+      "phone": "62821***740"
+    },
+    "messageId": "505bde21-d921-4cc3-b2b1-84fffb75b197",
+    "mediaContent": "[IMAGE]",
+    "reservation": {
+      "id": "32a9b102-af68-4de8-8b1e-c092a69f9600",
+      "status": "completed",
+      "bookingDate": "2026-10-30T07:00:00.000Z",
+      "createdAt": "2026-10-29T14:36:01.121Z",
+      "proofUrl": "/media/outbound/default-tenant/9f951bb381584c8484d3f3127660ea4a.jpg",
+      "paymentMethod": "QRIS",
+      "purchaseOccurredAt": "2026-10-30T08:31:25.444Z",
+      "rawText": "[Admin Manual] BABY: Kala Baby – Pijat Ceria Newborn [Total "
+    },
+    "classification": "COMPLETED",
+    "detailNote": "Reservasi sudah berstatus completed saat bukti dikirim (pelunasan pasca-visit)"
+  },
+  {
+    "index": 3,
+    "logTs": "2026-10-22T08:37:31.523Z",
+    "customer": {
+      "id": "8d77b054-8907-4986-80d4-c6de9fac8e6d",
+      "name": "Bunda Devi",
+      "phone": "62856***774"
+    },
+    "messageId": "be223e3f-f89b-4ed2-9802-82e6c91e1234",
+    "mediaContent": "[IMAGE]",
+    "reservation": {
+      "id": "86624d70-8946-4124-b340-9decd3863f26",
+      "status": "completed",
+      "bookingDate": "2026-10-22T06:30:00.000Z",
+      "createdAt": "2026-10-21T14:59:08.016Z",
+      "proofUrl": "/media/outbound/default-tenant/8df02e57f5fa4c63aefd0cf3d43d29b9.jpg",
+      "paymentMethod": "QRIS",
+      "purchaseOccurredAt": "2026-10-22T09:16:01.197Z",
+      "rawText": "Berikut reservasi 🐣\n\nHari dan tanggal : Kamis 22 Oktober 20"
+    },
+    "classification": "COMPLETED",
+    "detailNote": "Reservasi sudah berstatus completed saat bukti dikirim (pelunasan pasca-visit)"
+  },
+  {
+    "index": 4,
+    "logTs": "2026-10-25T09:40:19.113Z",
+    "customer": {
+      "id": "3c8e4d5b-d147-4d14-8927-a0ea8238529e",
+      "name": "Bunda Ervina",
+      "phone": "62881***550"
+    },
+    "messageId": "d899079a-7b2a-42eb-86b0-f0ded6367ab3",
+    "mediaContent": "[IMAGE: Saya telah berhasil mengirimkan Rp90.000 ke rekening kamu melalui SeaBank.]",
+    "reservation": {
+      "id": "1c8fcda2-0a99-4d81-8a6c-030ea7bec953",
+      "status": "completed",
+      "bookingDate": "2026-10-29T02:30:00.000Z",
+      "createdAt": "2026-10-24T11:16:39.151Z",
+      "proofUrl": null,
+      "paymentMethod": null,
+      "purchaseOccurredAt": "2026-10-24T22:30:13.127Z",
+      "rawText": "Berikut reservasi 🐣\n\nHari dan tanggal : Rabu 28 Oktober 202"
+    },
+    "classification": "COMPLETED",
+    "detailNote": "Reservasi sudah berstatus completed saat bukti dikirim (pelunasan pasca-visit)"
+  },
+  {
+    "index": 5,
+    "logTs": "2026-10-28T03:01:10.655Z",
+    "customer": {
+      "id": "4f4e18eb-657f-4dbf-9bcc-44814c9ff0e8",
+      "name": "Hidayatus Sholikhah",
+      "phone": "62896***351"
+    },
+    "messageId": "2bb39686-0b69-4c90-ab61-bd82205fe54d",
+    "mediaContent": "[IMAGE: ini DPnya ya]",
+    "reservation": {
+      "id": "7020aa14-3ed0-4e11-8937-7b2b5709c526",
+      "status": "completed",
+      "bookingDate": "2026-11-01T02:00:00.000Z",
+      "createdAt": "2026-10-27T12:55:04.706Z",
+      "proofUrl": null,
+      "paymentMethod": "CASH",
+      "purchaseOccurredAt": "2026-11-05T14:55:13.983Z",
+      "rawText": "Berikut reservasi 🐣\n\nHari dan tanggal : Minggu 1 November 2"
+    },
+    "classification": "COMPLETED",
+    "detailNote": "Reservasi sudah berstatus completed saat bukti dikirim (pelunasan pasca-visit)"
+  },
+  {
+    "index": 6,
+    "logTs": "2026-10-28T14:10:45.427Z",
+    "customer": {
+      "id": "bed09f6c-5877-4dfd-bf1c-4d970d1603d9",
+      "name": "Bunda Kinnas Sofia Amaranggana",
+      "phone": "62813***453"
+    },
+    "messageId": "0dc59414-acc5-453a-a46e-600bef106cef",
+    "mediaContent": "[IMAGE: Done bubid 🙏🏻🙏🏻]",
+    "reservation": {
+      "id": "fa3949a3-a588-4498-9f31-74f03b636f82",
+      "status": "completed",
+      "bookingDate": "2026-10-30T05:00:00.000Z",
+      "createdAt": "2026-10-30T02:31:00.455Z",
+      "proofUrl": null,
+      "paymentMethod": null,
+      "purchaseOccurredAt": null,
+      "rawText": "[Admin Manual] KIDS: Kala Kids – Pijat Ceria [Total 60m]\nAla"
+    },
+    "classification": "PRE_RESERVATION",
+    "detailNote": "Reservasi dibuat admin 36.3 jam SETELAH bukti transfer"
+  },
+  {
+    "index": 7,
+    "logTs": "2026-10-29T23:40:58.049Z",
+    "customer": {
+      "id": "d46fad6f-d2dc-4cf5-8490-8053483c7bcb",
+      "name": "Bunda Feriyal",
+      "phone": "62812***171"
+    },
+    "messageId": "79af41f7-5366-415c-8fe9-bd71bee4ca35",
+    "mediaContent": "[IMAGE: Saya udah lunasin ya]",
+    "reservation": {
+      "id": "f87928bb-81eb-4dc3-a673-7906a221cee1",
+      "status": "completed",
+      "bookingDate": "2026-10-31T04:00:00.000Z",
+      "createdAt": "2026-10-29T13:03:11.539Z",
+      "proofUrl": null,
+      "paymentMethod": null,
+      "purchaseOccurredAt": null,
+      "rawText": "Berikut reservasi 🐣\n\nHari dan tanggal : Sabtu 31 Oktober 20"
+    },
+    "classification": "COMPLETED",
+    "detailNote": "Reservasi sudah berstatus completed saat bukti dikirim (pelunasan pasca-visit)"
+  },
+  {
+    "index": 8,
+    "logTs": "2026-11-01T03:35:05.505Z",
+    "customer": {
+      "id": "9bb64e7b-b92b-46b7-8fc0-b10d3f1ce340",
+      "name": "Susi Setyowati",
+      "phone": "62857***340"
+    },
+    "messageId": "8625c629-0f76-4b0c-9856-6ba6dfb3b195",
+    "mediaContent": "[IMAGE]",
+    "reservation": {
+      "id": "ad587990-f70d-43b9-9573-94732538ef5c",
+      "status": "completed",
+      "bookingDate": "2026-11-01T02:00:00.000Z",
+      "createdAt": "2026-11-01T17:09:40.979Z",
+      "proofUrl": null,
+      "paymentMethod": null,
+      "purchaseOccurredAt": null,
+      "rawText": "[Admin Manual] BABY: Kala Baby – Pijat Lahap [Total 60m]\nAla"
+    },
+    "classification": "PRE_RESERVATION",
+    "detailNote": "Reservasi dibuat admin 13.6 jam SETELAH bukti transfer"
+  },
+  {
+    "index": 9,
+    "logTs": "2026-11-02T08:12:41.149Z",
+    "customer": {
+      "id": "aca1875d-4f10-4879-bee1-ba353ff87b9a",
+      "name": "Bunda Jennifer",
+      "phone": "62811***397"
+    },
+    "messageId": "ed0a8b2b-dad4-4655-b81e-335ab609805a",
+    "mediaContent": "[IMAGE]",
+    "reservation": {
+      "id": "d5a28a02-188d-4506-893f-13912acba54b",
+      "status": "completed",
+      "bookingDate": "2026-11-02T07:30:00.000Z",
+      "createdAt": "2026-11-02T14:14:47.917Z",
+      "proofUrl": null,
+      "paymentMethod": null,
+      "purchaseOccurredAt": null,
+      "rawText": "[Admin Manual] BABY: Kala Baby – Pijat Pulih Ceria Newborn +"
+    },
+    "classification": "PRE_RESERVATION",
+    "detailNote": "Reservasi dibuat admin 6.0 jam SETELAH bukti transfer"
+  },
+  {
+    "index": 10,
+    "logTs": "2026-11-03T03:34:50.707Z",
+    "customer": {
+      "id": "dcbbf821-bd5d-477a-a10d-280c5d9f8db8",
+      "name": "Bunda Devia",
+      "phone": "62858***929"
+    },
+    "messageId": "c0980ffe-2f23-4d2c-a2e5-e199ad8fb2c3",
+    "mediaContent": "[IMAGE: Thx]",
+    "reservation": {
+      "id": "6afa71c2-e281-459e-8d7d-67c01fe8963a",
+      "status": "completed",
+      "bookingDate": "2026-11-03T01:30:00.000Z",
+      "createdAt": "2026-11-03T13:32:39.557Z",
+      "proofUrl": null,
+      "paymentMethod": "TRANSFER",
+      "purchaseOccurredAt": "2026-11-03T03:34:00.000Z",
+      "rawText": "[RESERVATION:ADMIN_PANEL] Kala Baby – Pijat Pulih Ceria + Ka"
+    },
+    "classification": "PRE_RESERVATION",
+    "detailNote": "Reservasi dibuat admin 10.0 jam SETELAH bukti transfer"
+  },
+  {
+    "index": 11,
+    "logTs": "2026-11-03T10:22:16.177Z",
+    "customer": {
+      "id": "9a63c3b8-67d0-4bf0-a8dd-138a2f6c0fd8",
+      "name": "Bunda Leliy",
+      "phone": "62811***991"
+    },
+    "messageId": "3d7dc23d-3138-475b-ab88-8d58a8bbe04e",
+    "mediaContent": "[IMAGE]",
+    "reservation": {
+      "id": "a5328509-e022-4627-9850-0701a48a7c7c",
+      "status": "completed",
+      "bookingDate": "2026-11-03T08:00:00.000Z",
+      "createdAt": "2026-11-03T13:32:43.696Z",
+      "proofUrl": null,
+      "paymentMethod": "QRIS",
+      "purchaseOccurredAt": "2026-11-03T03:22:00.000Z",
+      "rawText": "[RESERVATION:ADMIN_PANEL] Kala Baby – Pijat Ceria [Total 60m"
+    },
+    "classification": "PRE_RESERVATION",
+    "detailNote": "Reservasi dibuat admin 3.2 jam SETELAH bukti transfer"
+  },
+  {
+    "index": 12,
+    "logTs": "2026-11-03T14:10:03.535Z",
+    "customer": {
+      "id": "3b36d4f9-c0d8-40fb-95f2-79dba935ba77",
+      "name": "Bunda Rika",
+      "phone": "62813***967"
+    },
+    "messageId": "bbbb3119-a934-4396-9207-3a0d5dd0566f",
+    "mediaContent": "[IMAGE]",
+    "reservation": {
+      "id": "7d4f4f5f-b032-4c2b-a28f-3304424f1314",
+      "status": "completed",
+      "bookingDate": "2026-11-04T02:30:00.000Z",
+      "createdAt": "2026-11-03T15:04:13.791Z",
+      "proofUrl": null,
+      "paymentMethod": null,
+      "purchaseOccurredAt": null,
+      "rawText": "[Admin Manual] BABY: Kala Baby – Pijat Pulih Ceria Newborn +"
+    },
+    "classification": "PRE_RESERVATION",
+    "detailNote": "Reservasi dibuat admin 0.9 jam SETELAH bukti transfer"
+  },
+  {
+    "index": 13,
+    "logTs": "2026-11-04T00:04:43.014Z",
+    "customer": {
+      "id": "a4da5347-8c49-4db0-a1f3-c25ba2092a85",
+      "name": "Bunda Pamela",
+      "phone": "62812***794"
+    },
+    "messageId": "0a258cbe-b4be-49d6-acf6-17c868c11f4e",
+    "mediaContent": "[IMAGE]",
+    "reservation": {
+      "id": "6c8b70d1-4e9d-44af-96b9-ed3317a96501",
+      "status": "completed",
+      "bookingDate": "2026-11-05T03:30:00.000Z",
+      "createdAt": "2026-11-03T12:08:47.897Z",
+      "proofUrl": null,
+      "paymentMethod": "Transfer",
+      "purchaseOccurredAt": "2026-11-05T03:30:00.000Z",
+      "rawText": "Berikut reservasi 🐣\n\nHari dan tanggal : Kamis 5 November 20"
+    },
+    "classification": "COMPLETED",
+    "detailNote": "Reservasi sudah berstatus completed saat bukti dikirim (pelunasan pasca-visit)"
+  },
+  {
+    "index": 14,
+    "logTs": "2026-11-05T20:16:17.323Z",
+    "customer": {
+      "id": "a2655f24-49d5-4347-86c6-78797123ab4b",
+      "name": "Bunda Izza",
+      "phone": "62812***420"
+    },
+    "messageId": "2f837252-ca12-4364-a4b0-026374fa9b09",
+    "mediaContent": "[IMAGE]",
+    "reservation": {
+      "id": "0d07ad75-3088-435d-a7bb-f60cee064642",
+      "status": "confirmed",
+      "bookingDate": "2026-11-19T02:30:00.000Z",
+      "createdAt": "2026-11-18T13:17:48.451Z",
+      "proofUrl": null,
+      "paymentMethod": null,
+      "purchaseOccurredAt": null,
+      "rawText": "Berikut reservasi 🐣\n\nHari dan tanggal : Kamis 19 November 2"
+    },
+    "classification": "WINDOW",
+    "detailNote": "Jadwal booking > 24 jam ke depan (+318.2 jam: terbentur maxBookingDate)"
+  },
+  {
+    "index": 15,
+    "logTs": "2026-11-07T11:53:26.201Z",
+    "customer": {
+      "id": "cc255067-ac58-4ba1-a3d9-785ecc30a30c",
+      "name": "Ferlin",
+      "phone": "62881***316"
+    },
+    "messageId": "daa2ec9f-0c70-4b74-b7dd-8638870cab52",
+    "mediaContent": "[IMAGE: Makasih yaaa]",
+    "reservation": {
+      "id": "0a2efa7f-58bc-4db1-994f-7adc1ec500cd",
+      "status": "completed",
+      "bookingDate": "2026-11-05T08:00:00.000Z",
+      "createdAt": "2026-11-04T22:55:21.711Z",
+      "proofUrl": null,
+      "paymentMethod": null,
+      "purchaseOccurredAt": null,
+      "rawText": "[Admin Manual] BABY: Kala Baby – Pijat Ceria [Total 60m]\nAla"
+    },
+    "classification": "COMPLETED",
+    "detailNote": "Reservasi sudah berstatus completed saat bukti dikirim (pelunasan pasca-visit)"
+  },
+  {
+    "index": 16,
+    "logTs": "2026-11-10T00:32:33.309Z",
+    "customer": {
+      "id": "b7e1e9c9-d9ed-48e7-92ec-1b394ca17748",
+      "name": "Bunda azizah",
+      "phone": "62817***696"
+    },
+    "messageId": "aaa42cfe-dbc4-48b0-b517-6e95b3c5bf19",
+    "mediaContent": "[IMAGE: Suda ya bu]",
+    "reservation": {
+      "id": "7d63447f-3dfc-433b-b74b-fbe80e5d7631",
+      "status": "completed",
+      "bookingDate": "2026-11-15T02:30:00.000Z",
+      "createdAt": "2026-11-10T00:12:02.804Z",
+      "proofUrl": "/media/inbound/default-tenant/393b53bf6de04eaf986a2a97b6de02d3.jpg",
+      "paymentMethod": "QRIS",
+      "purchaseOccurredAt": "2026-11-15T00:00:00.000Z",
+      "rawText": "Berikut reservasi 🐣\n\nHari dan tanggal : Minggu 15 November "
+    },
+    "classification": "COMPLETED",
+    "detailNote": "Reservasi sudah berstatus completed saat bukti dikirim (pelunasan pasca-visit)"
+  },
+  {
+    "index": 17,
+    "logTs": "2026-11-11T06:51:13.633Z",
+    "customer": {
+      "id": "eb0d6780-4a21-4ed2-a320-a10601cf41f2",
+      "name": "Bunda Riska",
+      "phone": "62857***431"
+    },
+    "messageId": "b35b137c-25ad-439e-b32c-0ce3dae45faa",
+    "mediaContent": "[IMAGE: Saya telah berhasil mengirimkan Rp115.000 ke rekening kamu melalui SeaBank.]",
+    "reservation": {
+      "id": "aa9dcc81-1214-49d8-ac3c-e0fc39122569",
+      "status": "completed",
+      "bookingDate": "2026-11-11T05:30:00.000Z",
+      "createdAt": "2026-11-10T13:13:29.180Z",
+      "proofUrl": "/media/outbound/default-tenant/a492d3d0cd344da4b6c7d9d773daf09f.jpg",
+      "paymentMethod": "QRIS",
+      "purchaseOccurredAt": "2026-11-11T06:51:03.026Z",
+      "rawText": "Berikut reservasi 🐣\n\nHari dan tanggal : Rabu 11 November 20"
+    },
+    "classification": "COMPLETED",
+    "detailNote": "Reservasi sudah berstatus completed saat bukti dikirim (pelunasan pasca-visit)"
+  },
+  {
+    "index": 18,
+    "logTs": "2026-11-12T08:45:43.087Z",
+    "customer": {
+      "id": "c8497a43-e6e6-4ccf-b67b-dd920864e8a9",
+      "name": "Bunda Nara Little Ummaya Daycare",
+      "phone": "62812***211"
+    },
+    "messageId": "235a2a93-5592-4ec5-aedd-02ec600ab533",
+    "mediaContent": "[IMAGE]",
+    "reservation": {
+      "id": "b66046d2-c7a7-4f0f-82f3-fa300704593a",
+      "status": "completed",
+      "bookingDate": "2026-11-11T08:00:00.000Z",
+      "createdAt": "2026-11-11T02:48:36.338Z",
+      "proofUrl": "/media/inbound/default-tenant/8452558bf6b242998645dd84f571e299.jpg",
+      "paymentMethod": "Transfer BCA",
+      "purchaseOccurredAt": "2026-11-11T00:00:00.000Z",
+      "rawText": "[Admin Manual] KIDS: Kala Kids – Pijat Ceria + Kala Baby – P"
+    },
+    "classification": "COMPLETED",
+    "detailNote": "Reservasi sudah berstatus completed saat bukti dikirim (pelunasan pasca-visit)"
+  },
+  {
+    "index": 19,
+    "logTs": "2026-11-14T03:50:43.334Z",
+    "customer": {
+      "id": "ba888316-9692-4f40-8793-5375f27b43f1",
+      "name": "Bunda Indy",
+      "phone": "62822***662"
+    },
+    "messageId": "3d99a5a0-5dfa-4eb4-96fa-6c26d46ca4df",
+    "mediaContent": "[IMAGE]",
+    "reservation": {
+      "id": "1bdced24-eac4-4f11-a219-9d2c01f9fa5b",
+      "status": "completed",
+      "bookingDate": "2026-11-16T06:30:00.000Z",
+      "createdAt": "2026-11-14T01:20:13.531Z",
+      "proofUrl": "/media/inbound/default-tenant/3655ce8e4f4341ddb5517a3e0b510f69.jpg",
+      "paymentMethod": "QRIS",
+      "purchaseOccurredAt": "2026-11-16T00:00:00.000Z",
+      "rawText": "Berikut reservasi 🐣\n\nHari dan tanggal : Senin 16 November 2"
+    },
+    "classification": "COMPLETED",
+    "detailNote": "Reservasi sudah berstatus completed saat bukti dikirim (pelunasan pasca-visit)"
+  },
+  {
+    "index": 20,
+    "logTs": "2026-11-14T07:34:36.274Z",
+    "customer": {
+      "id": "e9e4717c-5b1b-4ca1-9c0b-a76eb9c29a70",
+      "name": "Thabita",
+      "phone": "62831***876"
+    },
+    "messageId": "2f8e66c9-aa2c-4093-a0df-67226a62cb48",
+    "mediaContent": "[IMAGE]",
+    "reservation": null,
+    "classification": "UNKNOWN",
+    "detailNote": ""
+  },
+  {
+    "index": 21,
+    "logTs": "2026-11-16T05:42:16.222Z",
+    "customer": {
+      "id": "6632ba0c-d7c6-45f6-b59d-c8b835aa0b10",
+      "name": "Bunda Nida",
+      "phone": "62857***833"
+    },
+    "messageId": "5adbca89-5c62-42af-b789-2de6b52c315c",
+    "mediaContent": "[IMAGE]",
+    "reservation": {
+      "id": "0975f422-4f19-43ef-b03e-7ee9d13d6f2c",
+      "status": "completed",
+      "bookingDate": "2026-11-17T01:00:00.000Z",
+      "createdAt": "2026-11-16T02:56:58.176Z",
+      "proofUrl": null,
+      "paymentMethod": null,
+      "purchaseOccurredAt": null,
+      "rawText": "Berikut reservasi 🐣\n\nHari dan tanggal : Selasa 17 November "
+    },
+    "classification": "COMPLETED",
+    "detailNote": "Reservasi sudah berstatus completed saat bukti dikirim (pelunasan pasca-visit)"
+  }
+]
