@@ -121,7 +121,9 @@ describe('Ad Click Attribution & Meta CAPI Unit Tests', () => {
         userAgent: 'Mozilla/5.0',
       };
 
-      // Execution should resolve to success: false and log instead of crashing
+      // Execution should resolve to success: false and log instead of crashing.
+      // Payload kini membawa telemetri tambahan (deliveryConfirmed/eventsReceived);
+      // cukup pastikan kontrak inti success+message tetap benar.
       await expect(
         capiService.sendCapiEvent({
           eventName: 'Lead',
@@ -129,7 +131,7 @@ describe('Ad Click Attribution & Meta CAPI Unit Tests', () => {
           adClick,
           tenantId: DEFAULT_TENANT_ID,
         })
-      ).resolves.toEqual({ success: false, message: 'Network Timeout / DNS failure' });
+      ).resolves.toMatchObject({ success: false, message: 'Network Timeout / DNS failure' });
     });
   });
 
