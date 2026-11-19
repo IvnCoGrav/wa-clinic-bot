@@ -8,6 +8,7 @@ import { Modal } from '../../components/ui/Modal';
 import { ChatHistoryModal } from '../../components/modals/ChatHistoryModal';
 import { FollowUpTemplates } from './FollowUpTemplates';
 import { FollowUpEditModal } from './FollowUpEditModal';
+import { FollowUpHolidayModal } from './FollowUpHolidayModal';
 import {
   FollowUpCustomer as Customer,
   FollowUpEditModalState,
@@ -44,6 +45,7 @@ import {
   Phone,
   MapPin,
   ChevronRight,
+  Coffee,
 } from 'lucide-react';
 import { formatWib, formatWibClock } from '../../utils/dateWib';
 
@@ -76,6 +78,17 @@ export const FollowUpQueue: React.FC = () => {
 
   // Alasan pembatalan manual (opsional) — dikirim ke backend sebagai cancel_reason.
   const [confirmReason, setConfirmReason] = useState('');
+
+  // Mode Libur (Holiday Mode) State
+  const [holidayModalOpen, setHolidayModalOpen] = useState(false);
+  const [isHolidayActive, setIsHolidayActive] = useState(false);
+
+  const checkHolidayStatus = useCallback(async () => {
+    try {
+      const res = await apiRequest('follow-ups/holiday-mode');
+      setIsHolidayActive(res?.data?.state?.status === 'active');
+    } catch {}
+  }, []);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -157,6 +170,7 @@ export const FollowUpQueue: React.FC = () => {
 
   const loadFollowUps = useCallback(async () => {
     setLoading(true);
+    checkHolidayStatus();
     try {
       const params = new URLSearchParams();
       if (statusFilter) params.append('status', statusFilter);
@@ -202,6 +216,13 @@ export const FollowUpQueue: React.FC = () => {
   };
 
   const handleRescheduleOverdue = async () => {
+    if (isHolidayActive) {
+      setToastMsg({
+        type: 'error',
+        text: 'Mode Libur sedang aktif. Tidak dapat memajukan antrean overdue selama klinik libur. Nonaktifkan mode libur terlebih dahulu.',
+      });
+      return;
+    }
     setActionLoading('reschedule-overdue');
     try {
       const res = await apiRequest('follow-ups/reschedule-overdue', {
@@ -617,10 +638,23 @@ export const FollowUpQueue: React.FC = () => {
           </button>
 
           <button
+            onClick={() => setHolidayModalOpen(true)}
+            className={`px-3.5 py-2 rounded-xl transition shadow-xs flex items-center space-x-1.5 text-xs font-bold active:scale-95 ${
+              isHolidayActive
+                ? 'bg-amber-600 hover:bg-amber-700 text-white ring-2 ring-amber-300/60'
+                : 'bg-surface hover:bg-fill-1 border border-divider text-ink'
+            }`}
+            title="Pengaturan Mode Libur Follow-Up (jeda kirim & proteksi antrean)"
+          >
+            <Coffee size={14} className={isHolidayActive ? 'text-white' : 'text-warning'} />
+            <span>{isHolidayActive ? 'Mode Libur: AKTIF' : 'Mode Libur'}</span>
+          </button>
+
+          <button
             onClick={() => setConfirmAction({ type: 'reschedule-overdue' })}
-            disabled={actionLoading !== null}
-            className="px-3.5 py-2 bg-warning hover:bg-warning-hover active:scale-95 text-on-solid rounded-xl transition shadow-xs flex items-center space-x-1.5 text-xs font-bold"
-            title="Majukan follow-up overdue mulai hari ini/besok (maks 40 blast/hari)"
+            disabled={actionLoading !== null || isHolidayActive}
+            className="px-3.5 py-2 bg-warning hover:bg-warning-hover active:scale-95 text-on-solid rounded-xl transition shadow-xs flex items-center space-x-1.5 text-xs font-bold disabled:opacity-50 disabled:cursor-not-allowed"
+            title={isHolidayActive ? 'Mode Libur aktif — majukan overdue dinonaktifkan' : 'Majukan follow-up overdue mulai hari ini/besok (maks 40 blast/hari)'}
           >
             <FastForward size={14} />
             <span>Majukan Overdue</span>
@@ -1282,6 +1316,16 @@ export const FollowUpQueue: React.FC = () => {
               </div>
         </Modal>
       }
+
+      {/* Mode Libur (Holiday Mode) Modal */}
+      <FollowUpHolidayModal
+        open={holidayModalOpen}
+        onClose={() => setHolidayModalOpen(false)}
+        onSaved={(active) => {
+          setIsHolidayActive(active);
+          loadFollowUps();
+        }}
+      />
 
       {/* Toast Notification */}
       {toastMsg && (

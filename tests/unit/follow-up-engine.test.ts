@@ -493,7 +493,9 @@ describe('Follow-Up & Rolling Templates Engine Unit Tests', () => {
         expect(d.getUTCHours()).toBe(2);
         expect(d.getUTCMinutes()).toBe(0);
       }
-      expect(new Date(nextCalls[0][0].data.scheduled_at).toISOString()).toBe('2026-10-14T02:00:00.000Z');
+      expect(new Date(nextCalls[0][0].data.scheduled_at).toISOString()).toBe('2026-10-09T02:00:00.000Z');
+      expect(new Date(nextCalls[1][0].data.scheduled_at).toISOString()).toBe('2026-11-03T02:00:00.000Z');
+      expect(new Date(nextCalls[2][0].data.scheduled_at).toISOString()).toBe('2026-11-28T02:00:00.000Z');
     } finally {
       vi.useRealTimers();
     }
@@ -634,8 +636,8 @@ describe('Follow-Up & Rolling Templates Engine Unit Tests', () => {
 
   // ── Re-anchor NEXT_TREATMENT (fondasional: state-driven, bukan tambal prompt) ──
   // Booking jauh di masa depan agar deterministik lintas-waktu (tidak bergantung jam mesin).
-  const FUTURE_BOOKING = new Date('2030-01-15T10:00:00+07:00'); // stage1 → 2030-02-15 02:00 UTC
-  const STAGE1_TARGET = new Date('2030-02-15T02:00:00.000Z');
+  const FUTURE_BOOKING = new Date('2030-01-15T10:00:00+07:00'); // stage1 (+25 hari) → 2030-02-09 02:00 UTC
+  const STAGE1_TARGET = new Date('2030-02-09T02:00:00.000Z');
 
   it('24. re-anchor: baris QUEUED prematur digeser ke tanggal kunjungan baru + reservation_id ditautkan', async () => {
     const phone = `62893${Date.now()}reanchor`;

@@ -4,6 +4,44 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### 2026-11-19 - Fitur: Skema Repeat Follow-Up 25 Hari & Mode Libur Follow-Up (Holiday Mode)
+
+- **Permintaan Pengguna:**
+  1. Majukan jadwal pengingat repeat treatment (`NEXT_TREATMENT`) dari siklus 30 hari menjadi 25 hari (`[25, 50, 75]` hari pukul 09:00 WIB), dengan syarat jaminan non-retroaktif (antrean lama yang sudah terjadwal tidak disentuh, hanya berlaku untuk reservasi baru).
+  2. Implementasi mekanisme jeda/pause follow-up (Mode Libur / Holiday Mode) saat klinik libur operasional, disertai skema pasca-libur yang aman dari lonjakan blasting (*anti-blasting smooth reschedule*).
+- **Perubahan & Implementasi Fondasional:**
+  1. **Skema Repeat Order 25 Hari (`src/config/followup-templates.ts`)**:
+     - `NEXT_TREATMENT_STAGE_DAYS` dimutakhirkan menjadi `[25, 50, 75]`.
+     - Ditambahkan helper kanonis `computeNextTreatmentAtWib0900(serviceDate, stageDays)` untuk perhitungan waktu deterministik pukul 09:00 WIB.
+     - Penyelarasan template pesan default stage 1 menjadi narasi "hampir 1 bulan".
+     - Non-retroaktif: baris yang dibuat sebelum `NEXT_TREATMENT_SCHEME_EPOCH` (default 2026-11-19) tidak digeser, dan reconciler hanya memindai kunjungan setelah epoch. Reservasi baru tetap memakai jadwal 25/50/75.
+  2. **Kontrak & Konfigurasi Mode Libur (`src/config/followup-scheduling.ts`, `src/config/followup-quota.ts`)**:
+     - Struktur config murni di `Tenant.settings.followUpHoliday` & `Tenant.settings.followUpQuota` (tanpa migrasi database Prisma).
+     - Mendukung aktivasi fleksibel: mode manual (toggle ON/OFF dengan batas aman maks 30 hari) atau rentang tanggal kalender (`startDate` s/d `endDate`).
+     - Kuota harian terukur (`maxPerDay`, default 40/hari di jam kerja 09:00–16:30 WIB) dan batas kesegaran (`staleCapDays`, default 14 hari).
+  3. **Alokator Slot Cerdas & Smooth Reschedule (`src/services/followup-schedule-allocator.ts`, `src/services/followup-holiday.service.ts`)**:
+     - `allocateFollowUpSlots`: membagi antrean tertahan secara bertahap dan merata, load-aware (menghitung beban existing di database agar tidak melebihi kuota harian).
+     - Eksekusi transisi keluar libur (`runExitReschedule`) dilindungi idempotensi database via `adminNotificationLog` untuk mencegah eksekusi ganda antar-proses worker.
+     - Item tertahan yang melampaui `staleCapDays` dibatalkan secara bersih dengan `CANCEL_REASON.HOLIDAY_STALE`.
+  4. **Proteksi Generator & Worker (`follow-up-engine.service.ts`, `follow-up-lifecycle.service.ts`)**:
+     - Selama mode libur aktif: background worker secara otomatis menghentikan pengiriman pesan keluar (`return 0`) dan membekukan pembatalan aturan 48 jam (`OVERDUE_48H`). Percakapan masuk dan respon AI tetap berjalan normal.
+     - Generator baru (`NO_PURCHASE`, `NEXT_TREATMENT`, `REMINDER_H1`/`REVIEW_H1`) saat libur otomatis di-*clamp* ke hari kerja pertama pasca-libur.
+  5. **Admin API & Guard (`src/routes/admin/follow-up.subroute.ts`)**:
+     - `GET /api/admin/follow-ups/holiday-mode`: informasi status libur, rentang tanggal, ringkasan reschedule, dan jumlah backlog tertahan.
+     - `POST /api/admin/follow-ups/holiday-mode`: update status libur dengan validasi parser ketat dan pencatatan audit log admin.
+     - Tombol manual `POST /api/admin/follow-ups/reschedule-overdue` mengembalikan 409 Conflict bila dicoba saat mode libur sedang aktif.
+  6. **UI Dashboard Admin (`FollowUpQueue.tsx`, `FollowUpHolidayModal.tsx`)**:
+     - Dibuat komponen modal kontrol `FollowUpHolidayModal` (terdaftar di `ui-registry.json`).
+     - Tombol akses `[Mode Libur]` di toolbar `FollowUpQueue.tsx` dengan badge animasi pulsing amber saat mode libur aktif.
+     - Proteksi tombol `Majukan Overdue` di-disable dengan tooltip informatif saat mode libur aktif.
+- **Verifikasi & Kepatuhan Gerbang:**
+  - Seluruh test terkait hijau: `followup-holiday-state.test.ts`, `followup-holiday-mode.test.ts`, `followup-schedule-allocator.test.ts`, `follow-up-admin.test.ts`, `follow-up-repeat-schedule-25d.test.ts`.
+  - `npm run check:reuse`: Lulus (189 baseline, 0 baru).
+  - `npm run check:architecture`: Lulus (59 baseline, 0 baru, 0 circular import baru).
+  - `npm run check:ui-reuse`: Lulus (62 halaman, 28 komponen, 0 pelanggaran).
+  - `npm run build:all`: Lulus (backend `tsc` & frontend `vite build` bersih).
+
+
 #### 2026-11-15 - Fix: Salinan Alert Watchdog Iklan via WhatsApp (Solusi Sementara)
 
 - **Latar:** Alert `AD_FUNNEL_ANOMALY` sebenarnya sudah terkirim ke Telegram grup "Report kala" (thread 3) 8x sejak 14 Nov (status `SENT`), tetapi owner tidak melihatnya karena masuk topik laporan harian, `notification_channels` kosong, dan tidak ada kanal WhatsApp.

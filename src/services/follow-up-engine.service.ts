@@ -29,6 +29,7 @@ import {
   CANCEL_REASON,
   FOLLOWUP_TYPE_PRIORITY,
 } from './follow-up-lifecycle.service';
+import { isRepeatSchemeEligible } from '../config/followup-scheduling';
 
 const FOLLOWUP_BATCH_LIMIT = parsePositiveInt(process.env.FOLLOWUP_BATCH_LIMIT, 20);
 const FOLLOWUP_THROTTLE_BASE_MS = parsePositiveInt(process.env.FOLLOWUP_THROTTLE_BASE_MS, 1500);
@@ -186,6 +187,25 @@ export class FollowUpEngineService {
       return 0;
     }
 
+    const { getFollowUpHolidayConfig } = await import('./tenant-settings.store');
+    const { resolveFollowUpHolidayState } = await import('../config/followup-scheduling');
+    const now = new Date();
+    const holidayConfig = await getFollowUpHolidayConfig(tenantId);
+    const holidayState = resolveFollowUpHolidayState(holidayConfig, now);
+
+    if (holidayState.status === 'active') {
+      console.log(`[FollowUp Worker] Mode Libur aktif untuk tenant ${tenantId} (${holidayState.mode}). Pengiriman ditunda.`);
+      return 0;
+    }
+
+    if (holidayState.status === 'exit_pending' || holidayState.status === 'manual_expired') {
+      // Fail-closed: transisi keluar harus diselesaikan lebih dulu oleh
+      // FollowUpService. Jangan pernah menjalankan aturan 48 jam di atas
+      // antrean yang masih menunggu reschedule.
+      console.log(`[FollowUp Worker] Transisi keluar mode libur belum selesai (${holidayState.status}) untuk tenant ${tenantId}. Pemrosesan ditunda.`);
+      return 0;
+    }
+
     if (process.env.NODE_ENV !== 'test' && !isWithinFollowUpWorkingHours(new Date())) {
       console.log('[FollowUp Worker] Di luar jam kerja (09:00 - 17:00 WIB). Pengiriman ditunda.');
       return 0;
@@ -196,7 +216,6 @@ export class FollowUpEngineService {
       : ['QUEUED'];
 
     try {
-      const now = new Date();
 
       try {
         const nowWib = new Date(now.getTime() + 7 * 60 * 60 * 1000);
@@ -239,7 +258,8 @@ export class FollowUpEngineService {
         console.warn('[FollowUp Worker] Prune zombie follow-ups error:', pruneErr.message);
       }
 
-      const maxPerDay = parsePositiveInt(process.env.FOLLOWUP_MAX_PER_DAY, 40);
+      const { getFollowUpMaxPerDay } = await import('../config/followup-quota');
+      const maxPerDay = await getFollowUpMaxPerDay(tenantId);
       const sentToday = await this.countDailySent(tenantId, now);
       const remainingQuota = maxPerDay - sentToday;
       if (remainingQuota <= 0) {
@@ -452,6 +472,11 @@ export class FollowUpEngineService {
 
   public async suppressPrematureNextTreatment(fu: any, tenantId: string): Promise<boolean> {
     try {
+      // Non-retroaktif: baris NEXT_TREATMENT yang dibuat sebelum epoch skema
+      // tetap mengikuti jadwal lamanya dan tidak boleh digeser oleh guard baru.
+      if (fu?.created_at && !isRepeatSchemeEligible(fu.created_at)) {
+        return false;
+      }
       const now = new Date();
       const windowStart = new Date(now.getTime() - FOLLOWUP_RECENT_VISIT_SUPPRESS_DAYS * 24 * 60 * 60 * 1000);
 

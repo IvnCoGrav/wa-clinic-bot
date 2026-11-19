@@ -488,6 +488,52 @@
         "src/scripts/heal-single-card-provenance.ts"
       ],
       "test": "tests/unit/heal-single-card-provenance.test.ts"
+    },
+    {
+      "id": "followup.holiday_scheduling",
+      "title": "Kontrak & resolusi Mode Libur Follow-Up",
+      "description": "Parser konfigurasi libur tenant, resolver state (active/exit_pending/manual_expired), clamp jadwal ke hari buka pertama, dan epoch skema repeat 25/50/75 hari yang non-retroaktif.",
+      "canonical": "src/config/followup-scheduling.ts",
+      "exports": [
+        "parseFollowUpHolidayConfig",
+        "parseFollowUpHolidayInput",
+        "resolveFollowUpHolidayState",
+        "clampScheduledAtToPostHoliday",
+        "countWibDaysBetween",
+        "isRepeatSchemeEligible",
+        "NEXT_TREATMENT_SCHEME_EPOCH"
+      ],
+      "forbiddenDeclarations": [
+        "parseFollowUpHolidayConfig",
+        "parseFollowUpHolidayInput",
+        "resolveFollowUpHolidayState",
+        "clampScheduledAtToPostHoliday",
+        "isRepeatSchemeEligible"
+      ],
+      "allowedFiles": [
+        "src/config/followup-scheduling.ts"
+      ],
+      "test": "tests/unit/followup-holiday-state.test.ts"
+    },
+    {
+      "id": "followup.schedule_allocator",
+      "title": "Alokator slot follow-up beban-aware",
+      "description": "Membagi antrean follow-up ke slot jam kerja WIB secara deterministik, menghormati beban existing per hari, dan mengisi celah slot kosong untuk mencegah blasting.",
+      "canonical": "src/services/followup-schedule-allocator.ts",
+      "exports": [
+        "allocateFollowUpSlots",
+        "loadFollowUpDailyLoad",
+        "loadFollowUpDailyLoadDetailed",
+        "getWibMinutes"
+      ],
+      "forbiddenDeclarations": [
+        "allocateFollowUpSlots",
+        "loadFollowUpDailyLoad"
+      ],
+      "allowedFiles": [
+        "src/services/followup-schedule-allocator.ts"
+      ],
+      "test": "tests/unit/followup-schedule-allocator.test.ts"
     }
   ]
 }

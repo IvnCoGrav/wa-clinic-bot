@@ -265,4 +265,154 @@ describe('Follow-Up Admin Subroute Integration Tests', () => {
       expect.objectContaining({ dateFilter: 'upcoming' })
     );
   });
+
+  it('10. POST /api/admin/follow-ups/reschedule-overdue ditolak 409 saat mode libur active', async () => {
+    const { followUpHolidayService } = await import('../../src/services/followup-holiday.service');
+    vi.spyOn(followUpHolidayService, 'getStatus').mockResolvedValueOnce({
+      config: { enabled: true } as any,
+      state: { status: 'active', mode: 'manual' },
+      backlogCount: 15,
+    });
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/admin/follow-ups/reschedule-overdue',
+      payload: { maxPerDay: 40 },
+    });
+
+    expect(res.statusCode).toBe(409);
+    const body = JSON.parse(res.body);
+    expect(body.success).toBe(false);
+    expect(body.error).toContain('Mode Libur sedang aktif');
+  });
+
+  it('11. GET /api/admin/follow-ups/holiday-mode mengembalikan config, state, dan backlogCount', async () => {
+    const { followUpHolidayService } = await import('../../src/services/followup-holiday.service');
+    vi.spyOn(followUpHolidayService, 'getStatus').mockResolvedValueOnce({
+      config: { enabled: false, startDate: null, endDate: null } as any,
+      state: { status: 'inactive' },
+      backlogCount: 0,
+    });
+
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/admin/follow-ups/holiday-mode',
+    });
+
+    expect(res.statusCode).toBe(200);
+    const body = JSON.parse(res.body);
+    expect(body.success).toBe(true);
+    expect(body.data.config.enabled).toBe(false);
+    expect(body.data.state.status).toBe('inactive');
+  });
+
+  it('12. POST /api/admin/follow-ups/holiday-mode validasi input & perbarui config', async () => {
+    const { followUpHolidayService } = await import('../../src/services/followup-holiday.service');
+    vi.spyOn(followUpHolidayService, 'getConfig').mockResolvedValueOnce({
+      enabled: false,
+      startDate: null,
+      endDate: null,
+    } as any);
+
+    const updateSpy = vi.spyOn(followUpHolidayService, 'updateConfig').mockResolvedValueOnce({
+      enabled: true,
+      startDate: '2026-12-24',
+      endDate: '2026-12-26',
+      reason: 'Libur Cuti Bersama',
+      autoRescheduleOnExit: true,
+      staleCapDays: 14,
+      windowStartMinWib: 540,
+      windowEndMinWib: 990,
+      manualActivatedAt: null,
+      lastRescheduledAt: null,
+      lastRescheduleSummary: null,
+    });
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/admin/follow-ups/holiday-mode',
+      payload: {
+        enabled: true,
+        startDate: '2026-12-24',
+        endDate: '2026-12-26',
+        reason: 'Libur Cuti Bersama',
+      },
+    });
+
+    expect(res.statusCode).toBe(200);
+    const body = JSON.parse(res.body);
+    expect(body.success).toBe(true);
+    expect(body.data.config.enabled).toBe(true);
+    expect(updateSpy).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        enabled: true,
+        startDate: '2026-12-24',
+        endDate: '2026-12-26',
+      })
+    );
+  });
+
+  it('13. POST disable memakai endDate sebagai kunci keluar (anti double reschedule)', async () => {
+    const { followUpHolidayService } = await import('../../src/services/followup-holiday.service');
+    vi.spyOn(followUpHolidayService, 'getConfig').mockResolvedValueOnce({
+      enabled: true,
+      startDate: '2026-12-24',
+      endDate: '2026-12-26',
+      autoRescheduleOnExit: true,
+    } as any);
+    vi.spyOn(followUpHolidayService, 'updateConfig').mockResolvedValueOnce({
+      enabled: false,
+      startDate: '2026-12-24',
+      endDate: '2026-12-26',
+      autoRescheduleOnExit: true,
+    } as any);
+    const exitSpy = vi.spyOn(followUpHolidayService, 'runExitReschedule').mockResolvedValueOnce({
+      rescheduledCount: 1,
+      daysCount: 1,
+      distribution: {},
+      executedAt: new Date().toISOString(),
+    });
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/admin/follow-ups/holiday-mode',
+      payload: { enabled: false },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(exitSpy).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ status: 'exit_pending', exitEndDate: '2026-12-26' }),
+      expect.any(Date),
+      expect.any(Function)
+    );
+  });
+
+  it('14. POST holiday-mode menyimpan kuota harian tenant (maxPerDay)', async () => {
+    const { followUpHolidayService } = await import('../../src/services/followup-holiday.service');
+    vi.spyOn(followUpHolidayService, 'getConfig').mockResolvedValueOnce({
+      enabled: false,
+      startDate: null,
+      endDate: null,
+    } as any);
+    vi.spyOn(followUpHolidayService, 'updateConfig').mockResolvedValueOnce({
+      enabled: false,
+      startDate: null,
+      endDate: null,
+      autoRescheduleOnExit: true,
+    } as any);
+    const quotaSpy = vi.spyOn(followUpHolidayService, 'updateQuota').mockResolvedValueOnce(25);
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/admin/follow-ups/holiday-mode',
+      payload: { enabled: false, maxPerDay: 25 },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(quotaSpy).toHaveBeenCalledWith(expect.any(String), 25);
+    const body = JSON.parse(res.body);
+    expect(body.data.maxPerDay).toBe(25);
+  });
 });

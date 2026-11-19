@@ -540,6 +540,13 @@
       "reviewed": false
     },
     {
+      "path": "src/pages/tenant/FollowUpHolidayModal.tsx",
+      "module": "tenant",
+      "parent": null,
+      "adr": null,
+      "reviewed": false
+    },
+    {
       "path": "src/pages/tenant/FollowUpQueue.tsx",
       "module": "tenant",
       "parent": null,
@@ -781,6 +788,7 @@
     "src/pages/tenant/DeliveryTiers.tsx",
     "src/pages/tenant/FinancialAnalytics.tsx",
     "src/pages/tenant/FollowUpEditModal.tsx",
+    "src/pages/tenant/FollowUpHolidayModal.tsx",
     "src/pages/tenant/FollowUpQueue.tsx",
     "src/pages/tenant/FollowUpTemplates.tsx",
     "src/pages/tenant/KnowledgeBase.tsx",

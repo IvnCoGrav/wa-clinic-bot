@@ -1,8 +1,12 @@
 import { prisma } from '../db/client';
 import { DEFAULT_TENANT_ID } from '../config/tenant';
-import { getRollingVariant } from '../config/followup-templates';
+import { getRollingVariant, getWibDateKey } from '../config/followup-templates';
 import { parsePositiveInt } from '../utils/env-numeric';
 import { buildNonBypassCustomerWhere } from '../utils/customer-bypass';
+import { getFollowUpMaxPerDay } from '../config/followup-quota';
+import { loadFollowUpDailyLoadDetailed, allocateFollowUpSlots, getWibMinutes } from './followup-schedule-allocator';
+import { getFollowUpHolidayConfig } from './tenant-settings.store';
+import { resolveFollowUpHolidayState } from '../config/followup-scheduling';
 
 import {
   followUpTemplateService,
@@ -15,6 +19,7 @@ import {
   FollowUpLifecycleService,
   CANCEL_REASON,
   NO_PURCHASE_STAGE_DAYS,
+  NEXT_TREATMENT_STAGE_DAYS,
   FOLLOWUP_TYPE_PRIORITY,
 } from './follow-up-lifecycle.service';
 
@@ -28,6 +33,7 @@ import {
 export {
   CANCEL_REASON,
   NO_PURCHASE_STAGE_DAYS,
+  NEXT_TREATMENT_STAGE_DAYS,
   FOLLOWUP_TYPE_PRIORITY,
   isWithinFollowUpWorkingHours,
   followUpTemplateService,
@@ -193,8 +199,8 @@ export class FollowUpService {
     return followUpLifecycleService.computeScheduleAtWib0940(anchor, dayOffset, seed);
   }
 
-  public computeNextTreatmentAtWib0900(bookingDate: Date, monthOffset: number): Date {
-    return followUpLifecycleService.computeNextTreatmentAtWib0900(bookingDate, monthOffset);
+  public computeNextTreatmentAtWib0900(bookingDate: Date, stage: number): Date {
+    return followUpLifecycleService.computeNextTreatmentAtWib0900(bookingDate, stage);
   }
 
   public async reconcileOrphanedCompletedFollowUps(
@@ -240,6 +246,32 @@ export class FollowUpService {
 
   public async processDueFollowUps(tenantId: string = DEFAULT_TENANT_ID): Promise<number> {
     this.auditTenantUsage('processDueFollowUps', tenantId);
+    const holidayConfig = await getFollowUpHolidayConfig(tenantId);
+    const now = new Date();
+    const holidayState = resolveFollowUpHolidayState(holidayConfig, now);
+
+    if (holidayState.status === 'active') {
+      console.log(`[FollowUp Worker] Mode Libur aktif untuk tenant ${tenantId} (${holidayState.mode}). Pengiriman ditunda.`);
+      return 0;
+    }
+
+    if (holidayState.status === 'exit_pending' || holidayState.status === 'manual_expired') {
+      console.log(`[FollowUp Worker] Mode Libur transisi keluar (${holidayState.status}) untuk tenant ${tenantId}. Menjalankan smooth reschedule.`);
+      const { followUpHolidayService } = await import('./followup-holiday.service');
+      const exitSummary = await followUpHolidayService.runExitReschedule(
+        tenantId,
+        holidayState,
+        now,
+        this.rescheduleOverdueFollowUps.bind(this)
+      );
+      if (!exitSummary) {
+        // Fail-closed: jangan biarkan aturan 48 jam / EXPIRED_PENDING berjalan
+        // di atas antrean yang belum sempat dijadwalkan ulang.
+        console.log(`[FollowUp Worker] Reschedule pasca-libur belum selesai (tenant ${tenantId}). Pemrosesan ditunda.`);
+        return 0;
+      }
+    }
+
     return followUpEngineService.processDueFollowUps(tenantId, this.executeFollowUp.bind(this));
   }
 
@@ -535,15 +567,18 @@ export class FollowUpService {
     options: {
       maxPerDay?: number;
       startDate?: Date;
+      staleCapDays?: number;
+      source?: 'manual' | 'holiday_exit';
     } = {}
   ): Promise<{
     rescheduledCount: number;
     daysCount: number;
     distribution: Record<string, number>;
+    staleCancelledCount?: number;
   }> {
     this.auditTenantUsage('rescheduleOverdueFollowUps', tenantId);
-    const defaultMax = parsePositiveInt(process.env.FOLLOWUP_MAX_PER_DAY, 40);
-    const maxPerDay = Math.max(1, options.maxPerDay || defaultMax);
+    const tenantMax = await getFollowUpMaxPerDay(tenantId);
+    const maxPerDay = Math.max(1, options.maxPerDay || tenantMax);
 
     const now = new Date();
     const nowWib = new Date(now.getTime() + 7 * 60 * 60 * 1000);
@@ -551,22 +586,32 @@ export class FollowUpService {
     let startYear: number;
     let startMonth: number;
     let startDay: number;
+    let isStartDateToday = false;
 
     if (options.startDate) {
       const sWib = new Date(new Date(options.startDate).getTime() + 7 * 60 * 60 * 1000);
       startYear = sWib.getUTCFullYear();
       startMonth = sWib.getUTCMonth();
       startDay = sWib.getUTCDate();
+      isStartDateToday = (
+        startYear === nowWib.getUTCFullYear() &&
+        startMonth === nowWib.getUTCMonth() &&
+        startDay === nowWib.getUTCDate()
+      );
     } else {
       startYear = nowWib.getUTCFullYear();
       startMonth = nowWib.getUTCMonth();
       startDay = nowWib.getUTCDate();
+      isStartDateToday = true;
       if (nowWib.getUTCHours() >= 16) {
         startDay += 1;
+        isStartDateToday = false;
       }
     }
 
-    const baseCutoff = new Date(Date.UTC(startYear, startMonth, startDay, 2, 0, 0, 0));
+    const baseCutoff = options.startDate
+      ? new Date(Date.UTC(startYear, startMonth, startDay, 2, 0, 0, 0))
+      : now;
 
     const overdueFollowUps = await prisma.followUp.findMany({
       where: {
@@ -580,46 +625,98 @@ export class FollowUpService {
     });
 
     if (overdueFollowUps.length === 0) {
-      return { rescheduledCount: 0, daysCount: 0, distribution: {} };
+      return { rescheduledCount: 0, daysCount: 0, distribution: {}, staleCancelledCount: 0 };
     }
 
-    const sortedOverdue = [...overdueFollowUps].sort((a, b) => {
+    let staleCancelledCount = 0;
+    const toReschedule: typeof overdueFollowUps = [];
+
+    if (typeof options.staleCapDays === 'number' && options.staleCapDays > 0) {
+      const staleCutoffMs = now.getTime() - options.staleCapDays * 24 * 60 * 60 * 1000;
+      for (const fu of overdueFollowUps) {
+        if (new Date(fu.scheduled_at).getTime() < staleCutoffMs) {
+          await prisma.followUp.update({
+            where: { id: fu.id },
+            data: {
+              status: 'CANCELLED',
+              cancel_reason: CANCEL_REASON.HOLIDAY_STALE,
+              processing_claimed_at: null,
+            },
+          });
+          staleCancelledCount++;
+        } else {
+          toReschedule.push(fu);
+        }
+      }
+    } else {
+      toReschedule.push(...overdueFollowUps);
+    }
+
+    if (toReschedule.length === 0) {
+      return { rescheduledCount: 0, daysCount: 0, distribution: {}, staleCancelledCount };
+    }
+
+    const sortedOverdue = [...toReschedule].sort((a, b) => {
       const pA = FOLLOWUP_TYPE_PRIORITY[a.type] || 99;
       const pB = FOLLOWUP_TYPE_PRIORITY[b.type] || 99;
       if (pA !== pB) return pA - pB;
       return new Date(a.scheduled_at).getTime() - new Date(b.scheduled_at).getTime();
     });
 
-    const distribution: Record<string, number> = {};
-    let currentDayIndex = 0;
-    let countInCurrentDay = 0;
+    const startOfTargetUtc = new Date(Date.UTC(startYear, startMonth, startDay) - 7 * 60 * 60 * 1000);
+    const { counts: loadByDate, occupiedMinutes } = await loadFollowUpDailyLoadDetailed(tenantId, startOfTargetUtc);
 
-    const stepMin = maxPerDay > 1 ? Math.floor(450 / maxPerDay) : 30;
-
-    for (const fu of sortedOverdue) {
-      if (countInCurrentDay >= maxPerDay) {
-        currentDayIndex++;
-        countInCurrentDay = 0;
+    // Kurangi beban existing untuk item yang benar-benar akan dipindahkan
+    // (bukan yang sudah dibatalkan karena stale), termasuk slot menitnya.
+    for (const fu of toReschedule) {
+      const key = getWibDateKey(fu.scheduled_at);
+      if (key && loadByDate.has(key)) {
+        const cur = loadByDate.get(key)!;
+        if (cur > 0) loadByDate.set(key, cur - 1);
+        const occupied = occupiedMinutes.get(key);
+        if (occupied) occupied.delete(getWibMinutes(fu.scheduled_at));
       }
+    }
 
-      const offsetMin = countInCurrentDay * stepMin;
-      const targetDate = new Date(Date.UTC(startYear, startMonth, startDay + currentDayIndex, 2, offsetMin, 0, 0));
+    const nowWibMinutes = nowWib.getUTCHours() * 60 + nowWib.getUTCMinutes();
+    const firstDayMinStartWib = isStartDateToday ? Math.max(540, nowWibMinutes + 5) : undefined;
+
+    const slots = allocateFollowUpSlots({
+      count: sortedOverdue.length,
+      maxPerDay,
+      windowStartMinWib: 540, // 09:00 WIB
+      windowEndMinWib: 990,   // 16:30 WIB
+      startDateWib: { year: startYear, month: startMonth, day: startDay },
+      firstDayMinStartWib,
+      loadByDate,
+      occupiedMinutesByDate: occupiedMinutes,
+    });
+
+    const distribution: Record<string, number> = {};
+    for (let i = 0; i < sortedOverdue.length; i++) {
+      const fu = sortedOverdue[i];
+      const targetDate = slots[i];
+      if (!targetDate) continue;
 
       await prisma.followUp.update({
         where: { id: fu.id },
-        data: { scheduled_at: targetDate },
+        data: {
+          scheduled_at: targetDate,
+          processing_claimed_at: null,
+        },
       });
 
-      const dateStr = targetDate.toISOString().split('T')[0];
+      const dateStr = getWibDateKey(targetDate) || targetDate.toISOString().split('T')[0];
       distribution[dateStr] = (distribution[dateStr] || 0) + 1;
-      countInCurrentDay++;
     }
 
-    console.log(`[FollowUp Service] Rescheduled ${sortedOverdue.length} overdue follow-ups across ${currentDayIndex + 1} days.`);
+    const daysCount = Object.keys(distribution).length;
+    console.log(`[FollowUp Service] Rescheduled ${sortedOverdue.length} overdue follow-ups across ${daysCount} days (stale cancelled: ${staleCancelledCount}).`);
     return {
       rescheduledCount: sortedOverdue.length,
-      daysCount: currentDayIndex + 1,
+      daysCount,
       distribution,
+      staleCancelledCount,
     };
   }
 }
