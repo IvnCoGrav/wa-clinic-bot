@@ -246,6 +246,7 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
       }
 
       await auditService.logAdminAction({
+        tenantId,
         apiKey: (request as any).adminKeyUsed,
         adminIdentity: (request as any).adminIdentity,
         action: 'LIVE_CHAT_SYNC_HISTORY',
@@ -278,6 +279,7 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
       const result = await wahaHistorySyncService.startBackgroundFullSync(messagesPerChat, tenantId);
 
       await auditService.logAdminAction({
+        tenantId,
         apiKey: (request as any).adminKeyUsed,
         adminIdentity: (request as any).adminIdentity,
         action: 'LIVE_CHAT_SYNC_FULL_START',
@@ -538,6 +540,7 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
       // Catatan internal tidak dicatat sebagai balasan ke WhatsApp (audit terpisah).
       if (result.isInternal) {
         await auditService.logAdminAction({
+          tenantId: resolveSessionTenantId(request),
           apiKey: (request as any).adminKeyUsed,
           adminIdentity: (request as any).adminIdentity,
           action: 'INTERNAL_NOTE_CREATED',
@@ -549,6 +552,7 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
       }
 
       await auditService.logAdminAction({
+        tenantId: resolveSessionTenantId(request),
         apiKey: (request as any).adminKeyUsed,
         adminIdentity: (request as any).adminIdentity,
         action: 'LIVE_CHAT_ADMIN_REPLY',
@@ -1122,6 +1126,7 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
       }
 
       await auditService.logAdminAction({
+        tenantId,
         apiKey: (request as any).adminKeyUsed,
         adminIdentity: (request as any).adminIdentity,
         action: 'CONVERSATION_MANUAL_TAKEOVER',

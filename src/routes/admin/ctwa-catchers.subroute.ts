@@ -148,6 +148,7 @@ export async function ctwaCatchersAdminRoutes(fastify: FastifyInstance) {
       invalidateCtwaCatcherCache(tenantId);
       await auditService
         .logAdminAction({
+          tenantId,
           apiKey: (request as any).adminKeyUsed,
           adminIdentity: (request as any).adminIdentity,
           action: 'CREATE_CTWA_CATCHER',
@@ -183,6 +184,7 @@ export async function ctwaCatchersAdminRoutes(fastify: FastifyInstance) {
         invalidateCtwaCatcherCache(tenantId);
         await auditService
           .logAdminAction({
+            tenantId,
             apiKey: (request as any).adminKeyUsed,
             adminIdentity: (request as any).adminIdentity,
             action: 'UPDATE_CTWA_CATCHER',
@@ -213,6 +215,7 @@ export async function ctwaCatchersAdminRoutes(fastify: FastifyInstance) {
         invalidateCtwaCatcherCache(tenantId);
         await auditService
           .logAdminAction({
+            tenantId,
             apiKey: (request as any).adminKeyUsed,
             adminIdentity: (request as any).adminIdentity,
             action: 'DELETE_CTWA_CATCHER',

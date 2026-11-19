@@ -49,6 +49,7 @@ export async function migrationAdminRoutes(fastify: FastifyInstance) {
       }
 
       await auditService.logAdminAction({
+        tenantId: resolveSessionTenantId(request),
         apiKey: (request as any).adminKeyUsed,
         adminIdentity: (request as any).adminIdentity,
         action: 'MIGRATION_EXTRACT_CHATS',
@@ -165,6 +166,7 @@ export async function migrationAdminRoutes(fastify: FastifyInstance) {
       const approvedCount = await bulkApproveStagingPurchases(resolveSessionTenantId(request));
 
       await auditService.logAdminAction({
+        tenantId: resolveSessionTenantId(request),
         apiKey: (request as any).adminKeyUsed,
         adminIdentity: (request as any).adminIdentity,
         action: 'MIGRATION_BULK_APPROVE_PURCHASES',
@@ -201,6 +203,7 @@ export async function migrationAdminRoutes(fastify: FastifyInstance) {
       const updated = await migrationService.updateStagingStatus(id, status as any);
 
       await auditService.logAdminAction({
+        tenantId: resolveSessionTenantId(request),
         apiKey: (request as any).adminKeyUsed,
         adminIdentity: (request as any).adminIdentity,
         action: 'MIGRATION_UPDATE_STAGING_STATUS',
@@ -220,6 +223,7 @@ export async function migrationAdminRoutes(fastify: FastifyInstance) {
     const result = await migrationService.commitApprovedRecords();
 
     await auditService.logAdminAction({
+      tenantId: resolveSessionTenantId(request),
       apiKey: (request as any).adminKeyUsed,
       adminIdentity: (request as any).adminIdentity,
       action: 'MIGRATION_COMMIT_APPROVED',

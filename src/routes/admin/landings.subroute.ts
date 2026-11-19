@@ -178,6 +178,7 @@ export async function landingAdminRoutes(fastify: FastifyInstance) {
         });
 
         await auditService.logAdminAction({
+          tenantId: id,
           apiKey: (request as any).adminKeyUsed,
           adminIdentity: (request as any).adminIdentity,
           action: 'TENANT_RAW_HTML_UPLOAD',
@@ -238,6 +239,7 @@ export async function landingAdminRoutes(fastify: FastifyInstance) {
         });
 
         await auditService.logAdminAction({
+          tenantId: id,
           apiKey: (request as any).adminKeyUsed,
           adminIdentity: (request as any).adminIdentity,
           action: 'TENANT_RAW_HTML_RESET',
@@ -379,6 +381,7 @@ export async function landingAdminRoutes(fastify: FastifyInstance) {
       });
 
       await auditService.logAdminAction({
+        tenantId: tenantId,
         apiKey: (request as any).adminKeyUsed,
         adminIdentity: (request as any).adminIdentity,
         action: 'LANDING_PAGE_CREATE',
@@ -486,6 +489,7 @@ export async function landingAdminRoutes(fastify: FastifyInstance) {
         });
 
         await auditService.logAdminAction({
+          tenantId: existing.tenant_id || resolveSessionTenantId(request),
           apiKey: (request as any).adminKeyUsed,
           adminIdentity: (request as any).adminIdentity,
           action: 'LANDING_PAGE_UPDATE',
@@ -570,6 +574,7 @@ export async function landingAdminRoutes(fastify: FastifyInstance) {
         await prisma.landingPage.delete({ where: { id } });
 
         await auditService.logAdminAction({
+          tenantId: existing.tenant_id || resolveSessionTenantId(request),
           apiKey: (request as any).adminKeyUsed,
           adminIdentity: (request as any).adminIdentity,
           action: 'LANDING_PAGE_DELETE',

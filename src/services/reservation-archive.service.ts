@@ -229,6 +229,7 @@ export class ReservationArchiveService {
       .catch(() => {});
 
     await auditService.logAdminAction({
+      tenantId: existing.tenant_id || tenantId,
       apiKey: apiKey || 'ADMIN',
       adminIdentity: actor || 'ADMIN_MANUAL',
       action: 'ARCHIVE_RESERVATION',
@@ -416,6 +417,7 @@ export class ReservationArchiveService {
 
     // 6. Log audit
     await auditService.logAdminAction({
+      tenantId: resData.tenant_id || tenantId,
       apiKey: apiKey || 'ADMIN',
       adminIdentity: actor || 'ADMIN_MANUAL',
       action: 'RESTORE_RESERVATION_FROM_ARCHIVE',

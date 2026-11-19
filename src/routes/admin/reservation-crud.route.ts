@@ -684,6 +684,7 @@ export async function reservationCrudRoutes(fastify: FastifyInstance) {
         }
  
         await auditService.logAdminAction({
+          tenantId: tenantId,
           apiKey: (request as any).adminKeyUsed,
           adminIdentity: (request as any).adminIdentity,
           action: 'CREATE_RESERVATION',
@@ -845,6 +846,7 @@ export async function reservationCrudRoutes(fastify: FastifyInstance) {
         } catch {}
  
         await auditService.logAdminAction({
+          tenantId: tenantId,
           apiKey: (request as any).adminKeyUsed,
           adminIdentity: (request as any).adminIdentity,
           action: 'CREATE_QUICK_HOLD_RESERVATION',
@@ -1128,6 +1130,7 @@ export async function reservationCrudRoutes(fastify: FastifyInstance) {
         }
  
         await auditService.logAdminAction({
+          tenantId: tenantId,
           apiKey: (request as any).adminKeyUsed,
           adminIdentity: (request as any).adminIdentity,
           action: 'CREATE_RESERVATION_MANUAL',
@@ -1138,6 +1141,7 @@ export async function reservationCrudRoutes(fastify: FastifyInstance) {
         // Override disengaja (force) dicatat khusus agar mudah diaudit.
         if (force) {
           await auditService.logAdminAction({
+            tenantId: tenantId,
             apiKey: (request as any).adminKeyUsed,
             adminIdentity: (request as any).adminIdentity,
             action: 'CREATE_RESERVATION_FORCE_OVERRIDE',

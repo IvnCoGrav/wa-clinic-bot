@@ -1773,6 +1773,7 @@ export class StaffReservationService {
 
         const { auditService } = await import('./audit.service');
         await auditService.logAdminAction({
+          tenantId: tenantId || reservation.tenant_id || DEFAULT_TENANT_ID,
           apiKey: 'STAFF_SESSION',
           adminIdentity: staffName,
           action: 'STAFF_PAYMENT_MISMATCH',
@@ -1788,7 +1789,6 @@ export class StaffReservationService {
             paymentMethod,
             notes,
           },
-          tenantId,
         });
 
         return {
@@ -1927,6 +1927,7 @@ export class StaffReservationService {
       // Audit log — amount = total riil di tangan, grossTreatmentValue tersimpan di purchase_value
       const { auditService } = await import('./audit.service');
       await auditService.logAdminAction({
+        tenantId: tenantId || reservation.tenant_id || DEFAULT_TENANT_ID,
         apiKey: 'STAFF_SESSION',
         adminIdentity: staffName,
         action: 'STAFF_RECORD_PAYMENT',
@@ -1947,7 +1948,6 @@ export class StaffReservationService {
             ? { supervisorOverrideUnassigned: true, overrideBy: staffId }
             : {}),
         },
-        tenantId,
       });
 
       return {
@@ -2346,6 +2346,7 @@ export class StaffReservationService {
       // 3. Audit trail
       const { auditService } = await import('./audit.service');
       await auditService.logAdminAction({
+        tenantId,
         apiKey: 'STAFF_SESSION',
         adminIdentity: staffName,
         action: 'STAFF_ARRIVED',
@@ -2356,7 +2357,6 @@ export class StaffReservationService {
           arrivalWaSuppressed: isRapid || skipWhatsApp,
           otwSentAt: (reservation as any).otw_sent_at ? new Date((reservation as any).otw_sent_at).toISOString() : null,
         },
-        tenantId,
       });
 
       return {
@@ -2738,6 +2738,7 @@ export class StaffReservationService {
       // Audit Trail
       const { auditService } = await import('./audit.service');
       await auditService.logAdminAction({
+        tenantId,
         apiKey: 'STAFF_SESSION',
         adminIdentity: therapistName,
         action: 'STAFF_SEND_PAYMENT_INFO',
@@ -2748,7 +2749,6 @@ export class StaffReservationService {
           totalFee,
           bankAccountsCount: paymentInfo.bankAccounts.length,
         },
-        tenantId,
       });
 
       return {
