@@ -18,6 +18,7 @@ import { resolveZipcode } from '../../utils/gazetteer-zipcode-resolver';
 import { memoryReservations, filterMemoryByTenant } from './stores';
 import { shouldExcludeFromCapiQueue } from '../../utils/dummy-filter';
 import { verifyReservationPayment } from '../../services/reservation-payment-verification.service';
+import { evaluatePurchaseValueMutation } from '../../domain/purchase-value-guard';
 
 export async function reservationDispatchPaymentProofRoutes(fastify: FastifyInstance) {
   /**
@@ -206,9 +207,27 @@ export async function reservationDispatchPaymentProofRoutes(fastify: FastifyInst
 
           const { isCapiStrictDelivery } = await import('../../config/feature-flags');
           const strictDelivery = isCapiStrictDelivery();
-          const leadUnconfirmed = strictDelivery && leadCapiResult.deliveryConfirmed === false;
+          // Dedup-aware (D6): audit `MQL_LEAD_EVENT_SENT` hanya ditulis SETELAH
+          // pengiriman terkonfirmasi. Bila sudah ada, events_received=0 pada
+          // percobaan ulang berarti Meta men-dedup event yang sama — bukan gagal.
+          let leadAlreadyConfirmed = false;
+          // Hanya HTTP 200 + events_received=0 yang boleh dianggap dedup.
+          // Status 4xx/5xx atau circuit breaker tetap kegagalan nyata.
+          if (leadCapiResult.deliveryConfirmed === false && leadCapiResult.status === 200) {
+            try {
+              const priorLead = await (prisma.auditLog as any)?.findFirst?.({
+                where: { tenant_id: tenantId, action: 'MQL_LEAD_EVENT_SENT', target_id: customerId },
+                select: { id: true },
+              });
+              leadAlreadyConfirmed = priorLead != null;
+            } catch {
+              leadAlreadyConfirmed = false;
+            }
+          }
+          const leadUnconfirmed =
+            strictDelivery && !leadAlreadyConfirmed && leadCapiResult.deliveryConfirmed === false;
 
-          if (!leadCapiResult.success || leadUnconfirmed) {
+          if (leadUnconfirmed || (!leadCapiResult.success && !leadAlreadyConfirmed)) {
             console.error(`[CAPI ERROR] Approved Lead send failed/unconfirmed for ${id}: ${leadCapiResult.message || 'events_received=0'}`);
             return reply.status(502).send({
               success: false,
@@ -229,11 +248,18 @@ export async function reservationDispatchPaymentProofRoutes(fastify: FastifyInst
               events_received: leadCapiResult.eventsReceived ?? leadCapiResult.events_received ?? 0,
               delivery_confirmed: leadCapiResult.deliveryConfirmed ?? false,
               fbtrace_id: leadCapiResult.fbtrace_id || null,
+              dedup_already_confirmed: leadAlreadyConfirmed || undefined,
             },
             ipAddress: request.ip,
           });
 
-          return reply.status(200).send({ success: true, message: 'Lead event disetujui & dikirim ke Meta CAPI' });
+          return reply.status(200).send({
+            success: true,
+            alreadyDelivered: leadAlreadyConfirmed || undefined,
+            message: leadAlreadyConfirmed
+              ? 'Lead event sudah pernah terkonfirmasi terkirim ke Meta; pengiriman ulang terdeduplikasi.'
+              : 'Lead event disetujui & dikirim ke Meta CAPI',
+          });
         }
 
         const existing = await prisma.reservation.findFirst({
@@ -321,6 +347,18 @@ export async function reservationDispatchPaymentProofRoutes(fastify: FastifyInst
           });
         }
 
+        // D3: perubahan nilai pada pengiriman ulang TETAP diizinkan (keputusan
+        // bisnis 2026-11-19); cukup dicatat agar jejak selisih tidak hilang.
+        const approvalValueVerdict = evaluatePurchaseValueMutation({
+          previousValue: existing.purchase_value,
+          nextValue: resolvedVal,
+          purchaseEventSentAt: existing.purchase_event_sent_at,
+          mode: 'warn',
+        });
+        if (approvalValueVerdict.warning) {
+          request.log.warn(approvalValueVerdict.warning);
+        }
+
         const eventName = (customPayload && typeof customPayload.event_name === 'string')
           ? customPayload.event_name
           : 'Purchase';
@@ -399,14 +437,28 @@ export async function reservationDispatchPaymentProofRoutes(fastify: FastifyInst
         });
         capiSkipped = capiResult.skipped === true;
 
-        // CAPI delivery evaluation (A-002 / P0-6):
-        // Jika CAPI_STRICT_DELIVERY aktif (default true), deliveryConfirmed === false (mis. HTTP 200 dengan events_received=0)
-        // dianggap gagal kirim (502) agar purchase_event_sent_at & audit tidak pernah distempel palsu.
+        // CAPI delivery evaluation (A-002 / P0-6 + D6 dedup-aware):
+        // Jika CAPI_STRICT_DELIVERY aktif (default true), deliveryConfirmed === false
+        // (mis. HTTP 200 dengan events_received=0) dianggap gagal kirim (502) agar
+        // purchase_event_sent_at & audit tidak pernah distempel palsu.
+        // KECUALI event_id kanonis yang sama sudah pernah terkirim & terkonfirmasi:
+        // Meta mengembalikan 0 karena deduplikasi, bukan karena gagal.
         const { isCapiStrictDelivery } = await import('../../config/feature-flags');
         const strictDelivery = isCapiStrictDelivery();
-        const purchaseUnconfirmed = strictDelivery && !capiSkipped && capiResult.deliveryConfirmed === false;
+        const alreadyDeliveredWithSameId =
+          // Dedup Meta hanya berlaku untuk HTTP 200 dengan events_received=0.
+          capiResult.status === 200 &&
+          existing.purchase_event_sent_at != null &&
+          ((existing as any).purchase_event_id || null) !== null &&
+          (existing as any).purchase_event_id === effectiveEventId &&
+          capiResult.sentEventId === effectiveEventId;
+        const purchaseUnconfirmed =
+          strictDelivery &&
+          !capiSkipped &&
+          capiResult.deliveryConfirmed === false &&
+          !alreadyDeliveredWithSameId;
 
-        if (!capiResult.success || purchaseUnconfirmed) {
+        if (purchaseUnconfirmed || (!capiResult.success && !capiSkipped && !alreadyDeliveredWithSameId)) {
           console.error(`[CAPI ERROR] Approved Purchase send failed/unconfirmed for ${id}: ${capiResult.message || 'events_received=0'}`);
           return reply.status(502).send({
             success: false,
@@ -415,7 +467,7 @@ export async function reservationDispatchPaymentProofRoutes(fastify: FastifyInst
           });
         }
 
-        const shouldStampSentAt = !capiSkipped && (
+        const shouldStampSentAt = !capiSkipped && !alreadyDeliveredWithSameId && (
           strictDelivery
             ? capiResult.deliveryConfirmed === true
             : capiResult.success
@@ -426,7 +478,11 @@ export async function reservationDispatchPaymentProofRoutes(fastify: FastifyInst
           data: {
             purchase_occurred_at: occurredDate, // Task 2.4: SELALU diisi saat approve
             purchase_value: resolvedVal ?? undefined,
-            purchase_event_value: resolvedVal ?? (existing as any).purchase_event_value ?? undefined,
+            // Snapshot nilai yang BENAR-BENAR diterima Meta tidak boleh ditimpa
+            // saat resend terdedup (Meta tidak menerima update nilai retroaktif).
+            purchase_event_value: alreadyDeliveredWithSameId
+              ? (existing as any).purchase_event_value ?? resolvedVal
+              : resolvedVal ?? (existing as any).purchase_event_value ?? undefined,
             purchase_event_id: capiResult.sentEventId || effectiveEventId,
             purchase_review_status: 'approved',
             ...(shouldStampSentAt ? { purchase_event_sent_at: new Date() } : {}),
@@ -472,6 +528,8 @@ export async function reservationDispatchPaymentProofRoutes(fastify: FastifyInst
             allowAged: allowAged || undefined,
             capi_suppressed: capiResult.skipped === true,
             capi_policy: capiResult.policy || undefined,
+            dedup_already_delivered: alreadyDeliveredWithSameId || undefined,
+            value_changed_after_delivery: approvalValueVerdict.changed && approvalValueVerdict.afterDelivery || undefined,
           },
           ipAddress: request.ip,
         });
@@ -482,8 +540,11 @@ export async function reservationDispatchPaymentProofRoutes(fastify: FastifyInst
           data: reservation,
           warning,
           skipped: isSkipped,
+          alreadyDelivered: alreadyDeliveredWithSameId || undefined,
           note: isSkipped
             ? 'Pembelian disetujui internal; event CAPI repeat purchase tidak dikirim ke Meta untuk menjaga akurasi CAC iklan.'
+            : alreadyDeliveredWithSameId
+            ? 'Event dengan event_id yang sama sudah pernah diterima Meta; pengiriman ulang terdeduplikasi (bukan kegagalan).'
             : undefined,
         });
       } catch (error) {

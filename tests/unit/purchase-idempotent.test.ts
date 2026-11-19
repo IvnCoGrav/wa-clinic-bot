@@ -183,5 +183,97 @@ describe('Fase 1.2 & 2: Purchase Event Idempotency & Moderation Guards', () => {
       expect(json.success).toBe(false);
       expect(json.error).toContain('Nilai transaksi tidak terdeteksi');
     });
+
+    // D6 (2026-11-19): HTTP 200 + events_received=0 untuk event_id yang SUDAH
+    // pernah terkonfirmasi adalah deduplikasi Meta, bukan kegagalan. Resend
+    // tidak boleh membalas 502 dan tidak boleh menimpa snapshot nilai lama.
+    it('should treat events_received=0 with already-delivered event_id as dedup (200), not 502', async () => {
+      const resId = 'res-dedup-force';
+      const storedEventId = `pur_${DEFAULT_TENANT_ID}_${resId}`;
+      vi.mocked(prisma.reservation.findFirst).mockResolvedValueOnce({
+        id: resId,
+        tenant_id: DEFAULT_TENANT_ID,
+        customer_id: 'cust-1',
+        purchase_review_status: 'approved',
+        purchase_occurred_at: new Date(Date.now() - 3600_000),
+        purchase_event_sent_at: new Date('2026-10-01T10:00:00Z'),
+        purchase_event_id: storedEventId,
+        purchase_event_value: 150000,
+        purchase_value: 150000,
+        treatment_detail: 'Pijat Bayi',
+        customer: { id: 'cust-1', phone: '08123456789', adClick: null },
+      } as any);
+      vi.mocked(prisma.reservation.update).mockResolvedValueOnce({
+        id: resId,
+        purchase_value: 150000,
+        purchase_event_value: 150000,
+        purchase_event_id: storedEventId,
+      } as any);
+
+      const sentPayloads: any[] = [];
+      vi.mocked(axios.post).mockImplementation(async (_url: any, payload: any) => {
+        sentPayloads.push(payload);
+        return { status: 200, data: { events_received: 0, fbtrace_id: 'trace-dedup' } };
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: `/api/admin/reservation/${resId}/approve-purchase`,
+        headers: { 'x-api-key': 'test_admin_key_999', 'x-tenant-id': DEFAULT_TENANT_ID },
+        payload: { force: true, reason: 'kirim ulang manual untuk uji dedup' },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const json = JSON.parse(response.body);
+      expect(json.success).toBe(true);
+      expect(json.alreadyDelivered).toBe(true);
+      expect(json.note).toContain('terdeduplikasi');
+      expect(sentPayloads[0].data[0].event_id).toBe(storedEventId);
+
+      const updateArg = vi.mocked(prisma.reservation.update).mock.calls[0][0] as any;
+      // Snapshot nilai yang sudah diterima Meta tidak boleh ditimpa.
+      expect(updateArg.data.purchase_event_value).toBe(150000);
+      // Jangan menstempel ulang purchase_event_sent_at pada dedup.
+      expect(updateArg.data.purchase_event_sent_at).toBeUndefined();
+    });
+
+    it('should still return 502 when Meta fails hard (non-200) even if the stored event_id matches', async () => {
+      const resId = 'res-dedup-hard-fail';
+      const storedEventId = `pur_${DEFAULT_TENANT_ID}_${resId}`;
+      vi.mocked(prisma.reservation.findFirst).mockResolvedValueOnce({
+        id: resId,
+        tenant_id: DEFAULT_TENANT_ID,
+        customer_id: 'cust-1',
+        purchase_review_status: 'approved',
+        purchase_occurred_at: new Date(Date.now() - 3600_000),
+        purchase_event_sent_at: new Date('2026-10-01T10:00:00Z'),
+        purchase_event_id: storedEventId,
+        purchase_event_value: 150000,
+        purchase_value: 150000,
+        treatment_detail: 'Pijat Bayi',
+        customer: { id: 'cust-1', phone: '08123456789', adClick: null },
+      } as any);
+
+      vi.spyOn(capiService, 'sendCapiEvent').mockResolvedValueOnce({
+        success: false,
+        status: 500,
+        message: 'Status code 500',
+        sentEventId: storedEventId,
+        deliveryConfirmed: false,
+        eventsReceived: 0,
+      } as any);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: `/api/admin/reservation/${resId}/approve-purchase`,
+        headers: { 'x-api-key': 'test_admin_key_999', 'x-tenant-id': DEFAULT_TENANT_ID },
+        payload: { force: true, reason: 'kirim ulang manual setelah error' },
+      });
+
+      expect(response.statusCode).toBe(502);
+      const json = JSON.parse(response.body);
+      expect(json.success).toBe(false);
+      expect(prisma.reservation.update).not.toHaveBeenCalled();
+    });
   });
 });

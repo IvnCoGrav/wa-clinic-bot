@@ -12,6 +12,7 @@ import { resolveHumanAreaName } from './staff-trip-tracking.service';
 import { resolveDeliveryFeeSnapshot } from './reservation-core.service';
 import { resolveNextPurchaseReviewStatus } from './capi-review-status';
 import { resolveReservationBilling } from './reservation-billing.service';
+import { evaluatePurchaseValueMutation } from '../domain/purchase-value-guard';
 import {
   getStaffChatWindowConfig,
   StaffChatWindowConfig,
@@ -1816,6 +1817,18 @@ export class StaffReservationService {
           ? Math.max(0, totalCollected - deliveryFee + discount)
           : purchaseValue;
       const totalPaid = totalCollected;
+
+      // D3: pencatatan pembayaran staf tetap boleh mengubah nilai; cukup dicatat
+      // bila event Purchase sudah pernah terkirim (Meta tidak bisa di-update).
+      const staffValueVerdict = evaluatePurchaseValueMutation({
+        previousValue: (reservation as any).purchase_value,
+        nextValue: grossTreatmentValue,
+        purchaseEventSentAt: (reservation as any).purchase_event_sent_at,
+        mode: 'warn',
+      });
+      if (staffValueVerdict.warning) {
+        console.warn(staffValueVerdict.warning);
+      }
 
       // Update data Reservasi menjadi Lunas di kasir lapangan.
       // Kebijakan Queue-First: DILARANG kirim CAPI dari lapangan (semua via antrean approve-purchase).
