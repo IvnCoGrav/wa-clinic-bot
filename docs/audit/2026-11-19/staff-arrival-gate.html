@@ -1,0 +1,479 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0e6b5a">
+<title>Prototipe · Catat Kedatangan &amp; Gerbang Selesai</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: #e9e6de;
+    --surface: #ffffff;
+    --surface-2: #f7f5f0;
+    --ink: #17211e;
+    --ink-2: #3f4d48;
+    --muted: #78857f;
+    --line: #e4e0d6;
+    --line-strong: #d2cdc0;
+    --accent: #0e6b5a;
+    --accent-weak: #e6f1ee;
+    --accent-ink: #ffffff;
+    --warn: #96590a;
+    --warn-weak: #fbf3e4;
+    --danger: #a1273c;
+    --danger-weak: #fbeaee;
+    --radius: 18px;
+    --shadow: 0 1px 2px rgba(23,33,30,.05), 0 12px 32px -22px rgba(23,33,30,.5);
+    --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --serif: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0a0e0d;
+      --surface: #171e1b;
+      --surface-2: #1c2421;
+      --ink: #eef2ef;
+      --ink-2: #c2ccc6;
+      --muted: #8b9891;
+      --line: #2a3330;
+      --line-strong: #3b4743;
+      --accent: #5fc9b1;
+      --accent-weak: #16332d;
+      --accent-ink: #08201b;
+      --warn: #dfa458;
+      --warn-weak: #33270f;
+      --danger: #f08a9c;
+      --danger-weak: #3a1a22;
+      --shadow: 0 1px 2px rgba(0,0,0,.4), 0 12px 32px -22px rgba(0,0,0,.9);
+    }
+  }
+
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--font);
+    font-size: 16px;
+    line-height: 1.5;
+    font-variant-numeric: tabular-nums;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .phone {
+    width: 100%; max-width: 430px; margin: 22px auto;
+    background: var(--surface-2); border-radius: 34px;
+    box-shadow: 0 30px 70px -40px rgba(0,0,0,.55), 0 0 0 1px rgba(0,0,0,.06);
+    overflow: hidden; min-height: 760px; position: relative;
+  }
+  @media (max-width: 480px) {
+    body { background: var(--surface-2); }
+    .phone { margin: 0; border-radius: 0; box-shadow: none; min-height: 100dvh; }
+  }
+
+  .appbar {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: calc(14px + env(safe-area-inset-top)) 20px 10px;
+  }
+  .brand { font-size: 11px; letter-spacing: .11em; text-transform: uppercase; font-weight: 700; color: var(--muted); }
+  .clock { font-size: 12px; font-weight: 650; color: var(--ink-2); }
+
+  main { padding: 0 16px calc(30px + env(safe-area-inset-bottom)); }
+
+  .date { font-size: 11px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); padding: 6px 4px 0; }
+  h1 { font-family: var(--serif); font-size: 25px; font-weight: 600; letter-spacing: -.01em; margin: 4px 4px 16px; }
+
+  .task {
+    background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
+    padding: 18px; box-shadow: var(--shadow);
+    transition: opacity .2s ease;
+  }
+  .task.done { opacity: .72; }
+
+  .task-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+  .slot { font-size: 22px; font-weight: 650; letter-spacing: -.02em; line-height: 1.1; }
+  .slot-sub { font-size: 11.5px; color: var(--muted); margin-top: 3px; }
+
+  .status {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 4px 9px; border-radius: 999px;
+    font-size: 10.5px; font-weight: 650; white-space: nowrap;
+    background: var(--warn-weak); color: var(--warn);
+    border: 1px solid color-mix(in srgb, var(--warn) 24%, transparent);
+  }
+  .status::before { content: ""; width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
+  .status.ok { background: var(--accent-weak); color: var(--accent); border-color: color-mix(in srgb, var(--accent) 22%, transparent); }
+  .status.neutral { background: var(--surface-2); color: var(--muted); border-color: var(--line-strong); }
+
+  .patient { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--line); }
+  .patient strong { display: block; font-size: 15.5px; font-weight: 650; }
+  .patient span { display: block; font-size: 12px; color: var(--muted); margin-top: 2px; }
+
+  .actions { display: grid; gap: 8px; margin-top: 16px; }
+  .btn {
+    appearance: none; font: inherit; font-size: 14px; font-weight: 650;
+    border-radius: 13px; padding: 13px 16px; min-height: 48px;
+    display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+    cursor: pointer; transition: background .15s ease, border-color .15s ease, opacity .15s ease;
+    border: 1px solid transparent; text-align: center;
+  }
+  .btn.primary { background: var(--accent); color: var(--accent-ink); }
+  .btn.primary:hover { filter: brightness(1.06); }
+  .btn.ghost { background: transparent; color: var(--ink); border-color: var(--line-strong); }
+  .btn.ghost:hover { background: var(--surface-2); }
+  .btn:disabled, .btn[aria-disabled="true"] { cursor: not-allowed; opacity: .45; }
+  .btn .ic { font-size: 15px; line-height: 1; }
+
+  .hint { font-size: 11px; color: var(--muted); margin: 8px 2px 0; line-height: 1.45; }
+
+  .evidence {
+    margin-top: 12px; padding: 10px 12px; border-radius: 10px;
+    background: var(--accent-weak); color: var(--ink-2); font-size: 11.5px;
+    display: flex; gap: 8px; align-items: flex-start;
+  }
+  .evidence b { color: var(--ink); font-weight: 650; }
+  .evidence.warn { background: var(--warn-weak); }
+
+  .divider { height: 1px; background: var(--line); margin: 18px 0 14px; }
+
+  .complete-wrap { position: relative; }
+  .btn.complete {
+    width: 100%; background: var(--surface); color: var(--ink);
+    border-color: var(--line-strong);
+  }
+  .btn.complete[aria-disabled="true"] { background: var(--surface-2); color: var(--muted); }
+  .btn.complete.ready { background: var(--ink); color: var(--surface); border-color: var(--ink); }
+  @media (prefers-color-scheme: dark) { .btn.complete.ready { background: var(--ink); color: #10201b; } }
+  .complete-lock { display: flex; align-items: center; justify-content: center; gap: 6px; font-size: 11px; color: var(--muted); margin-top: 7px; }
+
+  .note {
+    margin-top: 16px; padding: 13px 14px;
+    background: var(--surface); border: 1px solid var(--line); border-radius: 14px;
+    font-size: 11.5px; color: var(--ink-2); line-height: 1.5;
+  }
+  .note b { color: var(--ink); }
+
+  /* toast */
+  .toast {
+    position: absolute; left: 50%; bottom: 26px; transform: translate(-50%, 20px);
+    background: var(--ink); color: var(--surface);
+    padding: 10px 16px; border-radius: 999px; font-size: 12px; font-weight: 600;
+    opacity: 0; pointer-events: none; transition: opacity .18s ease, transform .18s ease;
+    max-width: 86%; text-align: center;
+  }
+  @media (prefers-color-scheme: dark) { .toast { color: #0d1512; } }
+  .toast.show { opacity: 1; transform: translate(-50%, 0); }
+
+  /* modal */
+  .backdrop {
+    position: absolute; inset: 0; background: rgba(10,14,13,.5);
+    display: none; align-items: flex-end; z-index: 20;
+  }
+  .backdrop.open { display: flex; }
+  .sheet {
+    width: 100%; background: var(--surface);
+    border-radius: 22px 22px 0 0; padding: 20px 18px calc(20px + env(safe-area-inset-bottom));
+    animation: up .2s ease-out;
+  }
+  @keyframes up { from { transform: translateY(16px); opacity: .6 } to { transform: none; opacity: 1 } }
+  @media (prefers-reduced-motion: reduce) { .sheet { animation: none } .toast { transition: none } }
+  .sheet h2 { font-family: var(--serif); font-size: 20px; font-weight: 600; margin: 0 0 6px; }
+  .sheet p { margin: 0 0 16px; font-size: 13px; color: var(--ink-2); line-height: 1.5; }
+  .sheet .btn { width: 100%; }
+  .sheet .btn + .btn { margin-top: 8px; }
+
+  .gate-list { margin: 0 0 16px; padding: 0; list-style: none; display: grid; gap: 8px; }
+  .gate-list li { font-size: 12.5px; color: var(--ink-2); padding-left: 22px; position: relative; }
+  .gate-list li::before {
+    content: "✓"; position: absolute; left: 0; top: 0;
+    color: var(--accent); font-weight: 700;
+  }
+
+  .exception-toggle {
+    display: block; width: 100%; margin-top: 14px; padding: 8px;
+    background: none; border: 0; font: inherit; font-size: 11.5px;
+    color: var(--muted); text-decoration: underline; cursor: pointer;
+  }
+  .exception-box { display: none; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); }
+  .exception-box.open { display: block; }
+  .exception-box label { display: block; font-size: 11.5px; color: var(--muted); margin-bottom: 6px; }
+  .exception-box select, .exception-box input {
+    width: 100%; font: inherit; font-size: 13px; padding: 10px 12px;
+    border-radius: 10px; border: 1px solid var(--line-strong);
+    background: var(--surface-2); color: var(--ink); margin-bottom: 8px;
+  }
+
+  .review-bar {
+    display: flex; justify-content: center; gap: 14px; padding: 0 0 26px;
+    font-size: 11px; color: var(--muted);
+  }
+  .review-bar button { background: none; border: 0; font: inherit; color: var(--accent); cursor: pointer; text-decoration: underline; }
+</style>
+</head>
+<body>
+
+<div class="phone">
+  <div class="appbar">
+    <div class="brand">Kala · Tugas Saya</div>
+    <div class="clock" id="clock">10:47</div>
+  </div>
+
+  <main>
+    <p class="date">Selasa, 18 November</p>
+    <h1>Tugas berikutnya</h1>
+
+    <article class="task" id="task">
+      <div class="task-head">
+        <div>
+          <div class="slot">10:00</div>
+          <div class="slot-sub">60 menit · Pijat Ceria</div>
+        </div>
+        <span class="status" id="status">Belum tiba</span>
+      </div>
+
+      <div class="patient">
+        <strong>Bunda Dian</strong>
+        <span>Jl. Wonorejo Permai III No. 42 · 8,2 km</span>
+      </div>
+
+      <div class="actions">
+        <button class="btn primary" id="arriveBtn">
+          <span class="ic">◎</span> Catat kedatangan
+        </button>
+        <button class="btn ghost" id="notifyBtn" aria-disabled="true" disabled>
+          <span class="ic">✉</span> Kirim kabar ke Bunda
+        </button>
+      </div>
+      <p class="hint" id="hint">Hanya mencatat jam kedatangan. Tidak mengirim pesan apa pun ke Bunda.</p>
+
+      <div class="evidence" id="evidence" hidden></div>
+
+      <div class="divider"></div>
+
+      <div class="complete-wrap">
+        <button class="btn complete" id="completeBtn" aria-disabled="true">Selesaikan kunjungan</button>
+        <div class="complete-lock" id="completeLock">
+          <span>🔒</span> Terkunci sampai kedatangan dicatat
+        </div>
+      </div>
+    </article>
+
+    <div class="note">
+      <b>Kenapa dipisah?</b> Sebelumnya tombol kedatangan sekaligus mengirim WhatsApp ke customer.
+      Bidan yang datang terlambat memilih membatalkan pesannya, dan jam kedatangan tidak pernah tercatat.
+      Sekarang mencatat tidak mengirim apa pun.
+    </div>
+  </main>
+
+  <div class="toast" id="toast"></div>
+
+  <div class="backdrop" id="backdrop">
+    <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="gateTitle">
+      <h2 id="gateTitle">Kedatangan belum dicatat</h2>
+      <p id="gateBody">Kunjungan hanya bisa diselesaikan setelah jam kedatangan tercatat.</p>
+      <ul class="gate-list" id="gateList">
+        <li>Melindungi Anda kalau Bunda komplain soal waktu.</li>
+        <li>Menjadi dasar penilaian yang adil, bukan tebakan.</li>
+        <li>Hanya mencatat jam, tidak mengirim pesan.</li>
+      </ul>
+      <button class="btn primary" id="gateArrive">Catat kedatangan sekarang</button>
+      <button class="btn ghost" id="gateClose">Nanti</button>
+
+      <button class="exception-toggle" id="exceptionToggle">Butuh pengecualian? (supervisor)</button>
+      <div class="exception-box" id="exceptionBox">
+        <label for="reason">Alasan</label>
+        <select id="reason">
+          <option>HP atau aplikasi bermasalah</option>
+          <option>Tidak ada sinyal di lokasi</option>
+          <option>Kunjungan darurat / di luar jadwal</option>
+          <option>Lainnya</option>
+        </select>
+        <input id="reasonNote" type="text" placeholder="Catatan singkat (wajib diisi)">
+        <button class="btn primary" id="gateForce">Selesaikan dengan catatan</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="review-bar">
+    <button id="reset">Reset pratinjau</button>
+    <span>Draft UI · data contoh</span>
+  </div>
+</div>
+
+<script>
+  (function () {
+    var T = { arrive: '10:47', notify: '10:48', done: '11:52' };
+    var S = { arrived: false, notified: false, done: false, forced: false };
+
+    var task = document.getElementById('task');
+    var statusEl = document.getElementById('status');
+    var arriveBtn = document.getElementById('arriveBtn');
+    var notifyBtn = document.getElementById('notifyBtn');
+    var completeBtn = document.getElementById('completeBtn');
+    var completeLock = document.getElementById('completeLock');
+    var hint = document.getElementById('hint');
+    var evidence = document.getElementById('evidence');
+    var backdrop = document.getElementById('backdrop');
+    var toastEl = document.getElementById('toast');
+    var exceptionBox = document.getElementById('exceptionBox');
+
+    var toastTimer = null;
+    function toast(msg) {
+      toastEl.textContent = msg;
+      toastEl.classList.add('show');
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(function () { toastEl.classList.remove('show'); }, 2600);
+    }
+
+    function render() {
+      arriveBtn.style.display = '';
+      notifyBtn.style.display = '';
+      hint.style.display = '';
+
+      if (S.done) {
+        statusEl.textContent = S.forced ? 'Selesai · pengecualian' : 'Selesai ' + T.done;
+        statusEl.className = 'status neutral';
+        task.classList.add('done');
+        arriveBtn.disabled = true;
+        arriveBtn.style.display = 'none';
+        notifyBtn.style.display = 'none';
+        hint.style.display = 'none';
+        completeBtn.textContent = '✓ Kunjungan selesai';
+        completeBtn.classList.remove('ready');
+        completeBtn.setAttribute('aria-disabled', 'true');
+        completeLock.innerHTML = '<span>✓</span> Tercatat ' + (S.forced ? 'tanpa jam kedatangan · perlu tinjauan' : 'lengkap');
+        return;
+      }
+
+      if (S.arrived) {
+        statusEl.textContent = 'Tiba ' + T.arrive;
+        statusEl.className = 'status ok';
+        arriveBtn.disabled = true;
+        arriveBtn.classList.remove('primary');
+        arriveBtn.innerHTML = '<span class="ic">✓</span> Kedatangan tercatat ' + T.arrive;
+        arriveBtn.style.background = 'var(--accent-weak)';
+        arriveBtn.style.color = 'var(--accent)';
+        arriveBtn.style.borderColor = 'color-mix(in srgb, var(--accent) 22%, transparent)';
+        hint.textContent = 'Kabar ke Bunda bersifat opsional. Bisa dikirim kapan saja.';
+        evidence.hidden = false;
+        evidence.innerHTML = '<div><b>Sumber: tombol aplikasi</b><br>10:47 WIB · akurasi GPS 18 m · dicatat oleh Bidan Thabita</div>';
+        completeBtn.setAttribute('aria-disabled', 'false');
+        completeBtn.classList.add('ready');
+        completeLock.innerHTML = '<span>✓</span> Siap diselesaikan';
+        notifyBtn.disabled = false;
+        notifyBtn.removeAttribute('aria-disabled');
+      } else {
+        statusEl.textContent = 'Belum tiba';
+        statusEl.className = 'status';
+        arriveBtn.disabled = false;
+        arriveBtn.classList.add('primary');
+        arriveBtn.style.background = '';
+        arriveBtn.style.color = '';
+        arriveBtn.style.borderColor = '';
+        arriveBtn.innerHTML = '<span class="ic">◎</span> Catat kedatangan';
+        hint.style.display = '';
+        hint.textContent = 'Hanya mencatat jam kedatangan. Tidak mengirim pesan apa pun ke Bunda.';
+        evidence.hidden = true;
+        completeBtn.setAttribute('aria-disabled', 'true');
+        completeBtn.classList.remove('ready');
+        completeLock.innerHTML = '<span>🔒</span> Terkunci sampai kedatangan dicatat';
+        notifyBtn.disabled = true;
+        notifyBtn.setAttribute('aria-disabled', 'true');
+      }
+
+      if (S.notified) {
+        notifyBtn.disabled = true;
+        notifyBtn.innerHTML = '<span class="ic">✓</span> Kabar terkirim ' + T.notify;
+        notifyBtn.style.color = 'var(--accent)';
+        notifyBtn.style.borderColor = 'color-mix(in srgb, var(--accent) 22%, transparent)';
+      } else {
+        notifyBtn.innerHTML = '<span class="ic">✉</span> Kirim kabar ke Bunda';
+        notifyBtn.style.color = '';
+        notifyBtn.style.borderColor = '';
+      }
+    }
+
+    function openGate() {
+      document.getElementById('gateTitle').textContent = 'Kedatangan belum dicatat';
+      document.getElementById('gateBody').textContent =
+        'Kunjungan hanya bisa diselesaikan setelah jam kedatangan tercatat.';
+      document.getElementById('gateList').hidden = false;
+      document.getElementById('exceptionBox').classList.remove('open');
+      backdrop.classList.add('open');
+    }
+
+    function closeGate() { backdrop.classList.remove('open'); }
+
+    arriveBtn.addEventListener('click', function () {
+      if (S.done) return;
+      S.arrived = true;
+      S.forced = false;
+      render();
+      toast('Kedatangan tercatat 10:47. Tidak ada pesan yang dikirim.');
+      closeGate();
+    });
+
+    notifyBtn.addEventListener('click', function () {
+      if (!S.arrived || S.notified) return;
+      S.notified = true;
+      render();
+      toast('Pesan terkirim ke Bunda Dian lewat WhatsApp.');
+    });
+
+    completeBtn.addEventListener('click', function () {
+      if (S.done) return;
+      if (!S.arrived) { openGate(); return; }
+      S.done = true;
+      S.forced = false;
+      render();
+      toast('Kunjungan selesai. Jam kedatangan tersimpan.');
+    });
+
+    // Tombol "Selesai" memakai aria-disabled, jadi tetap bisa diklik untuk menjelaskan gerbangnya.
+    completeBtn.addEventListener('keydown', function (e) {
+      if ((e.key === 'Enter' || e.key === ' ') && !S.arrived && !S.done) {
+        e.preventDefault();
+        openGate();
+      }
+    });
+
+    document.getElementById('gateArrive').addEventListener('click', function () {
+      S.arrived = true;
+      S.forced = false;
+      render();
+      closeGate();
+      toast('Kedatangan tercatat 10:47.');
+    });
+
+    document.getElementById('gateClose').addEventListener('click', closeGate);
+    backdrop.addEventListener('click', function (e) { if (e.target === backdrop) closeGate(); });
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeGate(); });
+
+    document.getElementById('exceptionToggle').addEventListener('click', function () {
+      exceptionBox.classList.toggle('open');
+      if (exceptionBox.classList.contains('open')) document.getElementById('reasonNote').focus();
+    });
+
+    document.getElementById('gateForce').addEventListener('click', function () {
+      var note = document.getElementById('reasonNote').value.trim();
+      if (!note) { document.getElementById('reasonNote').focus(); toast('Catatan wajib diisi.'); return; }
+      S.forced = true;
+      S.done = true;
+      render();
+      closeGate();
+      toast('Kunjungan diselesaikan dengan pengecualian. Tercatat di audit.');
+    });
+
+    document.getElementById('reset').addEventListener('click', function () {
+      S = { arrived: false, notified: false, done: false, forced: false };
+      task.classList.remove('done');
+      render();
+      closeGate();
+    });
+
+    render();
+  })();
+</script>
+</body>
+</html>

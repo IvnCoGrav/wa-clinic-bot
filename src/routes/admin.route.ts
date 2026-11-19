@@ -42,6 +42,7 @@ import { googleIntegrationAdminRoutes } from './admin/google-integration.subrout
 import { backupAdminRoutes } from './admin/backup.subroute';
 import { analyticsAdminRoutes } from './admin/analytics.subroute';
 import { staffRetentionAdminRoutes } from './admin/staff-retention.subroute';
+import { staffScorecardAdminRoutes } from './admin/staff-scorecard.subroute';
 import { quickRepliesAdminRoutes } from './admin/quick-replies.subroute';
 import { aiHealthAdminRoutes } from './admin/ai-health.subroute';
 import type { StaffSessionWithStaff } from '../services/staff-auth.service';
@@ -345,6 +346,7 @@ export async function adminRoutes(fastify: FastifyInstance) {
   fastify.register(backupAdminRoutes);
   fastify.register(analyticsAdminRoutes);
   fastify.register(staffRetentionAdminRoutes);
+  fastify.register(staffScorecardAdminRoutes);
   fastify.register(quickRepliesAdminRoutes);
   fastify.register(aiHealthAdminRoutes);
 

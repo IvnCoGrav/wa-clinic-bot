@@ -319,6 +319,20 @@
         "default"
       ],
       "reviewed": false
+    },
+    {
+      "name": "ScorecardPolicyPanel",
+      "layer": "domain",
+      "path": "src/components/staff/ScorecardPolicyPanel.tsx",
+      "whenToUse": "Panel pengaturan bobot, ambang, target, dan grade penilaian bidan. Dipakai di tab Penilaian pada Staff Management.",
+      "states": [
+        "default",
+        "loading",
+        "error",
+        "saving",
+        "invalid-weights"
+      ],
+      "reviewed": false
     }
   ],
   "pages": [

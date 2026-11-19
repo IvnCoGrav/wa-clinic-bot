@@ -7,7 +7,7 @@
 
 ## 1. Daftar Kapabilitas Kanonis Aktif
 
-Total kapabilitas terdaftar: **31 modul**.
+Total kapabilitas terdaftar: **32 modul**.
 
 | ID Kapabilitas | Judul & Deskripsi | Modul Kanonis | Ekspor Resmi | Test File |
 |---|---|---|---|---|
@@ -32,11 +32,12 @@ Total kapabilitas terdaftar: **31 modul**.
 | `rbac.role_module_scopes` | **Kebijakan Layer 1 RBAC & derivasi scope custom role**<br>Sumber kebenaran tunggal daftar batas keamanan Layer 1 RBAC (Super Admin only/write-only/restricted sub-paths) dan pemetaan deterministik modul UI ke role_api_scopes tanpa I/O. | [`src/domain/role-module-scopes.ts`](../src/domain/role-module-scopes.ts) | `SUPER_ADMIN_ONLY_PREFIXES`, `SETTINGS_READ_ALLOWLIST`, `SUPER_ADMIN_WRITE_PREFIXES`, `SUPER_ADMIN_RESTRICTED_SUBPATHS`, `SUPER_ADMIN_ONLY_MODULE_PATHS`, `BASELINE_STAFF_API_SCOPES`, `MODULE_PATH_TO_API_SCOPES`, `isScopeFullyBlockedByLayer1`, `deriveApiScopesForAllowedPaths` | [`rbac-route-contract-matrix.test.ts`](../tests/unit/rbac-route-contract-matrix.test.ts) |
 | `regex.escape` | **Escape string untuk ekspresi reguler**<br>Meng-escape karakter khusus regex (.*+?^${}()|[\]) agar aman digunakan di RegExp dinamis. | [`src/utils/regex-escape.ts`](../src/utils/regex-escape.ts) | `escapeRegex` | [`regex-escape.test.ts`](../tests/unit/regex-escape.test.ts) |
 | `reservation.payment_evaluation` | **Evaluasi status pembayaran reservasi**<br>Menentukan status evaluasi pembayaran dan snapshot ongkir reservasi secara kanonis (murni, tanpa I/O). | [`src/domain/payment-expected.ts`](../src/domain/payment-expected.ts) | `resolveReservationPaymentEvaluation`, `resolveDeliveryFeeSnapshot` | *Belum ada (Fase lanjutan)* |
-| `reservation.payment_proof_candidate_selection` | **Pencocokan kandidat bukti pembayaran**<br>Scoring deterministik kandidat reservasi: kesesuaian nominal, selisih tanggal booking terdekat, `created_at` terbaru, `id` asc; menolak reservasi berstatus terminal (`cancelled`/`rejected`), sudah lunas, atau sudah berbukti. | [`src/domain/select-payment-proof-candidate.ts`](../src/domain/select-payment-proof-candidate.ts) | `selectPaymentProofCandidate` | [`payment-proof-candidate-selection.test.ts`](../tests/unit/payment-proof-candidate-selection.test.ts) |
-| `reservation.payment_proof_policy` | **Kebijakan jendela bukti pembayaran tenant**<br>Membaca jendela toleransi hari (sebelum/sesudah) dari `Tenant.settings` JSON dan menjepit input admin ke rentang 1–30 hari. | [`src/services/payment-proof-config.service.ts`](../src/services/payment-proof-config.service.ts), [`src/domain/payment-proof-window.ts`](../src/domain/payment-proof-window.ts) | `resolvePaymentProofPolicy`, `clampPaymentProofWindowDays` | [`payment-proof-policy.test.ts`](../tests/unit/payment-proof-policy.test.ts) |
 | `reservation.payment_response` | **Response wrapper evaluasi pembayaran reservasi**<br>Menyematkan hasil kalkulasi paymentEvaluation ke dalam payload respons reservasi admin. | [`src/routes/admin/shared/reservation-response.ts`](../src/routes/admin/shared/reservation-response.ts) | `withPaymentEvaluation` | [`reservation-payment-response.test.ts`](../tests/unit/reservation-payment-response.test.ts) |
 | `reservation.payment_verification` | **Verifikasi bukti pembayaran reservasi**<br>Seam kanonis verifikasi pembayaran transfer/non-tunai: simpan bukti permanen, hitung tagihan kanonis (GROSS), catat pembayaran tanpa mengubah status kunjungan, audit tenant-aware — tanpa akses Prisma di route. | [`src/services/reservation-payment-verification.service.ts`](../src/services/reservation-payment-verification.service.ts) | `verifyReservationPayment` | [`admin-verify-payment.test.ts`](../tests/integration/admin-verify-payment.test.ts) |
 | `schedule.overlap` | **Deteksi tumpang tindih slot jadwal**<br>Menghitung durasi efektif dan memeriksa tumpang-tindih interval reservasi atau janji temu. | [`src/services/slot-overlap.service.ts`](../src/services/slot-overlap.service.ts) | `effectiveDuration`, `intervalsOverlap` | [`slot-overlap-parity.test.ts`](../tests/unit/slot-overlap-parity.test.ts) |
+| `staff.scorecard_domain` | **Domain penilaian bidan (bobot, komponen, grade)**<br>Perhitungan deterministik ketepatan waktu, volume kunjungan, kelayakan retensi, komposisi bobot, dan grade A-E. Tanpa I/O; komponen yang sampelnya kurang dikeluarkan dan bobotnya dinormalisasi. | [`src/domain/staff-scorecard.ts`](../src/domain/staff-scorecard.ts) | `computePunctuality`, `computeVolume`, `evaluateRetentionEligibility`, `composeScore`, `gradeFromScore`, `validateWeights`, `DEFAULT_SCORECARD_WEIGHTS`, `DEFAULT_GRADE_THRESHOLDS` | [`staff-scorecard-domain.test.ts`](../tests/unit/staff-scorecard-domain.test.ts) |
+| `staff.scorecard_policy` | **Policy penilaian bidan (versioned)**<br>Validasi dan penyimpanan policy bobot, ambang waktu, target kunjungan, dan grade. Fallback default saat basis data offline; setiap perubahan menjadi versi baru yang tercatat di audit. | [`src/services/staff-scorecard.service.ts`](../src/services/staff-scorecard.service.ts) | `validateStaffScorecardPolicy`, `staffScorecardService` | [`staff-scorecard-policy.test.ts`](../tests/integration/staff-scorecard-policy.test.ts) |
+| `staff.visit_evidence` | **Kontrak bukti kedatangan kunjungan**<br>Jendela bukti deterministik (jadwal s.d. min(tiba, durasi+buffer)), penyusunan bukti TAP/OTW/PHOTO/CHAT, dan kandidat chat yang wajib direview. Tanpa menulis arrived_at. | [`src/domain/visit-evidence.ts`](../src/domain/visit-evidence.ts) | `resolveEvidenceWindow`, `buildVisitEvidence`, `hasVisitEvidence`, `DEFAULT_WINDOW_BUFFER_MINUTES` | [`visit-evidence.test.ts`](../tests/unit/visit-evidence.test.ts) |
 | `tenant.resolve` | **Resolusi ID tenant admin**<br>Mendapatkan tenant_id dari request Fastify admin secara aman dengan fallback DEFAULT_TENANT_ID. | [`src/routes/admin/settings-helpers.ts`](../src/routes/admin/settings-helpers.ts) | `resolveTenantId`, `requireTenantId` | *Belum ada (Fase lanjutan)* |
 | `tenant.scope` | **Isolasi tenant pembacaan baris**<br>Gerbang kanonis yang hanya mengembalikan baris milik tenant pemanggil (atau baris tanpa tenant_id/data lama), dan menolak baris milik tenant lain. | [`src/utils/tenant-scope.ts`](../src/utils/tenant-scope.ts) | `tenantScopedRow` | [`tenant-scope.test.ts`](../tests/unit/tenant-scope.test.ts) |
 | `text.strip_edges` | **Pembersihan tepi token kata utuh**<br>Membuang karakter non-alfanumerik (a-z, 0-9) di awal dan akhir token hasil split spasi sebelum dicocokkan dengan himpunan kata. | [`src/utils/text-edge.ts`](../src/utils/text-edge.ts) | `stripNonAlnumEdges` | [`text-edge.test.ts`](../tests/unit/text-edge.test.ts) |
@@ -260,6 +261,33 @@ Total kapabilitas terdaftar: **31 modul**.
 - **Simbol Terlarang di Luar Kanonis:** `effectiveDuration`, `intervalsOverlap`
 - **File yang Diizinkan:** `src/services/slot-overlap.service.ts`
 - **File Test:** [`tests/unit/slot-overlap-parity.test.ts`](../tests/unit/slot-overlap-parity.test.ts)
+
+### `staff.scorecard_domain` — Domain penilaian bidan (bobot, komponen, grade)
+
+- **Deskripsi:** Perhitungan deterministik ketepatan waktu, volume kunjungan, kelayakan retensi, komposisi bobot, dan grade A-E. Tanpa I/O; komponen yang sampelnya kurang dikeluarkan dan bobotnya dinormalisasi.
+- **File Kanonis:** [`src/domain/staff-scorecard.ts`](../src/domain/staff-scorecard.ts)
+- **Ekspor Kanonis:** `computePunctuality`, `computeVolume`, `evaluateRetentionEligibility`, `composeScore`, `gradeFromScore`, `validateWeights`, `DEFAULT_SCORECARD_WEIGHTS`, `DEFAULT_GRADE_THRESHOLDS`
+- **Simbol Terlarang di Luar Kanonis:** `computePunctuality`, `computeVolume`, `evaluateRetentionEligibility`, `composeScore`, `gradeFromScore`, `validateWeights`
+- **File yang Diizinkan:** `src/domain/staff-scorecard.ts`
+- **File Test:** [`tests/unit/staff-scorecard-domain.test.ts`](../tests/unit/staff-scorecard-domain.test.ts)
+
+### `staff.scorecard_policy` — Policy penilaian bidan (versioned)
+
+- **Deskripsi:** Validasi dan penyimpanan policy bobot, ambang waktu, target kunjungan, dan grade. Fallback default saat basis data offline; setiap perubahan menjadi versi baru yang tercatat di audit.
+- **File Kanonis:** [`src/services/staff-scorecard.service.ts`](../src/services/staff-scorecard.service.ts)
+- **Ekspor Kanonis:** `validateStaffScorecardPolicy`, `staffScorecardService`
+- **Simbol Terlarang di Luar Kanonis:** `validateStaffScorecardPolicy`
+- **File yang Diizinkan:** `src/services/staff-scorecard.service.ts`, `src/routes/admin/staff-scorecard.subroute.ts`
+- **File Test:** [`tests/integration/staff-scorecard-policy.test.ts`](../tests/integration/staff-scorecard-policy.test.ts)
+
+### `staff.visit_evidence` — Kontrak bukti kedatangan kunjungan
+
+- **Deskripsi:** Jendela bukti deterministik (jadwal s.d. min(tiba, durasi+buffer)), penyusunan bukti TAP/OTW/PHOTO/CHAT, dan kandidat chat yang wajib direview. Tanpa menulis arrived_at.
+- **File Kanonis:** [`src/domain/visit-evidence.ts`](../src/domain/visit-evidence.ts)
+- **Ekspor Kanonis:** `resolveEvidenceWindow`, `buildVisitEvidence`, `hasVisitEvidence`, `DEFAULT_WINDOW_BUFFER_MINUTES`
+- **Simbol Terlarang di Luar Kanonis:** `resolveEvidenceWindow`, `buildVisitEvidence`, `hasVisitEvidence`
+- **File yang Diizinkan:** `src/domain/visit-evidence.ts`, `src/services/visit-evidence.service.ts`, `src/scripts/backfill-visit-evidence.ts`
+- **File Test:** [`tests/unit/visit-evidence.test.ts`](../tests/unit/visit-evidence.test.ts)
 
 ### `tenant.resolve` — Resolusi ID tenant admin
 

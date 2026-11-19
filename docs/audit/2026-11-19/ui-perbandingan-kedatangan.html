@@ -1,0 +1,353 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Perbandingan UI — Catat Kedatangan</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: #efece5;
+    --surface: #ffffff;
+    --surface-2: #f7f5f0;
+    --ink: #17211e;
+    --ink-2: #3f4d48;
+    --muted: #78857f;
+    --line: #e4e0d6;
+    --line-strong: #d2cdc0;
+    --accent: #0e6b5a;
+    --accent-weak: #e6f1ee;
+    --accent-ink: #ffffff;
+    --warn: #96590a;
+    --warn-weak: #fbf3e4;
+    --danger: #a1273c;
+    --danger-weak: #fbeaee;
+    --info: #3f4f7a;
+    --info-weak: #eceff7;
+    --radius: 16px;
+    --shadow: 0 1px 2px rgba(23,33,30,.05), 0 14px 34px -26px rgba(23,33,30,.5);
+    --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --serif: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0b100e;
+      --surface: #171e1b;
+      --surface-2: #1c2421;
+      --ink: #eef2ef;
+      --ink-2: #c2ccc6;
+      --muted: #8b9891;
+      --line: #2a3330;
+      --line-strong: #3b4743;
+      --accent: #5fc9b1;
+      --accent-weak: #16332d;
+      --accent-ink: #08201b;
+      --warn: #dfa458;
+      --warn-weak: #33270f;
+      --danger: #f08a9c;
+      --danger-weak: #3a1a22;
+      --info: #a7b6dd;
+      --info-weak: #1d2436;
+      --shadow: 0 1px 2px rgba(0,0,0,.4), 0 14px 34px -26px rgba(0,0,0,.9);
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font-family: var(--font); font-size: 15px; line-height: 1.5;
+    font-variant-numeric: tabular-nums; -webkit-font-smoothing: antialiased;
+  }
+  .page { max-width: 940px; margin: 0 auto; padding: 30px 20px 70px; }
+
+  header.top { margin-bottom: 26px; }
+  .eyebrow { font-size: 10.5px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); margin: 0 0 8px; }
+  h1 { font-family: var(--serif); font-size: clamp(25px, 3.4vw, 33px); font-weight: 600; letter-spacing: -.01em; margin: 0 0 8px; }
+  .sub { margin: 0; color: var(--ink-2); font-size: 13.5px; }
+  .sub b { color: var(--ink); }
+
+  .boards { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; align-items: start; }
+  @media (max-width: 700px) { .boards { grid-template-columns: 1fr; gap: 34px; } }
+
+  .board-label { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+  .tag {
+    font-size: 10.5px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
+    padding: 4px 9px; border-radius: 999px; border: 1px solid transparent;
+  }
+  .tag.now { background: var(--danger-weak); color: var(--danger); border-color: color-mix(in srgb, var(--danger) 22%, transparent); }
+  .tag.new { background: var(--accent-weak); color: var(--accent); border-color: color-mix(in srgb, var(--accent) 22%, transparent); }
+  .board-label span.cap { font-size: 11.5px; color: var(--muted); }
+
+  /* ---------- phone ---------- */
+  .phone {
+    background: var(--surface-2); border-radius: 26px; padding: 12px;
+    box-shadow: 0 26px 60px -44px rgba(0,0,0,.6), 0 0 0 1px rgba(0,0,0,.06);
+  }
+  .screen {
+    background: var(--surface-2); border-radius: 16px; overflow: hidden;
+    border: 1px solid var(--line); font-size: 13px;
+  }
+  .bar {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 10px 12px; background: var(--surface); border-bottom: 1px solid var(--line);
+  }
+  .bar .who { font-size: 11px; font-weight: 650; }
+  .icons { display: flex; gap: 6px; }
+  .ib {
+    width: 36px; height: 36px; border-radius: 8px; display: grid; place-items: center;
+    background: var(--surface-2); border: 1px solid var(--line); font-size: 13px; color: var(--ink-2);
+  }
+  .ib.hot { background: var(--info-weak); border-color: color-mix(in srgb, var(--info) 30%, transparent); color: var(--info); box-shadow: 0 0 0 2px color-mix(in srgb, var(--info) 25%, transparent); position: relative; }
+  .ib.hot::after {
+    content: "1"; position: absolute; top: -7px; right: -7px;
+    width: 15px; height: 15px; border-radius: 50%; background: var(--danger); color: #fff;
+    font-size: 9px; font-weight: 700; display: grid; place-items: center;
+  }
+
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; margin: 10px; padding: 12px; }
+  .card + .card { margin-top: 0; }
+  .row { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+  .pname { font-size: 14px; font-weight: 650; }
+  .ptreat { font-size: 10.5px; color: var(--accent); font-weight: 600; margin-top: 1px; }
+  .avatar {
+    width: 34px; height: 34px; border-radius: 50%; background: var(--accent-weak);
+    color: var(--accent); display: grid; place-items: center; font-weight: 700; font-size: 12px;
+    position: relative; flex: 0 0 34px;
+  }
+  .avatar b {
+    position: absolute; top: -4px; left: -4px; background: var(--accent); color: var(--accent-ink);
+    font-size: 8px; padding: 1px 4px; border-radius: 999px; font-weight: 700;
+  }
+  .chips { display: flex; gap: 4px; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
+  .chip {
+    font-size: 9.5px; font-weight: 650; padding: 2px 6px; border-radius: 6px;
+    border: 1px solid transparent; white-space: nowrap;
+  }
+  .chip.time { background: var(--accent-weak); color: var(--accent); border-color: color-mix(in srgb, var(--accent) 25%, transparent); }
+  .chip.otw { background: var(--warn-weak); color: var(--warn); border-color: color-mix(in srgb, var(--warn) 25%, transparent); }
+  .chip.tiba { background: var(--info-weak); color: var(--info); border-color: color-mix(in srgb, var(--info) 25%, transparent); }
+  .chip.late { background: var(--danger-weak); color: var(--danger); border-color: color-mix(in srgb, var(--danger) 25%, transparent); }
+
+  .addr { margin-top: 9px; padding: 8px; border-radius: 9px; background: var(--surface-2); border: 1px solid var(--line); font-size: 10.5px; color: var(--ink-2); }
+  .addr b { color: var(--ink); font-weight: 600; }
+  .addr .dist { color: var(--accent); font-weight: 600; margin-top: 2px; display: block; }
+
+  .money { display: flex; justify-content: space-between; align-items: center; font-size: 10.5px; margin-top: 10px; padding-top: 9px; border-top: 1px solid var(--line); }
+  .pay { background: var(--danger); color: #fff; font-size: 9px; font-weight: 700; padding: 3px 7px; border-radius: 999px; }
+
+  .action-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; padding: 0 10px 10px; }
+  .ab {
+    min-height: 42px; border-radius: 11px; display: flex; align-items: center; justify-content: center;
+    gap: 6px; font-size: 10.5px; font-weight: 700; letter-spacing: .02em;
+    border: 1px solid var(--line-strong); background: var(--surface); color: var(--ink);
+  }
+  .ab.chat { background: var(--accent-weak); color: var(--accent); border-color: color-mix(in srgb, var(--accent) 25%, transparent); }
+  .ab.map { background: var(--surface); color: var(--ink-2); }
+  .ab.done { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+  .ab.locked { background: var(--surface-2); color: var(--muted); opacity: .6; }
+
+  .stack-actions { display: grid; gap: 7px; padding: 0 10px 10px; }
+  .stack-actions .ab { min-height: 44px; font-size: 12px; }
+  .hint { font-size: 9.5px; color: var(--muted); padding: 0 12px 10px; margin: -2px 0 0; line-height: 1.4; }
+
+  /* ---------- points ---------- */
+  ol.points { margin: 14px 0 0; padding: 0; list-style: none; counter-reset: p; display: grid; gap: 9px; }
+  ol.points li { counter-increment: p; display: grid; grid-template-columns: 20px minmax(0,1fr); gap: 8px; font-size: 12.5px; color: var(--ink-2); line-height: 1.45; }
+  ol.points li::before {
+    content: counter(p); width: 18px; height: 18px; border-radius: 50%;
+    display: grid; place-items: center; font-size: 10px; font-weight: 700;
+    background: var(--surface-2); color: var(--ink-2); border: 1px solid var(--line-strong);
+  }
+  ol.points li strong { color: var(--ink); font-weight: 650; }
+  .board.now ol.points li::before { background: var(--danger-weak); color: var(--danger); border-color: color-mix(in srgb, var(--danger) 25%, transparent); }
+  .board.new ol.points li::before { background: var(--accent-weak); color: var(--accent); border-color: color-mix(in srgb, var(--accent) 25%, transparent); }
+
+  /* ---------- comparison table ---------- */
+  .compare { margin-top: 40px; }
+  .compare h2 { font-family: var(--serif); font-size: 21px; font-weight: 600; margin: 0 0 4px; }
+  .compare p.lead { margin: 0 0 14px; font-size: 12.5px; color: var(--muted); }
+  table { width: 100%; border-collapse: collapse; font-size: 12.5px; background: var(--surface); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
+  thead th { text-align: left; font-size: 10px; letter-spacing: .07em; text-transform: uppercase; color: var(--muted); padding: 10px 12px; border-bottom: 1px solid var(--line); background: var(--surface-2); }
+  tbody td { padding: 11px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  tbody tr:last-child td { border-bottom: 0; }
+  td.when { font-weight: 650; white-space: nowrap; }
+  td.nowc { color: var(--danger); }
+  td.newc { color: var(--accent); font-weight: 600; }
+  .swatch { display: inline-block; width: 7px; height: 7px; border-radius: 2px; margin-right: 6px; vertical-align: 1px; }
+
+  .foot { margin-top: 30px; font-size: 11.5px; color: var(--muted); line-height: 1.6; border-top: 1px solid var(--line); padding-top: 14px; }
+  .foot b { color: var(--ink-2); }
+
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <header class="top">
+    <p class="eyebrow">Perbandingan UI · Prototipe</p>
+    <h1>Mencatat kedatangan: sekarang vs usulan</h1>
+    <p class="sub">Skenario yang sama — <b>Bunda Dian</b>, jadwal <b>10:00</b>, sekarang <b>11:04</b>. Bidan sudah mengirim OTW pukul 09:40 dan belum menekan tombol kedatangan.</p>
+  </header>
+
+  <div class="boards">
+
+    <!-- ============ SEKARANG ============ -->
+    <section class="board now">
+      <div class="board-label">
+        <span class="tag now">Sekarang</span>
+        <span class="cap">StaffTodayTaskCard + taskAction.ts</span>
+      </div>
+
+      <div class="phone">
+        <div class="screen">
+          <div class="bar">
+            <span class="who">Chat · Bunda Dian</span>
+            <div class="icons">
+              <span class="ib">☰</span>
+              <span class="ib">▤</span>
+              <span class="ib hot">◉</span>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="row">
+              <div style="display:flex;gap:8px;min-width:0">
+                <div class="avatar"><b>#1</b>BD</div>
+                <div>
+                  <div class="pname">Bunda Dian</div>
+                  <div class="ptreat">Kala Baby · Pijat Ceria 60 menit</div>
+                </div>
+              </div>
+              <div class="chips">
+                <span class="chip otw">Dalam Perjalanan</span>
+                <span class="chip time">10:00</span>
+              </div>
+            </div>
+
+            <div class="addr">
+              <b>Jl. Wonorejo Permai III No. 42</b>
+              <span class="dist">Jarak 8,2 km dari klinik (±22 mnt)</span>
+            </div>
+
+            <div class="money">
+              <span>Biaya: <b>Rp 185.000</b></span>
+              <span class="pay">Catat Bayar</span>
+            </div>
+          </div>
+
+          <div class="action-grid">
+            <div class="ab chat">💬 Chat</div>
+            <div class="ab done">✓ SELESAI</div>
+          </div>
+          <p class="hint">Karena jadwal sudah lewat 60 menit, tombol utama berubah dari PETA menjadi SELESAI.</p>
+        </div>
+      </div>
+
+      <ol class="points">
+        <li><div><strong>Tombol tiba tidak ada di kartu.</strong> Setelah OTW terkirim, tombol utama kartu menjadi PETA. Tombol "Sudah Sampai" hanya tersisa sebagai ikon 36 px di header chat.</div></li>
+        <li><div><strong>Status dan tombol saling bertentangan.</strong> Chip masih "Dalam Perjalanan", tetapi tombolnya sudah "SELESAI".</div></li>
+        <li><div><strong>Selesai tanpa kedatangan itu sah.</strong> Karena jadwal lewat, sistem membuka tombol selesai. `arrived_at` tidak pernah diisi.</div></li>
+      </ol>
+    </section>
+
+    <!-- ============ USULAN ============ -->
+    <section class="board new">
+      <div class="board-label">
+        <span class="tag new">Usulan</span>
+        <span class="cap">Tombol dipisah + gerbang selesai</span>
+      </div>
+
+      <div class="phone">
+        <div class="screen">
+          <div class="bar">
+            <span class="who">Tugas berikutnya</span>
+            <div class="icons">
+              <span class="ib">◉</span>
+              <span class="ib">💬</span>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="row">
+              <div style="display:flex;gap:8px;min-width:0">
+                <div class="avatar"><b>#1</b>BD</div>
+                <div>
+                  <div class="pname">Bunda Dian</div>
+                  <div class="ptreat">Kala Baby · Pijat Ceria 60 menit</div>
+                </div>
+              </div>
+              <div class="chips">
+                <span class="chip late">Belum tiba</span>
+                <span class="chip time">10:00</span>
+              </div>
+            </div>
+
+            <div class="addr">
+              <b>Jl. Wonorejo Permai III No. 42</b>
+              <span class="dist">Jarak 8,2 km dari klinik (±22 mnt)</span>
+            </div>
+          </div>
+
+          <div class="stack-actions">
+            <div class="ab done">◉ Catat kedatangan</div>
+            <div class="ab locked">✉ Kirim kabar ke Bunda</div>
+          </div>
+          <p class="hint">Mencatat tidak mengirim pesan. Kabar ke Bunda dipisah dan baru aktif setelah tercatat.</p>
+
+          <div style="padding:0 10px 10px">
+            <div class="ab locked" style="width:100%">🔒 Selesaikan kunjungan</div>
+          </div>
+          <p class="hint" style="text-align:center;padding-bottom:12px">Terkunci sampai kedatangan dicatat</p>
+        </div>
+      </div>
+
+      <ol class="points">
+        <li><div><strong>Satu tombol berlabel, selalu di kartu.</strong> Tidak berpindah ke ikon kecil, tidak berubah menjadi SELESAI saat jadwal lewat.</div></li>
+        <li><div><strong>Selesai terkunci.</strong> Kalau dipaksa, muncul penjelasan dan jalan pengecualian untuk supervisor.</div></li>
+        <li><div><strong>Mencatat jadi netral.</strong> Tidak ada WhatsApp yang otomatis terkirim, jadi tidak ada alasan sosial untuk menghindarinya.</div></li>
+      </ol>
+    </section>
+
+  </div>
+
+  <!-- ============ TABEL ============ -->
+  <section class="compare">
+    <h2>Tiga momen yang menentukan</h2>
+    <p class="lead">Perilaku tombol pada jam yang berbeda, untuk tugas yang sama.</p>
+    <table>
+      <thead>
+        <tr>
+          <th>Waktu</th>
+          <th>Sekarang</th>
+          <th>Usulan</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="when">09:50</td>
+          <td class="nowc"><span class="swatch" style="background:var(--danger)"></span>MULAI JALAN (OTW + peta)</td>
+          <td class="newc"><span class="swatch" style="background:var(--accent)"></span>MULAI JALAN · tombol tiba muncul H-10</td>
+        </tr>
+        <tr>
+          <td class="when">10:47 <span style="color:var(--muted);font-weight:400">telat</span></td>
+          <td class="nowc"><span class="swatch" style="background:var(--danger)"></span>PETA. Tiba hanya lewat ikon di header chat</td>
+          <td class="newc"><span class="swatch" style="background:var(--accent)"></span>CATAT KEDATANGAN, satu tap di kartu</td>
+        </tr>
+        <tr>
+          <td class="when">11:04 <span style="color:var(--muted);font-weight:400">lewat slot</span></td>
+          <td class="nowc"><span class="swatch" style="background:var(--danger)"></span>SELESAI aktif tanpa kedatangan</td>
+          <td class="newc"><span class="swatch" style="background:var(--accent)"></span>Terkunci sampai kedatangan dicatat</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <p class="foot">
+    <b>Sumber rekonstruksi:</b> <code>StaffTodayTaskCard.tsx</code> (tombol kartu), <code>taskAction.ts</code> (aturan tombol),
+    <code>StaffChatHeader.tsx</code> (ikon tiba di header chat), <code>StaffToday.tsx</code> (dialog konfirmasi tiba yang ikut mengirim WhatsApp).
+    Prototipe ini bukan tangkapan layar; tampilan disederhanakan agar perbedaannya terlihat.
+  </p>
+
+</div>
+</body>
+</html>

@@ -37,7 +37,7 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
 
 ## 359. [Audit Bidan / Raport] Raport Kinerja Bidan v1 tidak valid sebagai alat penilaian (2026-11-19, OPEN — UI/UX dirombak lebih dulu)
 
-- **Status:** OPEN — F1 selesai (2026-11-19): skema 3 tabel + domain `staff-scorecard.ts` + 36 tes + registrasi modul. Migrasi dibuat tetapi belum diterapkan (DB lokal tidak tersedia). F2 (kolektor bukti) berikutnya. Plan: `docs/plans/BIDAN_SCORECARD_PLAN_2026-11-19.md`.
+- **Status:** **F1–F3 SELESAI (2026-11-19).** F1: skema + domain nilai. F2: collector bukti + backfill. F3: policy penilaian + tab admin + audit + RBAC. Migrasi dibuat tetapi belum diterapkan (DB lokal tidak tersedia). F4 (antrean verifikasi) berikutnya. Plan: `docs/plans/BIDAN_SCORECARD_PLAN_2026-11-19.md`.
 - **Konteks:** `raport_bidan.html` (artefak Antigravity) + `.agents/skills/audit-treatment-repeat/scripts/run-audit.mjs` diverifikasi ulang terhadap DB production (`wa_clinic_db`, status `completed`, cutoff 18 Nov 2026).
 - **Temuan kritis (terverifikasi query, bukan dugaan):**
   1. **Nilai A dari data kosong.** Bidan Yusi: `arrived_at` terisi **0 dari 125** kunjungan selesai (Okt–Nov); `otw_sent_at` 2 dari 125. Raport menampilkan "100% tepat jam, 0 komplain, nilai A". Insentif terbalik: tidak memakai tracking = nilai sempurna.

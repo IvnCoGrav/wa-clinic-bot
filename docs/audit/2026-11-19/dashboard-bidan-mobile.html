@@ -1,0 +1,636 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0e6b5a">
+<title>Kinerja Saya — Bidan Thabita</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: #e9e6de;
+    --surface: #ffffff;
+    --surface-2: #f7f5f0;
+    --ink: #17211e;
+    --ink-2: #3f4d48;
+    --muted: #78857f;
+    --line: #e4e0d6;
+    --line-strong: #d2cdc0;
+    --accent: #0e6b5a;
+    --accent-weak: #e6f1ee;
+    --accent-ink: #ffffff;
+    --warn: #96590a;
+    --warn-weak: #fbf3e4;
+    --danger: #a1273c;
+    --danger-weak: #fbeaee;
+    --radius: 18px;
+    --shadow: 0 1px 2px rgba(23,33,30,.05), 0 12px 32px -22px rgba(23,33,30,.5);
+    --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --serif: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0a0e0d;
+      --surface: #171e1b;
+      --surface-2: #1c2421;
+      --ink: #eef2ef;
+      --ink-2: #c2ccc6;
+      --muted: #8b9891;
+      --line: #2a3330;
+      --line-strong: #3b4743;
+      --accent: #5fc9b1;
+      --accent-weak: #16332d;
+      --accent-ink: #08201b;
+      --warn: #dfa458;
+      --warn-weak: #33270f;
+      --danger: #f08a9c;
+      --danger-weak: #3a1a22;
+      --shadow: 0 1px 2px rgba(0,0,0,.4), 0 12px 32px -22px rgba(0,0,0,.9);
+    }
+  }
+
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--font);
+    font-size: 16px;
+    line-height: 1.5;
+    font-variant-numeric: tabular-nums;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Tempat preview di desktop; di HP menjadi layar penuh */
+  .phone {
+    width: 100%;
+    max-width: 430px;
+    margin: 22px auto;
+    background: var(--surface-2);
+    border-radius: 34px;
+    box-shadow: 0 30px 70px -40px rgba(0,0,0,.55), 0 0 0 1px rgba(0,0,0,.06);
+    overflow: hidden;
+    min-height: 720px;
+  }
+  @media (max-width: 480px) {
+    body { background: var(--surface-2); }
+    .phone { margin: 0; border-radius: 0; box-shadow: none; min-height: 100dvh; }
+  }
+
+  .appbar {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: calc(14px + env(safe-area-inset-top)) 20px 10px;
+  }
+  .brand {
+    font-size: 11px; letter-spacing: .11em; text-transform: uppercase;
+    font-weight: 700; color: var(--muted);
+  }
+  .avatar {
+    width: 34px; height: 34px; border-radius: 50%;
+    display: grid; place-items: center;
+    background: var(--accent-weak); color: var(--accent);
+    font-family: var(--serif); font-size: 16px; font-weight: 600;
+    border: 1px solid color-mix(in srgb, var(--accent) 20%, transparent);
+  }
+
+  main { padding: 0 16px calc(28px + env(safe-area-inset-bottom)); }
+
+  .hello { padding: 8px 4px 18px; }
+  .period {
+    margin: 0 0 8px; font-size: 11px; font-weight: 700;
+    letter-spacing: .1em; text-transform: uppercase; color: var(--muted);
+  }
+  h1 {
+    font-family: var(--serif);
+    font-size: 30px; font-weight: 600; line-height: 1.15;
+    margin: 0 0 8px; letter-spacing: -.01em;
+  }
+  .hello p { margin: 0; font-size: 13.5px; color: var(--ink-2); max-width: 34ch; }
+
+  /* ---------- hero ---------- */
+  .hero {
+    background: var(--accent);
+    color: var(--accent-ink);
+    border-radius: var(--radius);
+    padding: 18px 18px 16px;
+    box-shadow: var(--shadow);
+  }
+  .hero-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+  .hero-label { font-size: 11px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; opacity: .8; }
+  .delta {
+    font-size: 12px; font-weight: 700; padding: 3px 9px; border-radius: 999px;
+    background: rgba(255,255,255,.18); color: inherit;
+  }
+  .hero-value {
+    font-size: 46px; font-weight: 650; line-height: 1.05;
+    letter-spacing: -.03em; margin: 6px 0 2px;
+  }
+  .hero-value small { font-size: 15px; font-weight: 500; opacity: .78; letter-spacing: 0; }
+  .hero-grade {
+    display: inline-grid; place-items: center;
+    width: 26px; height: 26px; border-radius: 8px; margin-left: 8px;
+    font-size: 13px; font-weight: 700; vertical-align: 6px;
+    background: color-mix(in srgb, currentColor 15%, transparent);
+    border: 1px solid color-mix(in srgb, currentColor 25%, transparent);
+  }
+  .weeks { display: flex; justify-content: space-between; gap: 10px; height: 84px; margin-top: 8px; }
+  .week { flex: 1; display: flex; flex-direction: column; justify-content: flex-end; }
+  .pair { display: flex; align-items: flex-end; justify-content: center; gap: 5px; height: 58px; }
+  .week-bar {
+    flex: 1; max-width: 15px;
+    border-radius: 4px 4px 2px 2px;
+    background: color-mix(in srgb, currentColor 24%, transparent);
+    position: relative; min-height: 3px;
+  }
+  .week-bar.now { background: color-mix(in srgb, currentColor 78%, transparent); }
+  .week-bar b {
+    position: absolute; top: -16px; left: -4px; right: -4px; text-align: center;
+    font-size: 10.5px; font-weight: 650; color: inherit;
+  }
+  .week small { font-size: 9.5px; text-align: center; opacity: .72; margin-top: 5px; }
+  .weeks-title { font-size: 9.5px; font-weight: 700; letter-spacing: .09em; text-transform: uppercase; opacity: .7; margin: 16px 0 0; }
+  .chart-key { display: flex; gap: 14px; font-size: 10px; opacity: .8; margin-top: 6px; }
+  .chart-key i { display: inline-block; width: 7px; height: 7px; border-radius: 2px; margin-right: 5px; }
+  .chart-key .old { background: color-mix(in srgb, currentColor 24%, transparent); }
+  .chart-key .new { background: color-mix(in srgb, currentColor 78%, transparent); }
+  .hero-note { margin: 10px 0 0; font-size: 11.5px; opacity: .82; }
+
+  /* ---------- blocks ---------- */
+  .block { margin-top: 22px; }
+  .block > h2 {
+    font-size: 12px; font-weight: 700; letter-spacing: .1em;
+    text-transform: uppercase; color: var(--muted);
+    margin: 0 0 10px; padding-left: 4px;
+  }
+
+  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .mini {
+    background: var(--surface); border: 1px solid var(--line);
+    border-radius: 14px; padding: 14px;
+  }
+  .mini b { display: block; font-size: 26px; font-weight: 650; letter-spacing: -.02em; line-height: 1.1; }
+  .mini span { display: block; font-size: 12.5px; font-weight: 600; margin-top: 3px; }
+  .mini small { display: block; font-size: 11px; color: var(--muted); margin-top: 2px; }
+
+  .card {
+    background: var(--surface); border: 1px solid var(--line);
+    border-radius: var(--radius); padding: 16px;
+    box-shadow: var(--shadow);
+  }
+  .card + .card { margin-top: 10px; }
+  .card-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+  .card-head h3 { margin: 0; font-size: 15px; font-weight: 650; }
+  .card-head p { margin: 2px 0 0; font-size: 11.5px; color: var(--muted); }
+
+  .chip {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 3px 8px; border-radius: 999px;
+    font-size: 10.5px; font-weight: 650; white-space: nowrap;
+    border: 1px solid transparent;
+  }
+  .chip.warn { background: var(--warn-weak); color: var(--warn); border-color: color-mix(in srgb, var(--warn) 24%, transparent); }
+  .chip.ok { background: var(--accent-weak); color: var(--accent); border-color: color-mix(in srgb, var(--accent) 20%, transparent); }
+  .chip.na { background: var(--surface-2); color: var(--muted); border-color: var(--line-strong); }
+
+  /* ---------- grade ---------- */
+  .grade-card { display: grid; grid-template-columns: 84px minmax(0, 1fr); gap: 14px; align-items: center; }
+  .grade-left { text-align: center; }
+  .grade-letter { font-size: 52px; font-weight: 700; line-height: 1; letter-spacing: -.04em; }
+  .grade-letter.e { color: var(--danger); }
+  .grade-letter.d, .grade-letter.c { color: var(--warn); }
+  .grade-letter.b, .grade-letter.a { color: var(--accent); }
+  .grade-caption { font-size: 9px; color: var(--muted); margin-top: 4px; text-transform: uppercase; letter-spacing: .06em; }
+  .grade-rows { display: grid; gap: 9px; }
+  .grade-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: baseline; font-size: 12px; color: var(--ink-2); }
+  .grade-row span i { font-style: normal; font-size: 9.5px; color: var(--muted); margin-left: 4px; }
+  .grade-row b { font-size: 14px; font-weight: 650; color: var(--ink); }
+  .grade-note { grid-column: 1 / -1; margin: 0; font-size: 10.5px; color: var(--muted); line-height: 1.45; }
+  .grade-card details { grid-column: 1 / -1; margin-top: 2px; }
+  .grade-badge { width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center; font-size: 16px; font-weight: 700; }
+  .grade-badge.e { background: var(--danger-weak); color: var(--danger); border: 1px solid color-mix(in srgb, var(--danger) 25%, transparent); }
+  .grade-badge.d, .grade-badge.c { background: var(--warn-weak); color: var(--warn); border: 1px solid color-mix(in srgb, var(--warn) 25%, transparent); }
+  .grade-badge.b, .grade-badge.a { background: var(--accent-weak); color: var(--accent); border: 1px solid color-mix(in srgb, var(--accent) 25%, transparent); }
+
+  /* warna kartu mengikuti grade */
+  .card.grade-d { border-left: 3px solid var(--warn); border-color: color-mix(in srgb, var(--warn) 45%, var(--line)); }
+  .card.grade-e {
+    border-left: 3px solid var(--danger);
+    border-color: var(--danger);
+    background: var(--danger-weak);
+    position: relative;
+  }
+  .card.grade-e::after {
+    content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
+    animation: card-pulse 2.8s ease-in-out infinite;
+  }
+  @keyframes card-pulse {
+    0%, 100% { box-shadow: 0 0 0 0 transparent; }
+    50% { box-shadow: 0 0 0 5px color-mix(in srgb, var(--danger) 12%, transparent); }
+  }
+  .grade-badge.e { position: relative; }
+  .grade-badge.e::after {
+    content: ""; position: absolute; inset: -3px; border-radius: 12px;
+    border: 1px solid var(--danger);
+    animation: badge-ping 1.9s ease-out infinite;
+  }
+  @keyframes badge-ping {
+    0% { transform: scale(.95); opacity: .55; }
+    70% { transform: scale(1.18); opacity: 0; }
+    100% { opacity: 0; }
+  }
+  .flag {
+    display: inline-flex; align-items: center; gap: 5px;
+    margin-top: 3px; font-size: 9px; font-weight: 700;
+    letter-spacing: .04em; text-transform: uppercase; color: var(--danger);
+  }
+  .flag::before {
+    content: ""; width: 5px; height: 5px; border-radius: 50%;
+    background: var(--danger); animation: dot-blink 1.4s ease-in-out infinite;
+  }
+  @keyframes dot-blink { 0%, 100% { opacity: 1; } 50% { opacity: .25; } }
+  .grade-sub { font-size: 8.5px; color: var(--muted); margin-top: 1px; line-height: 1.35; }
+  .grade-badge.na { background: var(--surface-2); color: var(--muted); border: 1px solid var(--line-strong); }
+  .big-pct.muted { font-size: 22px; font-weight: 600; color: var(--muted); }
+
+  /* ---------- ring ---------- */
+  .ring-wrap { display: flex; align-items: center; gap: 16px; margin-top: 14px; }
+  .ring {
+    flex: 0 0 92px; width: 92px; height: 92px; border-radius: 50%;
+    background: conic-gradient(var(--warn) calc(var(--p) * 1%), var(--line) 0);
+    display: grid; place-items: center; position: relative;
+  }
+  .ring::before {
+    content: ""; position: absolute; inset: 9px; border-radius: 50%; background: var(--surface);
+  }
+  .ring > div { position: relative; text-align: center; line-height: 1.1; }
+  .ring b { display: block; font-size: 21px; font-weight: 650; letter-spacing: -.02em; }
+  .ring small { display: block; font-size: 9.5px; color: var(--muted); margin-top: 2px; }
+  .ring-side { font-size: 13px; color: var(--ink-2); }
+  .ring-side p { margin: 0 0 6px; }
+  .ring-side strong { color: var(--ink); font-weight: 650; }
+  .muted { color: var(--muted); }
+
+  /* donut tiga kategori */
+  .ring3 {
+    width: 132px; height: 132px; border-radius: 50%;
+    background: conic-gradient(var(--accent) 0 16.2%, var(--danger) 16.2% 83.8%, var(--line-strong) 83.8% 100%);
+    display: grid; place-items: center; position: relative; margin: 4px auto 0;
+  }
+  .ring3::before { content: ""; position: absolute; inset: 17px; border-radius: 50%; background: var(--surface); }
+  .ring3 > div { position: relative; text-align: center; line-height: 1.1; }
+  .ring3 b { display: block; font-size: 30px; font-weight: 650; letter-spacing: -.03em; }
+  .ring3 small { display: block; font-size: 9.5px; color: var(--muted); margin-top: 2px; }
+  .ring-legend { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-top: 14px; text-align: center; }
+  .rl b { display: block; font-size: 17px; font-weight: 650; letter-spacing: -.02em; }
+  .rl span { display: block; font-size: 9.5px; color: var(--muted); margin-top: 1px; }
+  .rl i { display: inline-block; width: 6px; height: 6px; border-radius: 50%; margin-right: 4px; vertical-align: 1px; }
+
+  .dist { display: flex; height: 9px; border-radius: 999px; overflow: hidden; background: var(--line); margin: 14px 0 8px; }
+  .dist > div { height: 100%; }
+  .d-ok { background: var(--accent); }
+  .d-warn { background: var(--warn); }
+  .d-bad { background: var(--danger); }
+
+  .dist-key { display: flex; justify-content: space-between; font-size: 10.5px; color: var(--muted); }
+
+  .ev { display: grid; gap: 8px; margin-top: 16px; }
+  .ev-row {
+    display: flex; align-items: baseline; justify-content: space-between; gap: 10px;
+    font-size: 12.5px; padding-top: 8px; border-top: 1px solid var(--line);
+  }
+  .ev-row:first-child { border-top: 0; padding-top: 0; }
+  .ev-row > span:first-child { color: var(--ink-2); }
+  .ev-row b { color: var(--ink); font-weight: 650; }
+  .ev-row > span:last-child { color: var(--muted); font-size: 11.5px; text-align: right; }
+
+  .warn-line {
+    background: var(--warn-weak); color: var(--ink-2);
+    border-radius: 10px; padding: 10px 12px; margin-top: 12px;
+    font-size: 12px;
+  }
+  .warn-line strong { color: var(--ink); }
+
+  details { margin-top: 12px; }
+  details summary {
+    list-style: none; cursor: pointer;
+    font-size: 12px; font-weight: 650; color: var(--accent);
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 10px 0; margin: -4px 0;
+  }
+  details summary::-webkit-details-marker { display: none; }
+  details summary::after { content: "▾"; font-size: 10px; color: var(--muted); }
+  details[open] summary::after { content: "▴"; }
+  .late-list { display: grid; gap: 0; }
+  .late-scroll { max-height: 296px; overflow-y: auto; padding-right: 4px; }
+  .late-row {
+    display: grid; grid-template-columns: minmax(0, 1fr) auto auto;
+    align-items: center; gap: 8px;
+    font-size: 12px; padding: 8px 0; border-top: 1px solid var(--line);
+  }
+  .late-row:first-child { border-top: 0; }
+  .late-row b { color: var(--danger); font-weight: 650; white-space: nowrap; }
+  .late-row .src {
+    font-size: 9px; font-weight: 650; padding: 1px 5px; border-radius: 4px;
+    background: var(--surface-2); color: var(--muted); border: 1px solid var(--line);
+  }
+
+  .big-pct { font-size: 34px; font-weight: 650; letter-spacing: -.025em; line-height: 1.1; margin: 10px 0 2px; }
+  .big-pct small { font-size: 12px; font-weight: 500; color: var(--muted); letter-spacing: 0; }
+  .meter { height: 8px; border-radius: 999px; background: var(--line); overflow: hidden; margin: 12px 0 8px; }
+  .meter > i { display: block; height: 100%; border-radius: 999px; background: var(--accent); }
+  .meter-key { display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); }
+
+  /* ---------- checklist ---------- */
+  .checklist { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+  .checklist li {
+    background: var(--surface); border: 1px solid var(--line); border-radius: 14px;
+  }
+  .checklist label {
+    display: flex; align-items: flex-start; gap: 12px;
+    padding: 14px; cursor: pointer; min-height: 52px;
+  }
+  .checklist input { position: absolute; opacity: 0; width: 0; height: 0; }
+  .box {
+    flex: 0 0 22px; width: 22px; height: 22px; margin-top: 1px;
+    border-radius: 7px; border: 1.5px solid var(--line-strong);
+    display: grid; place-items: center;
+    transition: background .15s ease, border-color .15s ease;
+  }
+  .box::after {
+    content: ""; width: 10px; height: 6px;
+    border-left: 2px solid #fff; border-bottom: 2px solid #fff;
+    transform: rotate(-45deg) translate(1px, -1px); opacity: 0;
+    transition: opacity .12s ease;
+  }
+  .checklist input:checked + .box { background: var(--accent); border-color: var(--accent); }
+  .checklist input:checked + .box::after { opacity: 1; }
+  .checklist input:focus-visible + .box { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .checklist .txt { font-size: 13.5px; line-height: 1.45; }
+  .checklist .txt small { display: block; font-size: 11px; color: var(--muted); margin-top: 2px; }
+  .checklist input:checked ~ .txt { color: var(--muted); text-decoration: line-through; text-decoration-color: var(--line-strong); }
+
+  .check-progress {
+    margin: 10px 4px 0; font-size: 11.5px; color: var(--muted);
+    display: flex; justify-content: space-between;
+  }
+
+  .footer {
+    margin-top: 26px; padding: 16px 4px 0;
+    border-top: 1px solid var(--line);
+    font-size: 11px; color: var(--muted); line-height: 1.5;
+  }
+  .footer b { color: var(--ink-2); font-weight: 600; }
+
+  /* ---------- penyesuaian layout ---------- */
+  .hello .sub { margin: 0; font-size: 12px; color: var(--muted); }
+  .top-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 22px; }
+  .top-grid .hero { padding: 15px 14px; }
+  .top-grid .hero-value { font-size: 38px; }
+  .top-grid .hero-note { font-size: 10.5px; }
+  .up { font-weight: 700; }
+  .grade-card { display: flex; flex-direction: column; justify-content: center; padding: 14px; gap: 4px; }
+  .grade-cap { font-size: 8.5px; font-weight: 700; letter-spacing: .09em; text-transform: uppercase; color: var(--muted); }
+  .grade-letter { font-size: 40px; font-weight: 700; line-height: 1; letter-spacing: -.04em; margin: 2px 0; }
+  .grade-rows { gap: 4px; }
+  .grade-row { font-size: 10.5px; }
+  .grade-row b { font-size: 12px; }
+  .grade-row .cg { font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 5px; }
+  .cg.e { background: var(--danger); color: #fff; }
+  .cg.b { background: var(--accent); color: var(--accent-ink); }
+  .grade-details { margin-top: 2px; }
+  .grade-details summary {
+    list-style: none; cursor: pointer;
+    font-size: 9px; font-weight: 600; color: var(--muted);
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .grade-details summary::-webkit-details-marker { display: none; }
+  .grade-details summary::after { content: "▾"; font-size: 8px; }
+  .grade-details[open] summary::after { content: "▴"; }
+  .grade-details .grade-rows { margin-top: 6px; }
+
+  .one-line { padding: 2px 16px; }
+  .line-row { display: flex; align-items: center; justify-content: space-between; padding: 12px 0; font-size: 13.5px; }
+  .line-row b { font-size: 18px; font-weight: 650; }
+  .line-details { border-top: 1px solid var(--line); }
+  .line-details summary { display: flex; align-items: center; justify-content: space-between; padding: 12px 0; cursor: pointer; list-style: none; font-size: 13.5px; }
+  .line-details summary::-webkit-details-marker { display: none; }
+  .line-details summary b { font-size: 18px; font-weight: 650; }
+  .line-details summary::after { content: "▾"; font-size: 10px; color: var(--muted); margin-left: 8px; }
+  .line-details[open] summary::after { content: "▴"; }
+  .line-detail { padding: 0 0 12px; font-size: 11.5px; color: var(--muted); }
+
+  .ring-wrap { display: flex; align-items: center; gap: 18px; margin-top: 10px; }
+  .ring3 { flex: 0 0 120px; width: 120px; height: 120px; margin: 0; }
+  .ring3 b { font-size: 26px; }
+  .ring3 b.red { color: var(--danger); }
+  .legend-v { display: grid; gap: 9px; flex: 1; }
+  .legend-v div { display: flex; align-items: center; gap: 7px; font-size: 11.5px; }
+  .legend-v i { width: 7px; height: 7px; border-radius: 50%; flex: 0 0 7px; }
+  .legend-v span { flex: 1; color: var(--ink-2); }
+  .legend-v b { font-weight: 650; }
+
+  .meter { position: relative; }
+  .bench { position: absolute; top: -2px; bottom: -2px; width: 2px; background: var(--ink-2); border-radius: 2px; }
+  .bench-line { margin: 8px 0 0; font-size: 11px; color: var(--muted); }
+
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+<div class="phone">
+
+  <div class="appbar">
+    <div class="brand">Kala · Buku Raport</div>
+    <div class="avatar" aria-hidden="true">T</div>
+  </div>
+
+  <main>
+    <section class="hello">
+      <p class="period">1–18 November 2026</p>
+      <h1>Bidan Thabita</h1>
+      <p class="sub">Summary</p>
+    </section>
+
+    <!-- ATAS: nilai + kunjungan (50/50) -->
+    <section class="top-grid">
+      <div class="card grade-card grade-e">
+        <div class="grade-cap">Nilai akhir</div>
+        <div class="grade-letter e">E</div>
+        <div class="flag">Perlu perbaikan</div>
+        <div class="grade-sub">Retensi belum dinilai</div>
+        <details class="grade-details">
+          <summary>Rincian nilai</summary>
+          <div class="grade-rows">
+            <div class="grade-row"><span>Ketepatan</span><b class="cg e">E</b></div>
+            <div class="grade-row"><span>Kunjungan</span><b class="cg b">B</b></div>
+          </div>
+        </details>
+      </div>
+
+      <div class="hero grade-b" aria-label="Kunjungan bulan ini">
+        <div class="hero-top">
+          <span class="hero-label">Kunjungan selesai</span>
+          <span class="hero-grade">B</span>
+        </div>
+        <div class="hero-value">37 <small>kunjungan</small></div>
+        <p class="hero-note">Bulan lalu 31 <span class="up">▲ +6 (19%)</span></p>
+      </div>
+    </section>
+
+    <!-- KEKUATAN -->
+    <section class="block">
+      <h2>Yang berjalan baik</h2>
+      <div class="card one-line">
+        <div class="line-row"><span>Pasien baru</span><b>26</b></div>
+        <details class="line-details">
+          <summary><span>Repeat</span><b>11</b></summary>
+          <div class="line-detail">1 dari Thabita sendiri · 10 limpahan bidan lain</div>
+        </details>
+      </div>
+    </section>
+
+    <!-- PERHATIAN -->
+    <section class="block">
+      <h2>Perlu perhatian</h2>
+
+      <article class="card grade-e">
+        <div class="card-head">
+          <div>
+            <h3>Ketepatan waktu</h3>
+            <span class="flag">Perlu perbaikan</span>
+          </div>
+          <span class="grade-badge e">E</span>
+        </div>
+
+        <div class="ring-wrap">
+          <div class="ring3" role="img" aria-label="6 tepat waktu, 25 terlambat, 6 tidak tercatat">
+            <div><b class="red">19%</b><small>tepat · dari 31</small></div>
+          </div>
+          <div class="legend-v">
+            <div><i style="background:var(--accent)"></i><span>Tepat waktu</span><b>6</b></div>
+            <div><i style="background:var(--danger)"></i><span>Terlambat</span><b>25</b></div>
+            <div><i style="background:var(--line-strong)"></i><span>Tidak tercatat</span><b>6</b></div>
+          </div>
+        </div>
+
+        <details>
+          <summary>Lihat semua keterlambatan (25)</summary>
+          <div class="late-scroll">
+            <div class="late-list">
+              <div class="late-row"><span>Bunda Eka · 15 Nov</span><span class="src">chat</span><b>+117 m</b></div>
+              <div class="late-row"><span>Bunda Maisya · 16 Nov</span><span class="src">chat</span><b>+101 m</b></div>
+              <div class="late-row"><span>Bunda Dian · 7 Nov</span><span class="src">jam</span><b>+94 m</b></div>
+              <div class="late-row"><span>Bunda Aden · 10 Nov</span><span class="src">chat</span><b>+87 m</b></div>
+              <div class="late-row"><span>Bunda Lily · 17 Nov</span><span class="src">chat</span><b>+85 m</b></div>
+              <div class="late-row"><span>Bunda Dhea · 16 Nov</span><span class="src">chat</span><b>+82 m</b></div>
+              <div class="late-row"><span>Bunda Riska · 11 Nov</span><span class="src">chat</span><b>+81 m</b></div>
+              <div class="late-row"><span>Bunda Putri · 4 Nov</span><span class="src">chat</span><b>+79 m</b></div>
+              <div class="late-row"><span>Bunda Anjani · 4 Nov</span><span class="src">jam</span><b>+78 m</b></div>
+              <div class="late-row"><span>Bunda Devita · 7 Nov</span><span class="src">chat</span><b>+77 m</b></div>
+              <div class="late-row"><span>Bunda Alin · 18 Nov</span><span class="src">jam</span><b>+74 m</b></div>
+              <div class="late-row"><span>Bunda Dani · 6 Nov</span><span class="src">chat</span><b>+66 m</b></div>
+              <div class="late-row"><span>Bunda Ayu W. · 10 Nov</span><span class="src">chat</span><b>+65 m</b></div>
+              <div class="late-row"><span>Bunda Ananda · 1 Nov</span><span class="src">chat</span><b>+62 m</b></div>
+              <div class="late-row"><span>Bunda Vivi S. · 14 Nov</span><span class="src">jam</span><b>+59 m</b></div>
+              <div class="late-row"><span>Bunda Irlandia · 8 Nov</span><span class="src">chat</span><b>+56 m</b></div>
+              <div class="late-row"><span>Bunda Intan · 17 Nov</span><span class="src">jam</span><b>+52 m</b></div>
+              <div class="late-row"><span>Bunda Erriza · 9 Nov</span><span class="src">chat</span><b>+50 m</b></div>
+              <div class="late-row"><span>Bunda Risma · 3 Nov</span><span class="src">chat</span><b>+47 m</b></div>
+              <div class="late-row"><span>Bunda Herlina · 14 Nov</span><span class="src">chat</span><b>+46 m</b></div>
+              <div class="late-row"><span>Bunda Sifa · 14 Nov</span><span class="src">chat</span><b>+45 m</b></div>
+              <div class="late-row"><span>Bunda Mery · 18 Nov</span><span class="src">jam</span><b>+40 m</b></div>
+              <div class="late-row"><span>Bunda Kristi · 15 Nov</span><span class="src">chat</span><b>+34 m</b></div>
+              <div class="late-row"><span>Bunda Indah · 9 Nov</span><span class="src">jam</span><b>+32 m</b></div>
+              <div class="late-row"><span>Fiko · 3 Nov</span><span class="src">chat</span><b>+32 m</b></div>
+            </div>
+          </div>
+        </details>
+      </article>
+
+      <article class="card">
+        <div class="card-head">
+          <h3>Pasien kembali</h3>
+          <span class="grade-badge na">—</span>
+        </div>
+
+        <div class="big-pct">3 <small>pasien kembali</small></div>
+        <p class="bench-line" style="margin-top:6px">dari 21 pasien baru Oktober · <b>14,3%</b></p>
+
+        <div class="meter" style="margin-top:14px"><i style="width:52.5%"></i></div>
+        <div class="meter-key"><span>Sampel 21 / 40</span><span>Butuh 19 lagi</span></div>
+
+        <p class="bench-line">Benchmark policy 34,6% · <b>20 poin di bawah</b></p>
+
+        <p class="bench-line" style="margin-top:10px; padding-top:10px; border-top:1px solid var(--line)">
+          11 kunjungan ulang November · 1 sendiri, 10 limpahan.
+        </p>
+      </article>
+    </section>
+
+    <!-- CHECKLIST -->
+    <section class="block">
+      <h2>Yang perlu ditingkatkan</h2>
+      <ul class="checklist" id="checklist">
+        <li>
+          <label>
+            <input type="checkbox" data-key="jam">
+            <span class="box" aria-hidden="true"></span>
+            <span class="txt">Isi jam kedatangan setiap kunjungan selesai
+              <small>Target: 37 dari 37 kunjungan tercatat</small>
+            </span>
+          </label>
+        </li>
+        <li>
+          <label>
+            <input type="checkbox" data-key="telat">
+            <span class="box" aria-hidden="true"></span>
+            <span class="txt">Periksa rute 3 kunjungan yang lewat 60 menit
+              <small>Dian 7 Nov, Anjani 4 Nov, Alin 18 Nov</small>
+            </span>
+          </label>
+        </li>
+        <li>
+          <label>
+            <input type="checkbox" data-key="jadwal">
+            <span class="box" aria-hidden="true"></span>
+            <span class="txt">Tawarkan jadwal berikutnya sebelum Bunda pulang
+              <small>Target: 50% pasien baru punya jadwal lanjutan</small>
+            </span>
+          </label>
+        </li>
+      </ul>
+      <p class="check-progress"><span id="done">0 dari 3 selesai</span><span>Periode ini</span></p>
+    </section>
+  </main>
+</div>
+
+<script>
+  (function () {
+    var boxes = Array.prototype.slice.call(document.querySelectorAll('#checklist input'));
+    var done = document.getElementById('done');
+    var store = null;
+    try { store = JSON.parse(localStorage.getItem('raport-thabita-check') || '{}'); } catch (e) { store = {}; }
+
+    function save() {
+      try { localStorage.setItem('raport-thabita-check', JSON.stringify(store)); } catch (e) {}
+    }
+    function paint() {
+      var n = boxes.filter(function (b) { return b.checked; }).length;
+      done.textContent = n + ' dari ' + boxes.length + ' selesai';
+    }
+
+    boxes.forEach(function (b) {
+      var k = b.getAttribute('data-key');
+      b.checked = !!store[k];
+      b.addEventListener('change', function () {
+        store[k] = b.checked;
+        save();
+        paint();
+      });
+    });
+    paint();
+  })();
+</script>
+</body>
+</html>
