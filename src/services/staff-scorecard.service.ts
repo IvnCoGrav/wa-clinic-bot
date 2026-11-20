@@ -249,6 +249,24 @@ export interface StaffScorecardItem {
   computedAt: string;
 }
 
+export interface ScorecardImpactItem {
+  staffId: string;
+  staffName: string;
+  pending: number;
+  current: {
+    punctualityPct: number | null;
+    score: number | null;
+    grade: string | null;
+    coveragePct: number;
+  };
+  projected: {
+    punctualityPct: number | null;
+    score: number | null;
+    grade: string | null;
+    coveragePct: number;
+  };
+}
+
 export interface StaffScorecardReport {
   tenantId: string;
   periodYear: number;
@@ -384,6 +402,113 @@ export class StaffScorecardService {
     }
 
     return { tenantId, periodYear: year, periodMonth: month, policy, items };
+  }
+
+  /**
+   * Preview dampak bila seluruh bukti chat yang menunggu disetujui.
+   * Read-only; memakai policy & bobot yang sama dengan laporan.
+   */
+  async previewPendingImpact(params: {
+    tenantId: string;
+    year: number;
+    month: number;
+    now?: Date;
+  }): Promise<ScorecardImpactItem[]> {
+    const report = await this.getReport({
+      tenantId: params.tenantId,
+      year: params.year,
+      month: params.month,
+      includeFrozen: false,
+      now: params.now,
+    });
+    const period = resolveScorecardPeriod(
+      params.year,
+      params.month,
+      params.now ?? new Date()
+    );
+
+    let rows: any[] = [];
+    try {
+      rows = await this.prisma.visitArrivalEvidence.findMany({
+        where: {
+          tenant_id: params.tenantId,
+          source: 'CHAT',
+          review_status: 'NEEDS_REVIEW',
+          observed_minutes: { gt: report.policy.chat_evidence_minutes },
+          reservation: {
+            status: 'completed',
+            booking_date: { gte: period.from, lt: period.to },
+            arrived_at: null,
+          },
+        },
+        select: {
+          reservation_id: true,
+          reservation: { select: { assigned_staff_id: true } },
+        },
+      });
+    } catch {
+      rows = [];
+    }
+
+    const pendingByStaff = new Map<string, Set<string>>();
+    for (const row of rows || []) {
+      const staffId = row?.reservation?.assigned_staff_id;
+      if (!staffId) continue;
+      if (!pendingByStaff.has(staffId)) pendingByStaff.set(staffId, new Set());
+      pendingByStaff.get(staffId)!.add(String(row.reservation_id));
+    }
+
+    const round1 = (value: number) => Math.round(value * 10) / 10;
+
+    return report.items.map((item) => {
+      const pending = pendingByStaff.get(item.staffId)?.size ?? 0;
+      const nextAssessed = item.punctuality.assessed + pending;
+      const nextPct =
+        nextAssessed > 0 ? round1((item.punctuality.onTime / nextAssessed) * 100) : null;
+      const nextCoverage =
+        item.punctuality.total > 0
+          ? round1((nextAssessed / item.punctuality.total) * 100)
+          : 0;
+
+      const composed = composeScore({
+        punctuality: {
+          pct: nextPct,
+          assessed: nextAssessed,
+          minSample: report.policy.min_sample_punctuality,
+        },
+        retention: { pct: item.retention.pct, eligible: item.retention.eligible },
+        volume: { pct: item.volume.pct },
+        weights: {
+          punctuality: report.policy.weight_punctuality,
+          retention: report.policy.weight_retention,
+          volume: report.policy.weight_volume,
+        },
+        thresholds: {
+          aMin: report.policy.grade_a_min,
+          bMin: report.policy.grade_b_min,
+          cMin: report.policy.grade_c_min,
+          dMin: report.policy.grade_d_min,
+        },
+      });
+
+      return {
+        staffId: item.staffId,
+        staffName: item.staffName,
+        pending,
+        current: {
+          punctualityPct: item.punctuality.pct,
+          score: item.score,
+          grade: item.grade,
+          coveragePct: item.coveragePct,
+        },
+        projected: {
+          punctualityPct: nextPct,
+          score: composed.score,
+          grade: composed.grade,
+          coveragePct: nextCoverage,
+        },
+      };
+    });
   }
 
   private async computeItem(

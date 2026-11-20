@@ -354,11 +354,15 @@
       "name": "ScorecardVerificationQueue",
       "layer": "domain",
       "path": "src/components/staff/ScorecardVerificationQueue.tsx",
-      "whenToUse": "Antrean verifikasi bukti keterlambatan dari chat. Admin menyetujui atau menolak sebelum bukti masuk perhitungan nilai.",
+      "whenToUse": "Antrean verifikasi bukti keterlambatan dari chat. Admin melihat konteks percakapan, memfilter per bidan/bulan, dan menyetujui atau menolak sebelum bukti masuk perhitungan nilai.",
       "states": [
         "loading",
         "empty",
         "list",
+        "filtered",
+        "pagination",
+        "chat-context",
+        "impact-preview",
         "review-modal",
         "error"
       ],
