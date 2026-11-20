@@ -45,6 +45,7 @@ const ChatMigration = lazy(() => import('./pages/tenant/ChatMigration').then(m =
 const StaffLogin = lazy(() => import('./pages/staff/StaffLogin').then(m => ({ default: m.StaffLogin })));
 const StaffToday = lazy(() => import('./pages/staff/StaffToday').then(m => ({ default: m.StaffToday })));
 const StaffSchedule = lazy(() => import('./pages/staff/StaffSchedule').then(m => ({ default: m.StaffSchedule })));
+const StaffScorecard = lazy(() => import('./pages/staff/StaffScorecard').then(m => ({ default: m.StaffScorecard })));
 const StaffManagement = lazy(() => import('./pages/tenant/StaffManagement').then(m => ({ default: m.StaffManagement })));
 const TelegramIntegration = lazy(() => import('./pages/tenant/TelegramIntegration').then(m => ({ default: m.TelegramIntegration })));
 const QuickReplies = lazy(() => import('./pages/tenant/QuickReplies').then(m => ({ default: m.QuickReplies })));
@@ -361,6 +362,13 @@ export const App: React.FC = () => {
               <StaffAuthProvider>
                 <StaffProtectedRoute>
                   <StaffSchedule />
+                </StaffProtectedRoute>
+              </StaffAuthProvider>
+            } />
+            <Route path="/admin/staff/scorecard" element={
+              <StaffAuthProvider>
+                <StaffProtectedRoute>
+                  <StaffScorecard />
                 </StaffProtectedRoute>
               </StaffAuthProvider>
             } />

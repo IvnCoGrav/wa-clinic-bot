@@ -31,6 +31,7 @@ import {
   BellRing,
   Copy,
   Home,
+  Award,
 } from 'lucide-react';
 import {
   extractMedia,
@@ -2960,6 +2961,18 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                   <span className="truncate">Buka Portal Admin / CS</span>
                 </button>
               )}
+
+              <button
+                type="button"
+                onClick={() => {
+                  setShowMenuDrawer(false);
+                  window.location.href = '/admin/staff/scorecard';
+                }}
+                className="w-full flex items-center justify-center space-x-1.5 py-2 px-2.5 rounded-xl bg-surface hover:bg-fill-2 text-[11px] font-semibold text-ink border border-divider shadow-xs transition active:scale-95"
+              >
+                <Award size={13} className="text-accent flex-shrink-0" />
+                <span className="truncate">Raport Saya</span>
+              </button>
 
               <button
                 type="button"

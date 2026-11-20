@@ -1,7 +1,7 @@
 # Plan: Bidan Scorecard (Penilaian + Verifikasi via Admin)
 
 - **Tanggal:** 2026-11-19
-- **Status:** **F1 SELESAI (2026-11-19).** Skema, domain, tes, dan registrasi modul sudah masuk. Migrasi dibuat tetapi belum diterapkan (DB lokal tidak tersedia). F2 berikutnya.
+- **Status:** **F1–F6 SELESAI (2026-11-20).** F1: skema + domain nilai. F2: collector bukti + backfill. F3: policy penilaian + tab admin. F4: antrean verifikasi bukti chat. F5: agregasi + snapshot FINAL immutable. F6: endpoint `/api/staff/scorecard/me` + halaman Raport Bidan mobile. Migrasi belum diterapkan (DB lokal tidak tersedia). F7 (klasifikasi AI chat) opsional, belum dikerjakan; F8 rollout menunggu migrasi.
 - **Prototipe acuan:** `docs/audit/2026-11-19/dashboard-bidan-mobile.html`, `docs/audit/2026-11-19/raport-bidan-v2.html`
 - **Temuan audit:** `docs/KNOWN_ISSUES.md` #359
 
@@ -359,12 +359,20 @@ Komponen baru wajib didaftarkan di `packages/admin-dashboard/src/ui-registry.jso
 - Shebang `#!/usr/bin/env node` pada dua skrip `.mjs` membuat Vitest gagal meng-import-nya. Shebang dihapus; skrip tetap dijalankan via `node <file>`.
 - Fixture tanggal tetap di `reservation-intake-contract.test.ts` diganti relatif (time-rot pada 20 Nov).
 
-### F6 — Dashboard HP (2 hari)
+### F6 — Dashboard HP (2 hari) — **SELESAI 2026-11-20**
 
-- [ ] `GET /api/staff/scorecard/me`.
-- [ ] Ganti data hardcode di dashboard menjadi fetch + loading/error state.
-- [ ] Grafik/pulse tetap; tambah fallback "belum ada data".
+- [x] `GET /api/staff/scorecard/me` — `staffId` **selalu dari sesi** (query `staffId` diabaikan / anti-IDOR), tenant dari sesi, periode default bulan berjalan WIB.
+- [x] Halaman `packages/admin-dashboard/src/pages/staff/StaffScorecard.tsx` — fetch ke API (bukan data hardcode), state loading/error/empty, pemilih periode, rincian per komponen + bobot terpakai, cakupan bukti, status PREVIEW/FINAL, dan penjelasan komponen yang dikecualikan.
+- [x] Rute `/admin/staff/scorecard` di `App.tsx` (di dalam `StaffAuthProvider` + `StaffProtectedRoute`); pintu masuk "Raport Saya" di drawer `StaffToday`; terdaftar di `ui-registry.json`.
+- [x] Tes `tests/integration/staff-scorecard-me.test.ts` — **6 tes** (401 tanpa sesi, anti-IDOR, bentuk data lengkap, periode invalid 400, item null, error 500).
 - **Lulus jika:** angka dashboard = API = raport owner.
+
+**Verifikasi F6:**
+- `npm run typecheck` → hijau
+- `npm run check:reuse` → 189 baseline, **0 baru**
+- `npm run build` dashboard → sukses
+- Suite fitur + RBAC/module registry → **45 tes hijau**
+- `npm test` → **1044 file / 8183 tes hijau**, 28 skipped, 0 gagal
 
 ### F7 — Chat classifier (3 hari, opsional & bergerbang)
 

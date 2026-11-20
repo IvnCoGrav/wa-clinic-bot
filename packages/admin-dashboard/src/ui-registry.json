@@ -435,6 +435,13 @@
       "reviewed": false
     },
     {
+      "path": "src/pages/staff/StaffScorecard.tsx",
+      "module": "staff",
+      "parent": null,
+      "adr": null,
+      "reviewed": false
+    },
+    {
       "path": "src/pages/staff/StaffTaskDetailModal.tsx",
       "module": "staff",
       "parent": null,
@@ -797,6 +804,7 @@
     "src/pages/staff/StaffLogin.tsx",
     "src/pages/staff/StaffPaymentModal.tsx",
     "src/pages/staff/StaffSchedule.tsx",
+    "src/pages/staff/StaffScorecard.tsx",
     "src/pages/staff/StaffTaskDetailModal.tsx",
     "src/pages/staff/StaffToday.tsx",
     "src/pages/staff/StaffTodayTaskCard.tsx",
