@@ -68,10 +68,29 @@ export interface EvidenceReviewItem {
   };
 }
 
+export interface EvidenceThreadMessage {
+  id: string;
+  content: string;
+  createdAt: Date;
+  direction: string | null;
+  senderType: string | null;
+  isAnchor: boolean;
+}
+
+export interface EvidenceThread {
+  conversationId: string;
+  anchorId: string;
+  messages: EvidenceThreadMessage[];
+  customerName: string | null;
+  staffName: string | null;
+  bookingDate: Date | null;
+}
+
 export interface ReviewEvidenceResult {
   ok: boolean;
-  code?: 'NOT_FOUND' | 'ALREADY_REVIEWED' | 'INVALID_ACTION';
+  code?: 'NOT_FOUND' | 'ALREADY_REVIEWED' | 'INVALID_ACTION' | 'INVALID_MINUTES';
   data?: any;
+  previousObservedMinutes?: number | null;
 }
 
 export class VisitEvidenceService {
@@ -396,6 +415,106 @@ export class VisitEvidenceService {
   }
 
   /**
+   * Thread percakapan untuk modal review. Read-only, maksimal 100 pesan
+   * di sekitar pesan bukti (default 60).
+   */
+  async getConversationThread(params: {
+    tenantId: string;
+    evidenceId: string;
+    limit?: number;
+  }): Promise<EvidenceThread | null> {
+    const row = await this.prisma.visitArrivalEvidence.findFirst({
+      where: { id: params.evidenceId, tenant_id: params.tenantId },
+      select: {
+        message_id: true,
+        reservation: {
+          select: {
+            booking_date: true,
+            customer: { select: { name: true } },
+            assigned_staff: { select: { name: true } },
+          },
+        },
+      },
+    });
+    if (!row?.message_id) return null;
+
+    const anchor = await this.prisma.message.findFirst({
+      where: { id: row.message_id, tenant_id: params.tenantId },
+      select: {
+        id: true,
+        content: true,
+        created_at: true,
+        conversation_id: true,
+        direction: true,
+        sender_type: true,
+      },
+    });
+    if (!anchor?.conversation_id) return null;
+
+    const limit = Math.min(Math.max(params.limit ?? 60, 10), 100);
+    const beforeTake = Math.ceil((limit - 1) / 2);
+    const afterTake = Math.max(0, limit - 1 - beforeTake);
+    const select = {
+      id: true,
+      content: true,
+      created_at: true,
+      direction: true,
+      sender_type: true,
+    };
+
+    const [before, after] = await Promise.all([
+      this.prisma.message.findMany({
+        where: {
+          tenant_id: params.tenantId,
+          conversation_id: anchor.conversation_id,
+          created_at: { lt: anchor.created_at },
+        },
+        orderBy: { created_at: 'desc' },
+        take: beforeTake,
+        select,
+      }),
+      this.prisma.message.findMany({
+        where: {
+          tenant_id: params.tenantId,
+          conversation_id: anchor.conversation_id,
+          created_at: { gt: anchor.created_at },
+        },
+        orderBy: { created_at: 'asc' },
+        take: afterTake,
+        select,
+      }),
+    ]);
+
+    const ordered = [...(before || []).reverse(), anchor, ...(after || [])];
+    const seen = new Set<string>();
+    const messages = ordered
+      .filter((message: any) => {
+        if (!message?.id || seen.has(message.id)) return false;
+        seen.add(message.id);
+        return true;
+      })
+      .map((message: any) => ({
+        id: message.id,
+        content: message.content,
+        createdAt: new Date(message.created_at),
+        direction: message.direction ?? null,
+        senderType: message.sender_type ?? null,
+        isAnchor: message.id === anchor.id,
+      }));
+
+    return {
+      conversationId: anchor.conversation_id,
+      anchorId: anchor.id,
+      messages,
+      customerName: row.reservation?.customer?.name ?? null,
+      staffName: row.reservation?.assigned_staff?.name ?? null,
+      bookingDate: row.reservation?.booking_date
+        ? new Date(row.reservation.booking_date)
+        : null,
+    };
+  }
+
+  /**
    * Menyetujui/menolak bukti. Hanya mengubah baris bukti; tidak menyentuh reservasi.
    */
   async reviewEvidence(params: {
@@ -403,10 +522,20 @@ export class VisitEvidenceService {
     evidenceId: string;
     action: 'APPROVE' | 'REJECT';
     note?: string | null;
+    observedMinutes?: number | null;
     actor: string;
   }): Promise<ReviewEvidenceResult> {
     if (params.action !== 'APPROVE' && params.action !== 'REJECT') {
       return { ok: false, code: 'INVALID_ACTION' };
+    }
+
+    let observedMinutes: number | undefined;
+    if (params.action === 'APPROVE' && params.observedMinutes != null) {
+      const value = Number(params.observedMinutes);
+      if (!Number.isFinite(value) || value < 0 || value > 1440) {
+        return { ok: false, code: 'INVALID_MINUTES' };
+      }
+      observedMinutes = Math.round(value);
     }
 
     const existing = await this.prisma.visitArrivalEvidence.findFirst({
@@ -425,10 +554,15 @@ export class VisitEvidenceService {
         reviewed_by: params.actor,
         reviewed_at: new Date(),
         review_note: params.note ?? null,
+        ...(observedMinutes !== undefined ? { observed_minutes: observedMinutes } : {}),
       },
     });
 
-    return { ok: true, data: updated };
+    return {
+      ok: true,
+      data: updated,
+      previousObservedMinutes: existing.observed_minutes ?? null,
+    };
   }
 
   /**

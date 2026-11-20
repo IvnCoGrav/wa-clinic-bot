@@ -3,6 +3,16 @@
 Catatan temuan yang sengaja dipisah dari fitur aktif, supaya tidak hilang dan
 tidak disalahartikan sebagai bug dari perubahan terbaru.
 
+## 362. [Departure Watchdog] Early Warning Keterlambatan Keberangkatan & Batasan Pengiriman WhatsApp Admin (2026-11-20)
+
+- **Status:** IMPLEMENTED (Fase 0–6 Selesai).
+- **Konteks:** Sistem Departure Watchdog & Delay Early Warning diimplementasikan untuk mendeteksi potensi keterlambatan bidan/terapis sebelum tiba di pasien pertama maupun antar-pasien (Plan `DELAY_WATCHDOG_DEPARTURE_WARNING_PLAN_2026-11-20.md`).
+- **Penyelesaian Isu #166a (Tenant-Aware):** Ambang toleransi keterlambatan kini tenant-aware melalui `Tenant.settings.delayWatchdog.toleranceMinutes` dengan fallback dinamis ke `StaffScorecardPolicy.tolerance_minutes` -> default 30 menit. Batas gap jam antar tugas (`maxGapHours`, default 3 jam) dan ekstra menit eskalasi kritis (`criticalExtraMinutes`, default 15 menit) juga dapat dikonfigurasi per tenant di Admin Dashboard (Settings -> Delay Watchdog).
+- **Privasi SOP No-HP:** Nomor HP WhatsApp customer dilarang keras terekspos ke kartu tugas staf atau pesan keluar terapis. Bidan mengirimkan notifikasi satu-klik ke nomor resmi admin klinik via bot WA tanpa pernah melihat nomor kontak customer atau membuka tautan `wa.me` manual.
+- **Batasan Jendela Layanan 24 Jam WABA Meta Cloud API:** Jika tenant menggunakan gateway WABA resmi (Meta Cloud API Graph), pengiriman pesan teks bebas ke nomor WhatsApp admin/CS di luar jendela interaksi 24 jam customer service akan ditolak oleh Meta. Sistem menolak silent-success dan mencatat status gagal secara eksplisit di audit log `STAFF_DELAY_ADMIN_NOTIFICATION`. Disarankan menggunakan nomor WhatsApp yang terhubung ke gateway WAHA untuk nomor admin penerima, atau memastikan admin berinteraksi secara aktif dengan bot klinik.
+- **Rollout Safe Gate:** Background sweep watchdog dijaga oleh feature flag `ENABLE_DELAY_WATCHDOG` (default `false` pada peluncuran pertama) di `src/lifecycle/background-crons.ts`.
+- **Verifikasi:** 36 test unit & integrasi hijau (`delay-watchdog-domain.test.ts`, `delay-watchdog-config.test.ts`, `staff-departure-watchdog.test.ts`, `staff-task-delay-payload.test.ts`, `staff-delay-notify.test.ts`, `staff-task-data-minimization.test.ts`).
+
 ## 361. [Payment Proof / Deploy] Source Produksi Sempat Tidak Sinkron dengan Image & Batasan Cakupan Bukti Bayar (2026-11-19, SEBAGIAN SELESAI)
 
 - **Status:** SEBAGIAN SELESAI — hotfix sudah ter-deploy & terverifikasi; sisa remediasi data, PDF, dan WABA masih terbuka.
@@ -37,12 +47,12 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
 
 ## 359. [Audit Bidan / Raport] Raport Kinerja Bidan v1 tidak valid sebagai alat penilaian (2026-11-19, OPEN — UI/UX dirombak lebih dulu)
 
-- **Status:** **F1–F8 SELESAI & TERDEPLOY (2026-11-20).** Dashboard admin live di tab **Penilaian Bidan**; portal mobile bidan tetap **tersembunyi** (`SCORECARD_STAFF_UI_ENABLED` default off). Migrasi produksi diterapkan (seed scope `admin_cs`). Verifikasi `verify:scorecard` **PASS 0 selisih** untuk Okt & Nov 2026.
+- **Status:** **F1–F8 SELESAI & TERDEPLOY (2026-11-20).** Dashboard admin live di tab **Penilaian Bidan**; portal mobile bidan tetap **tersembunyi** (`SCORECARD_STAFF_UI_ENABLED` default off). Migrasi produksi diterapkan (seed scope `admin_cs`). Verifikasi `verify:scorecard` **PASS 0 selisih** untuk Okt & Nov 2026. Antrean verifikasi sudah dilengkapi filter bidan/bulan, pagination, konteks 3+3 pesan, dan preview dampak grade.
 - **Gate rollout:** portal bidan disembunyikan sampai owner memvalidasi angka dashboard admin. Aktivasi: `SCORECARD_STAFF_UI_ENABLED=true` di `.env` server **dan** build ulang dashboard dengan flag yang sama (lihat plan F8). Rollback point server: tag `pre-scorecard-deploy-20261120`.
 - **Temuan operasional pasca-deploy (2026-11-20):**
   1. Belum ada `RetentionPolicy` aktif untuk `default-tenant`; raport memakai default kode (benchmark 34,6%, sampel 40, tenure 4 bulan). Perlu dikonfigurasi lewat admin bila ingin policy kanonis.
   2. Collector bukti chat (`VisitEvidenceService`) belum dijadwalkan; dry-run 1 Okt–20 Nov: 232 kunjungan, 54 terukur, **78 kandidat chat**, 100 tanpa bukti. Tanpa eksekusi, kolom telat chat tetap 0.
-  3. 78 kandidat chat menunggu review admin di antrean verifikasi sebelum masuk nilai.
+  3. 78 kandidat chat menunggu review admin di antrean verifikasi sebelum masuk nilai. Default antrean hanya menampilkan **19** milik staf dinilai (14 milik Yusi/owner disembunyikan); gunakan filter untuk melihat sisanya.
   4. Drift `migrate diff` yang dilaporkan saat deploy adalah **pre-existing** (tabel backup audit & default kolom), bukan dari migrasi scorecard.
   5. Owner (ADMIN_CS) bisa review bukti, tetapi pembekuan snapshot dan simpan policy hanya untuk **Super Admin** (akun `Admin`). Perlu keputusan RBAC bila owner ingin memakai akunnya sendiri.
   6. Bidan tanpa kunjungan (Cindy, 0 kunjungan) saat ini tampil **E / skor 0**; perlu keputusan apakah dikecualikan (cuti/baru masuk) daripada dinilai E.
@@ -4918,10 +4928,10 @@ Keputusan user: (1) tahan booking lokasi tak presisi + notifikasi admin saja; (2
   global di `src/services/staff-trip-tracking.service.ts`:
   `ARRIVAL_RADIUS_M=50`, `ARRIVAL_CONSECUTIVE_PING=2`, `GPS_ACCURACY_MAX_M=100`,
   `PRE_TRIP_WINDOW_MIN=30`, `DELAY_WARN_MIN=20`, `DELAY_CRITICAL_MIN=30`.
-- **166a — Belum tenant-aware (OPEN, sengaja):** idealnya dibaca dari `ClinicPolicy`
-  per-tenant. Sesuai Confirmation Gate: ditunda (tanpa migrasi), karena solusi
-  tenant-aware butuh kolom/tabel kebijakan baru. Ada `TODO(tenant-aware)` di blok
-  konstanta.
+- **166a — Sudah tenant-aware via Delay Watchdog (RESOLVED 2026-11-20, lihat Issue #362):** Ambang batas keterlambatan
+  kini dibaca tenant-aware dari `Tenant.settings.delayWatchdog.toleranceMinutes` via `src/config/delay-watchdog-config.ts`
+  dengan fallback ke `StaffScorecardPolicy.tolerance_minutes` -> default 30 menit. Tetap kompatibel dengan konstanta
+  fallback di `staff-trip-tracking.service.ts`.
 - **166b — Auto-stop 50m TIDAK mengubah `arrived_at` (by design):** `staff.trip_arrived`
   hanya sinyal indikator bagi CS + mematikan pemancar pelacakan; status kedatangan
   resmi tetap tombol manual bidan (mengirim WA). Jangan disamakan.
