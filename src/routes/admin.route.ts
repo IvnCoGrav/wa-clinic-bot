@@ -92,9 +92,10 @@ export async function adminRoutes(fastify: FastifyInstance) {
       return reply.status(404).send({ error: 'Not Found' });
     }
 
-    // 2. Allow unauthenticated access to auth endpoints and static HTML pages
+    // 2. Allow unauthenticated access to auth endpoints and static HTML / vendor pages
     if (
       request.url.startsWith('/admin/') ||
+      request.url.startsWith('/vendor/') ||
       request.url === '/api/admin/auth/login' ||
       request.url === '/api/admin/auth/logout' ||
       request.url === '/api/admin/auth/me' ||
@@ -354,6 +355,56 @@ export async function adminRoutes(fastify: FastifyInstance) {
   const fs = await import('fs/promises');
   const path = await import('path');
 
+  // Aset pihak ketiga yang di-vendor lokal (mis. Leaflet di
+  // packages/admin-dashboard/public/vendor/leaflet). Diserve same-origin agar
+  // CSP `script-src 'self'` tidak perlu dilonggarkan (KNOWN #344).
+  const serveVendorAsset = async (urlPath: string, reply: FastifyReply) => {
+    const relRaw = urlPath.includes('/admin/vendor/')
+      ? urlPath.split('/admin/vendor/').pop() || ''
+      : urlPath.split('/vendor/').pop() || '';
+    const segments = relRaw
+      .replace(/\\/g, '/')
+      .split('/')
+      .filter((seg) => seg && seg !== '.' && seg !== '..');
+    const rel = segments.join('/');
+    const distVendorRoot = path.resolve(__dirname, '../../packages/admin-dashboard/dist/vendor');
+    const publicVendorRoot = path.resolve(__dirname, '../../packages/admin-dashboard/public/vendor');
+    let filePath = path.resolve(distVendorRoot, rel);
+    if (!filePath.startsWith(distVendorRoot + path.sep)) {
+      return reply.status(404).send({ error: 'Not Found' });
+    }
+    try {
+      await fs.access(filePath);
+    } catch {
+      filePath = path.resolve(publicVendorRoot, rel);
+      if (!filePath.startsWith(publicVendorRoot + path.sep)) {
+        return reply.status(404).send({ error: 'Not Found' });
+      }
+    }
+    try {
+      const content = await fs.readFile(filePath);
+      if (rel.endsWith('.js')) {
+        reply.type('application/javascript');
+      } else if (rel.endsWith('.css')) {
+        reply.type('text/css');
+      } else if (rel.endsWith('.svg')) {
+        reply.type('image/svg+xml');
+      } else if (rel.endsWith('.png')) {
+        reply.type('image/png');
+      } else if (rel.endsWith('.woff2')) {
+        reply.type('font/woff2');
+      } else if (rel.endsWith('.woff')) {
+        reply.type('font/woff');
+      } else {
+        reply.type('text/plain; charset=utf-8');
+      }
+      reply.header('Cache-Control', 'public, max-age=86400');
+      return reply.send(content);
+    } catch {
+      return reply.status(404).send({ error: 'Not Found' });
+    }
+  };
+
   fastify.get('/admin/*', async (request: FastifyRequest, reply: FastifyReply) => {
     const urlPath = request.url.split('?')[0];
 
@@ -383,7 +434,7 @@ export async function adminRoutes(fastify: FastifyInstance) {
 
     // Aset vendor lokal (mis. Leaflet) ditangani cabang khusus di bawah —
     // jangan intersep oleh handler gambar root yang hanya membaca nama file.
-    if (!urlPath.includes('/admin/vendor/') && /\.(svg|ico|png|jpg|jpeg|webp)$/i.test(urlPath)) {
+    if (!urlPath.includes('/admin/vendor/') && !urlPath.includes('/vendor/') && /\.(svg|ico|png|jpg|jpeg|webp)$/i.test(urlPath)) {
       const filename = urlPath.split('/').pop() || '';
       try {
         const filePath = path.join(__dirname, '../../packages/admin-dashboard/dist', filename);
@@ -469,49 +520,8 @@ export async function adminRoutes(fastify: FastifyInstance) {
     // Aset pihak ketiga yang di-vendor lokal (mis. Leaflet di
     // packages/admin-dashboard/public/vendor/leaflet). Diserve same-origin agar
     // CSP `script-src 'self'` tidak perlu dilonggarkan (KNOWN #344).
-    if (urlPath.includes('/admin/vendor/')) {
-      const relRaw = urlPath.split('/admin/vendor/').pop() || '';
-      const segments = relRaw
-        .replace(/\\/g, '/')
-        .split('/')
-        .filter((seg) => seg && seg !== '.' && seg !== '..');
-      const rel = segments.join('/');
-      const distVendorRoot = path.resolve(__dirname, '../../packages/admin-dashboard/dist/vendor');
-      const publicVendorRoot = path.resolve(__dirname, '../../packages/admin-dashboard/public/vendor');
-      let filePath = path.resolve(distVendorRoot, rel);
-      if (!filePath.startsWith(distVendorRoot + path.sep)) {
-        return reply.status(404).send({ error: 'Not Found' });
-      }
-      try {
-        await fs.access(filePath);
-      } catch {
-        filePath = path.resolve(publicVendorRoot, rel);
-        if (!filePath.startsWith(publicVendorRoot + path.sep)) {
-          return reply.status(404).send({ error: 'Not Found' });
-        }
-      }
-      try {
-        const content = await fs.readFile(filePath);
-        if (rel.endsWith('.js')) {
-          reply.type('application/javascript');
-        } else if (rel.endsWith('.css')) {
-          reply.type('text/css');
-        } else if (rel.endsWith('.svg')) {
-          reply.type('image/svg+xml');
-        } else if (rel.endsWith('.png')) {
-          reply.type('image/png');
-        } else if (rel.endsWith('.woff2')) {
-          reply.type('font/woff2');
-        } else if (rel.endsWith('.woff')) {
-          reply.type('font/woff');
-        } else {
-          reply.type('text/plain; charset=utf-8');
-        }
-        reply.header('Cache-Control', 'public, max-age=86400');
-        return reply.send(content);
-      } catch {
-        return reply.status(404).send({ error: 'Not Found' });
-      }
+    if (urlPath.includes('/admin/vendor/') || urlPath.includes('/vendor/')) {
+      return serveVendorAsset(urlPath, reply);
     }
 
     if (urlPath.includes('/admin/geo/') || urlPath.includes('/geo/')) {
@@ -592,5 +602,12 @@ export async function adminRoutes(fastify: FastifyInstance) {
         }
       }
     }
+  });
+
+  // Alias vendor tanpa prefix /admin/ agar pemanggilan lokal atau aset statis
+  // yang merujuk /vendor/ tetap diserve dengan benar (KNOWN #344).
+  fastify.get('/vendor/*', async (request: FastifyRequest, reply: FastifyReply) => {
+    const urlPath = request.url.split('?')[0];
+    return serveVendorAsset(urlPath, reply);
   });
 }

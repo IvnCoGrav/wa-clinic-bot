@@ -21,7 +21,12 @@ export interface LeafletAssetUrls {
 
 /** Normalisasi base URL aset (selalu berakhir dengan '/'). */
 export function resolveLeafletAssetBase(baseUrl?: string): string {
-  const raw = String(baseUrl || '/').trim() || '/';
+  let raw = String(baseUrl ?? '').trim();
+  if (!raw) {
+    raw = typeof window !== 'undefined' && window.location?.pathname?.startsWith('/admin')
+      ? '/admin/'
+      : '/';
+  }
   const withSlash = raw.endsWith('/') ? raw : `${raw}/`;
   return `${withSlash}vendor/leaflet/`;
 }
@@ -31,7 +36,9 @@ export function resolveLeafletAssetBase(baseUrl?: string): string {
  * (Vite: '/admin/') agar tetap benar saat dashboard diserve di sub-path.
  */
 export function getLeafletAssetUrls(baseUrl?: string): LeafletAssetUrls {
-  const base = resolveLeafletAssetBase(baseUrl);
+  const base = resolveLeafletAssetBase(
+    baseUrl !== undefined ? baseUrl : import.meta.env.BASE_URL
+  );
   return {
     base,
     css: [
@@ -51,21 +58,27 @@ function waitForCss(href: string): Promise<void> {
   const existing = document.getElementById(id) as HTMLLinkElement | null;
   if (existing) {
     if (existing.dataset.loaded === 'true') return Promise.resolve();
-    return new Promise((resolve) => {
-      existing.addEventListener('load', () => resolve(), { once: true });
-      existing.addEventListener('error', () => resolve(), { once: true });
-    });
+    // Elemen lama gagal/stale: hapus agar tidak memblokir retry dengan listener basi
+    existing.remove();
   }
   return new Promise((resolve) => {
     const link = document.createElement('link');
     link.id = id;
     link.rel = 'stylesheet';
     link.href = href;
+    const timer = setTimeout(() => {
+      // Timeout 5 detik: kegagalan CSS tidak boleh membekukan inisialisasi JS/peta
+      resolve();
+    }, 5000);
     link.onload = () => {
+      clearTimeout(timer);
       link.dataset.loaded = 'true';
       resolve();
     };
-    link.onerror = () => resolve();
+    link.onerror = () => {
+      clearTimeout(timer);
+      resolve();
+    };
     document.head.appendChild(link);
   });
 }
@@ -75,23 +88,28 @@ function injectScript(src: string): Promise<void> {
   const existing = document.getElementById(id) as HTMLScriptElement | null;
   if (existing) {
     if (existing.dataset.loaded === 'true') return Promise.resolve();
-    return new Promise((resolve, reject) => {
-      existing.addEventListener('load', () => resolve(), { once: true });
-      existing.addEventListener('error', () => reject(new Error(`Gagal memuat script: ${src}`)), {
-        once: true,
-      });
-    });
+    // Elemen lama gagal/stale: hapus dari DOM agar tag baru dapat dipasang ulang
+    existing.remove();
   }
   return new Promise((resolve, reject) => {
     const script = document.createElement('script');
     script.id = id;
     script.src = src;
     script.async = true;
+    const timer = setTimeout(() => {
+      script.remove();
+      reject(new Error(`Timeout memuat script: ${src}`));
+    }, 10000);
     script.onload = () => {
+      clearTimeout(timer);
       script.dataset.loaded = 'true';
       resolve();
     };
-    script.onerror = () => reject(new Error(`Gagal memuat script: ${src}`));
+    script.onerror = () => {
+      clearTimeout(timer);
+      script.remove();
+      reject(new Error(`Gagal memuat script: ${src}`));
+    };
     document.head.appendChild(script);
   });
 }
@@ -106,9 +124,7 @@ function injectScript(src: string): Promise<void> {
  */
 export function loadLeaflet(): Promise<void> {
   if (loadPromise) return loadPromise;
-  const assets = getLeafletAssetUrls(
-    typeof import.meta !== 'undefined' ? (import.meta as any)?.env?.BASE_URL : undefined
-  );
+  const assets = getLeafletAssetUrls();
 
   loadPromise = (async () => {
     await Promise.all(assets.css.map(waitForCss));
