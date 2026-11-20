@@ -1260,10 +1260,10 @@ export class MediaService {
   }
 
   /**
-   * Sapu file media yang TIDAK direferensikan pesan/customer/pricelist mana pun
-   * (yatim). Dipakai untuk membebaskan kuota tanpa menyentuh media yang masih
-   * dipakai Live Chat. Aman: hanya menghapus file yatim yang lebih tua dari
-   * `minAgeHours` dan TIDAK pernah menyentuh folder payment-proofs.
+   * Sapu THUMBNAIL yatim (tidak direferensikan pesan/customer/konfigurasi mana
+   * pun). Dipakai untuk membebaskan kuota tanpa menyentuh HD yang mungkin masih
+   * dipakai Quick Reply/QRIS/pricelist. Aman: hanya file yatim yang lebih tua
+   * dari `minAgeHours` dan TIDAK pernah menyentuh folder payment-proofs.
    *
    * GERBANG KESELAMATAN: menolak berjalan bila masih ada pesan dengan
    * payload_raw rusak (`unset`) — jalankan backfill dulu agar thumbnail tidak
@@ -1329,6 +1329,26 @@ export class MediaService {
         select: { pricelist_image_url: true },
       });
       addRef(tenantRow?.pricelist_image_url);
+
+      // Referensi di luar pesan/customer: quick reply, settings tenant (QRIS),
+      // session data, dan bukti bayar. Tanpa ini, gambar konfigurasi bisa
+      // dianggap yatim dan terhapus.
+      const extraRefs = await prisma.$queryRaw<Array<{ u: string | null }>>`
+        SELECT DISTINCT m[1] AS u FROM (
+          SELECT regexp_matches(settings::text, '/media/[^"\\ ]+', 'g') FROM tenants WHERE id = ${tenantId}
+          UNION ALL
+          SELECT regexp_matches(session_data::text, '/media/[^"\\ ]+', 'g') FROM conversations WHERE tenant_id = ${tenantId}
+          UNION ALL
+          SELECT regexp_matches(session_data::text, '/media/[^"\\ ]+', 'g') FROM reservations WHERE tenant_id = ${tenantId}
+          UNION ALL
+          SELECT regexp_matches(coalesce(proof_url, ''), '/media/[^"\\ ]+', 'g') FROM reservations WHERE tenant_id = ${tenantId}
+          UNION ALL
+          SELECT regexp_matches(coalesce(image_url, ''), '/media/[^"\\ ]+', 'g') FROM quick_replies WHERE tenant_id = ${tenantId}
+          UNION ALL
+          SELECT regexp_matches(preferences::text, '/media/[^"\\ ]+', 'g') FROM customers WHERE tenant_id = ${tenantId}
+        ) t(m)
+      `;
+      extraRefs.forEach((r) => addRef(r.u));
     } catch {
       // DB offline → sweep tidak aman dijalankan
       return { scanned: 0, orphans: 0, deleted: 0, freedBytes: 0, skippedBecauseCorrupt, aborted: true };
@@ -1350,6 +1370,10 @@ export class MediaService {
       }
       for (const entry of entries) {
         if (!entry.isFile()) continue;
+        // HANYA thumbnail yang disapu. HD bisa dipakai konfigurasi lain
+        // (quick reply, QRIS, pricelist) yang tidak seluruhnya terlacak di DB;
+        // menghapusnya berisiko memutus gambar yang masih dipakai.
+        if (!isThumbName(entry.name)) continue;
         scanned++;
         const relUrl = toRelativeUrl(scope, tenantId, entry.name);
         if (refs.has(relUrl)) continue;
