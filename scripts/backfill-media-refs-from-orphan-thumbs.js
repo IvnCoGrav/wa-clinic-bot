@@ -143,7 +143,19 @@ async function main() {
       matches.push({ msg, file: candidates[0] });
       used.add(candidates[0].relUrl);
     } else if (candidates.length > 1) {
-      ambiguous++;
+      // Tie-break aman: kandidat terdekat ≤1,5 dtk dan minimal 2x lebih dekat
+      // dari kandidat kedua → kemungkinan besar memang file pesan ini.
+      const sorted = [...candidates].sort(
+        (a, b) => Math.abs(a.mtimeMs - t) - Math.abs(b.mtimeMs - t)
+      );
+      const d0 = Math.abs(sorted[0].mtimeMs - t);
+      const d1 = Math.abs(sorted[1].mtimeMs - t);
+      if (d0 <= 1500 && d1 >= d0 * 2) {
+        matches.push({ msg, file: sorted[0] });
+        used.add(sorted[0].relUrl);
+      } else {
+        ambiguous++;
+      }
     } else {
       noMatch++;
     }
