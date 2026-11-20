@@ -39,13 +39,18 @@ describe('Media Watermark-Based Auto-Pruning', () => {
   beforeEach(() => {
     cleanDirs();
     delete process.env.MEDIA_QUOTA_BYTES;
+    // Guard umur minimum HD dimatikan di suite lama; guard-nya diuji terpisah.
+    process.env.MEDIA_HD_MIN_AGE_HOURS = '0';
     vi.spyOn(prisma.tenant, 'findUnique').mockResolvedValue(null as any);
     vi.spyOn(prisma.customer, 'updateMany').mockResolvedValue({ count: 0 } as any);
+    vi.spyOn(prisma.customer, 'findMany').mockResolvedValue([] as any);
     vi.spyOn(prisma.message, 'updateMany').mockResolvedValue({ count: 0 } as any);
+    vi.spyOn(prisma.message, 'findMany').mockResolvedValue([] as any);
   });
 
   afterEach(() => {
     cleanDirs();
+    delete process.env.MEDIA_HD_MIN_AGE_HOURS;
     vi.restoreAllMocks();
   });
 
@@ -249,7 +254,7 @@ describe('Media Watermark-Based Auto-Pruning', () => {
     expect(fs.existsSync(thumbJpg)).toBe(true);
   });
 
-  it('4.8: deleteExpiredMedia menghapus video dan audio kedaluwarsa (>35 hari) dengan ref unset', async () => {
+  it('4.8: deleteExpiredMedia menghapus video/audio kedaluwarsa & membersihkan ref media secara utuh', async () => {
     const inboundDir = path.join(rootDir, 'inbound', TEST_TENANT_ID);
     fs.mkdirSync(inboundDir, { recursive: true });
 
@@ -262,20 +267,70 @@ describe('Media Watermark-Based Auto-Pruning', () => {
     fs.utimesSync(expiredMp4, past, past);
     fs.utimesSync(expiredOgg, past, past);
 
+    const videoRel = `/media/inbound/${TEST_TENANT_ID}/old_video.mp4`;
+    // Pesan masih mereferensikan video; key lain (quoted_message) WAJIB selamat.
+    (prisma.message.findMany as any).mockResolvedValue([
+      {
+        id: 'msg-old-video',
+        payload_raw: {
+          media: { url: videoRel, hdUrl: videoRel, mimeType: 'video/mp4' },
+          quoted_message: { id: 'q-1' },
+        },
+      },
+    ]);
+
     const removed = await mediaService.deleteExpiredMedia(TEST_TENANT_ID, 30);
 
     expect(removed).toBe(2);
     expect(fs.existsSync(expiredMp4)).toBe(false);
     expect(fs.existsSync(expiredOgg)).toBe(false);
 
-    // Pastikan ref payload_raw di-unset (karena thumbRelUrl null)
+    // Read-modify-write: payload ditulis utuh, TANPA operasi JSON `unset`/`path`.
     expect(prisma.message.updateMany).toHaveBeenCalledWith({
-      where: {
-        tenant_id: TEST_TENANT_ID,
-        payload_raw: { path: ['media', 'url'], equals: `/media/inbound/${TEST_TENANT_ID}/old_video.mp4` },
-      },
-      data: { payload_raw: { unset: ['media', 'url'] } },
+      where: { id: 'msg-old-video', tenant_id: TEST_TENANT_ID },
+      data: { payload_raw: { quoted_message: { id: 'q-1' } } },
     });
+    const calls = (prisma.message.updateMany as any).mock.calls as any[];
+    for (const [arg] of calls) {
+      expect(JSON.stringify(arg?.data?.payload_raw ?? {})).not.toContain('"unset"');
+      expect(JSON.stringify(arg?.data?.payload_raw ?? {})).not.toContain('"path"');
+    }
+  });
+
+  it('4.8b (anti data-loss produksi): file HD baru (< 24 jam) TIDAK boleh dipangkas kuota', async () => {
+    process.env.MEDIA_HD_MIN_AGE_HOURS = '24';
+    const outboundDir = path.join(rootDir, 'outbound', TEST_TENANT_ID);
+    fs.mkdirSync(outboundDir, { recursive: true });
+
+    const freshPhoto = path.join(outboundDir, 'foto-baru.jpg');
+    const freshThumb = path.join(outboundDir, 'foto-baru_thumb.jpg');
+    fs.writeFileSync(freshPhoto, Buffer.alloc(200 * 1024));
+    fs.writeFileSync(freshThumb, Buffer.alloc(10 * 1024));
+
+    const res = await mediaService.pruneToLowWatermark(TEST_TENANT_ID, 50 * 1024);
+
+    expect(res.filesRemoved).toBe(0);
+    expect(fs.existsSync(freshPhoto)).toBe(true);
+    expect(fs.existsSync(freshThumb)).toBe(true);
+  });
+
+  it('4.8c: setelah lewat 24 jam, file HD yang sama boleh dipangkas', async () => {
+    process.env.MEDIA_HD_MIN_AGE_HOURS = '24';
+    const outboundDir = path.join(rootDir, 'outbound', TEST_TENANT_ID);
+    fs.mkdirSync(outboundDir, { recursive: true });
+
+    const oldPhoto = path.join(outboundDir, 'foto-lama.jpg');
+    const oldThumb = path.join(outboundDir, 'foto-lama_thumb.jpg');
+    fs.writeFileSync(oldPhoto, Buffer.alloc(200 * 1024));
+    fs.writeFileSync(oldThumb, Buffer.alloc(10 * 1024));
+    const past = new Date(Date.now() - 30 * 3600 * 1000);
+    fs.utimesSync(oldPhoto, past, past);
+
+    const res = await mediaService.pruneToLowWatermark(TEST_TENANT_ID, 50 * 1024);
+
+    expect(res.filesRemoved).toBe(1);
+    expect(fs.existsSync(oldPhoto)).toBe(false);
+    expect(fs.existsSync(oldThumb)).toBe(true);
   });
 
   it('4.9 (pembersihan duplikat thumbnail inbound): membersihkan duplicate wrong-extension thumb yang berisi magic JPEG', async () => {

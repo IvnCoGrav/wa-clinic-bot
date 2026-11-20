@@ -3,6 +3,26 @@
 Catatan temuan yang sengaja dipisah dari fitur aktif, supaya tidak hilang dan
 tidak disalahartikan sebagai bug dari perubahan terbaru.
 
+## 364. [Deploy] Rilis Dashboard Staf "Opsi C" Terpasang sebagai Artifact, Belum Lewat Image (2026-11-20, OPEN — MENUNGGU RILIS BERIKUTNYA)
+
+- **Status:** perbaikan **sudah aktif di produksi**, tetapi hanya sebagai artifact `dist` yang disalin ke container `app` (backup lama: `/app/packages/admin-dashboard/dist.bak`).
+- **Kenapa ditempuh jalur ini:** perubahannya murni frontend (banner izin lokasi + warm-up GPS dihapus), sedangkan working tree masih memuat pekerjaan lain yang belum di-commit (Departure Watchdog + migrasi `20261120120000_add_delay_watchdog_base_and_notify`). `docker compose build` dari working tree akan ikut merilis pekerjaan tersebut.
+- **Dampak:** `docker compose up --build` / recreate berikutnya mengembalikan `dist` dari image → banner "Izinkan aplikasi memakai lokasi di latar" dan warm-up GPS **muncul lagi** sampai rilis penuh.
+- **Tindakan wajib pada rilis berikutnya:** commit `StaffToday.tsx`, `geoUtils.ts`, 3 file tes, dan 3 dokumen, lalu jalankan `scripts/deploy-prod.sh` di server (build image + `prisma migrate deploy` + recreate app/worker).
+- **Rollback cepat:** `docker exec wa-clinic-bot-app-1 sh -c "cd /app/packages/admin-dashboard && rm -rf dist && mv dist.bak dist"` lalu `docker restart wa-clinic-bot-app-1`.
+
+## 363. [Media / Live Chat] Gambar Chat Hilang: Operasi JSON Prisma Tidak Sah + Kuota Habis oleh Thumbnail (2026-11-20, SELESAI SEBAGIAN)
+
+- **Status:** FIXED untuk penyebab (kode + guard kuota); **batasan data permanen** dijelaskan di bawah.
+- **Insiden:** 2026-11-20 12:23 WIB Bidan Thabita mengirim foto rumah + caption "Maaf bunda rumahnya yang ini nggih?" lewat portal staf. Foto **terkirim ke WhatsApp** (WAHA `POST /api/sendImage` 201; pasien menjawab "Seblah nya kak" / "Mobil biru"), tetapi 3 menit kemudian hilang dari Live Chat.
+- **Akar masalah A (kode):** `media.service.ts` memakai `data: { payload_raw: { unset: [...] } }` dan `{ path: [...], set: ... }`. Prisma 5 **tidak** mendukung operasi JSON pada `data` — `path`/`set`/`unset` hanya untuk filter. Nilai disimpan sebagai literal sehingga **seluruh `payload_raw` tertimpa** `{"unset":["media","hdUrl"]}`. Dampak terukur: **640 pesan** (373 inbound, 267 outbound) + **55 `customers.preferences`** kehilangan referensi media/house_photo_url.
+- **Akar masalah B (kuota):** thumbnail tidak pernah benar-benar kecil (resize 640px JPEG q80 ≈ 85–90 KB). 1.417 thumbnail ≈ 134 MB dari kuota 200 MB, sementara thumbnail tidak pernah dipangkas → target low-watermark 130 MB **mustahil tercapai**, sehingga setiap prune menghapus **seluruh** HD termasuk foto yang baru dikirim.
+- **Akar masalah C (operasional):** `ENABLE_MESSAGE_RETENTION_CRON` tidak diset sehingga retensi pesan 120 hari tidak berjalan; 2.047 pesan >120 hari + **972 file yatim (78 MB)** menumpuk.
+- **Perbaikan kode:** `patchMediaRefs()` (fungsi murni) + `updateMediaRefsAfterHdDelete()` kini read-modify-write (payload utuh, key lain seperti `quoted_message`/`forceEscalate` selamat); `customer.preferences` juga ditulis utuh. Guard `MEDIA_HD_MIN_AGE_HOURS` (default 24) melarang prune menghapus file baru. `sweepOrphanMedia()` membersihkan file yatim dengan gerbang tolak-jalan bila masih ada payload rusak. Thumbnail default 480px/q60 (env `MEDIA_THUMB_MAX_WIDTH`/`MEDIA_THUMB_QUALITY`).
+- **Pemulihan data:** `scripts/backfill-house-photo-from-corrupt-pref.ts` (55 customer, sumber `preferences.set`) dan `scripts/backfill-media-refs-from-orphan-thumbs.ts` (640 pesan, cocokkan thumbnail yatim lewat `mtime ≈ created_at`, hanya kecocokan tunggal). Keduanya default **dry-run** + CSV.
+- **Batasan permanen:** foto **resolusi penuh** yang sudah dihapus prune **tidak dapat dipulihkan**; yang kembali hanya thumbnail. Retensi pesan 120 hari tetap **NONAKTIF** (keputusan bisnis belum diambil) sehingga thumbnail akan terus bertambah — pantau kuota atau aktifkan retensi/sweep berkala.
+- **Verifikasi:** `tests/unit/media-refs-patch.test.ts`, `media-thumb-size.test.ts`, `media-watermark-autoprune.test.ts` (guard 24 jam), `media-fallback-thumb.test.ts`; typecheck + suite penuh.
+
 ## 362. [Departure Watchdog] Early Warning Keterlambatan Keberangkatan & Batasan Pengiriman WhatsApp Admin (2026-11-20)
 
 - **Status:** IMPLEMENTED (Fase 0–6 Selesai).
@@ -958,7 +978,7 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
 
 - **Tindakan W16 (2026-11-13) — 5 item dashboard selesai + Gate F4 terpenuhi:**
   - **S-02:** outbox gagal memakai `sessionStorage` (TTL 2 jam), gambar tidak dipersist, dan dibersihkan saat logout.
-  - **S-06:** warm-up GPS berjalan hanya setelah consent eksplisit; cache lokasi dihapus saat berhenti.
+  - **S-06:** warm-up GPS latar DIBATALKAN (revisi Opsi C, 2026-11-20). Tidak ada lagi `watchPosition`/banner consent; titik awal hanya satu tembakan `getDepartPositionFast` saat Bidan menekan "Navigasi" (gestur pengguna), dan cache posisi dibersihkan saat unmount/setelah OTW.
   - **S-08:** ambang jangkauan kunjungan memakai `clinicLocation.maxCoverageKm` per tenant; titik/nama klinik itinerary dari DB tenant.
   - **S-09:** status kedatangan tidak lagi mengklaim WhatsApp terkirim bila gagal/ditekan; input login 16px.
   - **Cfg-015:** brand dashboard dari `/api/admin/settings`, watermark tanpa brand hardcode, `x-tenant-id` dari user, titik klinik form dari `/api/admin/tenant-settings`.
@@ -3444,7 +3464,8 @@ dicatat di CHANGELOG 2026-10-05. Sisa batasan:
      Bidan.** Sistem fail-open: pesan OTW tetap terkirim, titik awal jatuh ke fallback
      (`prev_patient`) atau `unknown` (⚪ tak terekam). Ini batas platform, bukan regresi.
   2. **PWA dibekukan OS saat Bidan pindah ke aplikasi Google Maps** → tidak ada ping GPS kontinu
-     selama berkendara. Titik awal hanya satu tembakan saat klik (dipanaskan via pre-warm cache).
+     selama berkendara. Titik awal hanya satu tembakan saat klik "Navigasi" (tanpa warm-up latar
+     sejak revisi Opsi C 2026-11-20, sehingga klik pertama bisa tertunda ±2 dtk).
      Tracking live tetap butuh aplikasi native (lihat catatan `useTripTelemetry` yang di-deprecate).
   3. **Fallback `prev_patient` mengasumsikan keberangkatan dari rumah pasien sebelumnya.**
      Bila Bidan berangkat dari lokasi lain (rumah sendiri), estimasi bisa tidak akurat — ditandai

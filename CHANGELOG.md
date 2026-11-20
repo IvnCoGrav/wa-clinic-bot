@@ -4,6 +4,27 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### 2026-11-20 - Fix: Gambar Live Chat Hilang (Operasi JSON Prisma Tidak Sah + Kuota Thumbnail)
+
+- **Konteks:** Insiden Bidan Thabita 2026-11-20 12:23 WIB — foto rumah terkirim ke pasien (WAHA `sendImage` 201), tetapi hilang dari Live Chat 3 menit kemudian.
+- **Akar masalah:** `data: { payload_raw: { unset/path/set } }` bukan operasi Prisma yang sah (hanya untuk filter) → seluruh `payload_raw` tertimpa `{"unset":["media","hdUrl"]}`. Dampak: 640 pesan + 55 `customers.preferences` rusak. Ditambah thumbnail ±90 KB yang tidak pernah dipangkas → kuota 200 MB habis, prune menghapus **semua** HD termasuk foto baru.
+- **Perbaikan:** `patchMediaRefs()` + `updateMediaRefsAfterHdDelete()` read-modify-write (key lain selamat); `customer.preferences` ditulis utuh; guard `MEDIA_HD_MIN_AGE_HOURS=24`; `sweepOrphanMedia()` dengan gerbang anti-hapus saat payload masih rusak; thumbnail default 480px/q60 (`MEDIA_THUMB_MAX_WIDTH`, `MEDIA_THUMB_QUALITY`).
+- **Pemulihan:** `scripts/backfill-house-photo-from-corrupt-pref.ts` dan `scripts/backfill-media-refs-from-orphan-thumbs.ts` (default dry-run + CSV; hanya kecocokan thumbnail tunggal).
+- **Tes:** `media-refs-patch.test.ts` (6), `media-thumb-size.test.ts` (3), guard prune 24 jam (2), ekspektasi `media-watermark-autoprune`/`media-fallback-thumb` diperbarui ke kontrak baru.
+- **Batasan:** HD yang sudah terhapus tidak dapat dipulihkan (hanya thumbnail); retensi pesan 120 hari tetap nonaktif.
+
+#### 2026-11-20 - GPS Keberangkatan Tanpa Warm-up Latar (Opsi C) + Hapus Banner Izin Lokasi
+
+- **Konteks:** Bidan melihat banner "Izinkan aplikasi memakai lokasi di latar hanya saat ada jadwal kunjungan?" setiap kali ada kunjungan dalam jendela waktu. Banner itu lapisan konfirmasi buatan aplikasi: Bidan harus menekan "Izinkan" dulu, baru prompt izin sistem muncul. Teksnya juga menjanjikan "lokasi di latar" yang tidak bisa ditepati PWA (browser membekukan halaman saat pindah ke Google Maps).
+- **Keputusan:** warm-up lokasi latar dihapus seluruhnya (Opsi C). Koordinat keberangkatan hanya diambil **satu tembakan** saat Bidan menekan "Navigasi" — gestur pengguna, jadi prompt izin sistem tetap muncul andal, tanpa perekaman lokasi di latar.
+- **Frontend:**
+  - `StaffToday.tsx`: banner consent + state `staff_gps_warmup_consent_v1`, `hasDepartWindowTask`, dan effect warm-up dihapus; cache posisi dibersihkan saat unmount dan setelah OTW terkirim (`clearDepartPositionCache`).
+  - `geoUtils.ts`: `startDepartGpsWarmup`, `stopDepartGpsWarmup`, `watchPosition`, `GPS_WARMUP_MINUTES`, dan `isWithinGpsWarmupWindow` dihapus; `getDepartPositionFast` tetap (cache 60 dtk + batas balapan 2 dtk, fail-open `null`).
+- **Tes:** `depart-gps-cache.test.ts` ditulis ulang (11 tes adversarial: tanpa `watchPosition`, cache segar/basi, `clearDepartPositionCache`, izin ditolak, time-out, akurasi >100 m, geolocation rusak, koordinat NaN); guard `staff-dashboard-hardening.test.ts` S-06 diperbarui; blok `isWithinGpsWarmupWindow` di `depart-window.test.ts` dihapus. 33 tes hijau.
+- **Verifikasi:** `npm run typecheck` bersih, `npm run build` dashboard hijau. `npm run check:reuse` menandai 1 pelanggaran baru `patchMediaRefs` (`src/services/media.service.ts:49`) yang **pre-existing** dari pekerjaan belum ter-commit (terbukti muncul sebagai baris `+` di `git diff`, bukan dari perubahan ini).
+- **Dampak operasional:** klik "Navigasi" pertama bisa tertunda ±2 detik (GPS dingin). Tidak ada lagi perekaman lokasi latar, hemat baterai, dan tidak ada banner yang menghalangi daftar kunjungan.
+- **Deploy (2026-11-20 13:47 WIB):** artifact `dist` disalin ke container `app` + restart (±6 detik, WAHA tidak disentuh; `/ready` → `waha: WORKING`). Karena bekerja dari working tree yang masih memuat pekerjaan lain, rilis ini belum lewat image — lihat `docs/KNOWN_ISSUES.md` #364 untuk syarat rilis penuh dan rollback.
+
 #### 2026-11-20 - Raport Admin Sesuai Prototipe (F9)
 
 - **Konteks:** Prototipe `docs/audit/2026-11-19/raport-bidan-v2.html` belum diimplementasikan; panel admin sebelumnya hanya tabel ringkas. Layout disesuaikan (hybrid): struktur prototipe, tetapi **grade tetap** sesuai keputusan D5.
