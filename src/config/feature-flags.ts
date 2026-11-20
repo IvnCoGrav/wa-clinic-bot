@@ -67,5 +67,15 @@ export function isPixelHealthEnabled(): boolean {
   return process.env.PIXEL_HEALTH_ENABLED === 'true';
 }
 
+/**
+ * Rollout gate F8: tampilkan raport kinerja di portal mobile bidan.
+ * Default: false (raport hanya untuk review admin). Aktifkan setelah owner
+ * memvalidasi angka satu periode penuh. Nama sengaja eksplisit agar tidak
+ * tertukar dengan fitur lain.
+ */
+export function isScorecardStaffUiEnabled(): boolean {
+  return process.env.SCORECARD_STAFF_UI_ENABLED === 'true';
+}
+
 
 

@@ -1,5 +1,6 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { DEFAULT_TENANT_ID } from '../../config/tenant';
+import { isScorecardStaffUiEnabled } from '../../config/feature-flags';
 import { StaffScorecardService } from '../../services/staff-scorecard.service';
 import { staffRetentionService } from '../../services/staff-retention.service';
 
@@ -23,6 +24,14 @@ function parsePeriod(query: Record<string, any>): { year: number; month: number 
  */
 export async function staffScorecardRoutes(fastify: FastifyInstance) {
   fastify.get('/api/staff/scorecard/me', async (request: FastifyRequest, reply: FastifyReply) => {
+    if (!isScorecardStaffUiEnabled()) {
+      return reply.status(404).send({
+        success: false,
+        code: 'FEATURE_DISABLED',
+        error: 'Raport bidan belum diaktifkan untuk portal staf.',
+      });
+    }
+
     const staffId = (request as any).staffId;
     if (!staffId) {
       return reply.status(401).send({

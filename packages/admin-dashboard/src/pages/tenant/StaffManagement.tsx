@@ -5,6 +5,7 @@ import { Modal } from '../../components/ui/Modal';
 import { FormErrorSummary } from '../../components/ui/FormErrorSummary';
 import { StaffRoleModal } from './StaffRoleModal';
 import { ScorecardPolicyPanel } from '../../components/staff/ScorecardPolicyPanel';
+import { ScorecardReportPanel } from '../../components/staff/ScorecardReportPanel';
 import { ScorecardVerificationQueue } from '../../components/staff/ScorecardVerificationQueue';
 import type { FieldIssue } from '../../lib/validateReservation';
 import { ToggleSwitch } from '../../components/common/ToggleSwitch';
@@ -1115,8 +1116,9 @@ export const StaffManagement: React.FC = () => {
       {/* ========================================================================= */}
       {activeTab === 'PENILAIAN' && (
         <div className="space-y-6">
-          <ScorecardPolicyPanel />
+          <ScorecardReportPanel />
           <ScorecardVerificationQueue />
+          <ScorecardPolicyPanel />
         </div>
       )}
 

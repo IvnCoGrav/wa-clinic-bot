@@ -40,6 +40,7 @@ import {
 import { emitBootPhase } from '../../lib/bootProgress';
 import { fireAndForget, mustSucceed } from '../../services/errorPolicy';
 import { APP_VERSION, BUILD_TIME } from '../../config/version';
+import { SCORECARD_STAFF_UI_ENABLED } from '../../config/features';
 import { compressImageFile, compressDataUrl, resolveCompressProfile } from '../../utils/imageCompressor';
 import { stampGpsWatermark } from '../../utils/imageWatermark';
 import { ThemeToggle } from '../../components/common/ThemeToggle';
@@ -2962,17 +2963,19 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                 </button>
               )}
 
-              <button
-                type="button"
-                onClick={() => {
-                  setShowMenuDrawer(false);
-                  window.location.href = '/admin/staff/scorecard';
-                }}
-                className="w-full flex items-center justify-center space-x-1.5 py-2 px-2.5 rounded-xl bg-surface hover:bg-fill-2 text-[11px] font-semibold text-ink border border-divider shadow-xs transition active:scale-95"
-              >
-                <Award size={13} className="text-accent flex-shrink-0" />
-                <span className="truncate">Raport Saya</span>
-              </button>
+              {SCORECARD_STAFF_UI_ENABLED && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowMenuDrawer(false);
+                    window.location.href = '/admin/staff/scorecard';
+                  }}
+                  className="w-full flex items-center justify-center space-x-1.5 py-2 px-2.5 rounded-xl bg-surface hover:bg-fill-2 text-[11px] font-semibold text-ink border border-divider shadow-xs transition active:scale-95"
+                >
+                  <Award size={13} className="text-accent flex-shrink-0" />
+                  <span className="truncate">Raport Saya</span>
+                </button>
+              )}
 
               <button
                 type="button"

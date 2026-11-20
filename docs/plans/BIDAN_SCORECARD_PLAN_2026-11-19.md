@@ -1,7 +1,7 @@
 # Plan: Bidan Scorecard (Penilaian + Verifikasi via Admin)
 
 - **Tanggal:** 2026-11-19
-- **Status:** **F1–F6 SELESAI (2026-11-20).** F1: skema + domain nilai. F2: collector bukti + backfill. F3: policy penilaian + tab admin. F4: antrean verifikasi bukti chat. F5: agregasi + snapshot FINAL immutable. F6: endpoint `/api/staff/scorecard/me` + halaman Raport Bidan mobile. Migrasi belum diterapkan (DB lokal tidak tersedia). F7 (klasifikasi AI chat) opsional, belum dikerjakan; F8 rollout menunggu migrasi.
+- **Status:** **F1–F6 SELESAI, F8 SELESAI DI KODE (2026-11-20).** Portal mobile bidan disembunyikan di balik flag `SCORECARD_STAFF_UI_ENABLED` (default off); dashboard admin jadi kanal review utama. Migrasi belum diterapkan (DB lokal tidak tersedia); validasi angka dua periode di server tertunda. F7 (klasifikasi AI chat) opsional, belum dikerjakan.
 - **Prototipe acuan:** `docs/audit/2026-11-19/dashboard-bidan-mobile.html`, `docs/audit/2026-11-19/raport-bidan-v2.html`
 - **Temuan audit:** `docs/KNOWN_ISSUES.md` #359
 
@@ -380,12 +380,27 @@ Komponen baru wajib didaftarkan di `packages/admin-dashboard/src/ui-registry.jso
 - [ ] Hasil hanya `VisitArrivalEvidence` (bukan `arrived_at`).
 - **Lulus jika:** presisi ≥95%, nol false positive pada kunjungan tepat waktu.
 
-### F8 — Rollout (1 hari)
+### F8 — Rollout (1 hari) — **KODE SELESAI 2026-11-20, validasi lapangan tertunda**
 
-- [ ] Feature flag `SCORECARD_ENABLED` (default off).
-- [ ] Aktifkan untuk tenant uji, bandingkan 1 periode.
-- [ ] Dokumentasi + Known Issues.
+- [x] Feature flag `SCORECARD_STAFF_UI_ENABLED` (default off) di backend + `VITE_SCORECARD_STAFF_UI_ENABLED` (build-time, default off) di dashboard.
+- [x] Portal mobile bidan **disembunyikan** saat flag off: tombol "Raport Saya" tidak dirender, rute `/admin/staff/scorecard` dialihkan ke `/admin/staff/today`, dan `GET /api/staff/scorecard/me` menjawab `404 FEATURE_DISABLED`.
+- [x] Dashboard admin menjadi kanal utama review: `ScorecardReportPanel` di tab **Penilaian Bidan** (nilai per periode, rincian komponen + cakupan bukti, hitung ulang, bekukan snapshot khusus Super Admin).
+- [x] Build-arg Docker + compose + `.env.example` disiapkan agar aktivasi tidak perlu ubah kode.
+- [ ] Aktifkan untuk tenant uji, bandingkan 1 periode di server (butuh PostgreSQL produksi).
 - **Lulus jika:** dua periode berturut-turut tanpa selisih angka.
+
+**Cara aktivasi portal bidan (setelah owner memvalidasi dashboard admin):**
+1. Set `SCORECARD_STAFF_UI_ENABLED=true` di `.env` server.
+2. Build ulang dashboard dengan `SCORECARD_STAFF_UI_ENABLED=true` (compose meneruskan sebagai `VITE_SCORECARD_STAFF_UI_ENABLED`).
+3. `docker compose build app && docker compose up -d --no-deps app`.
+4. Rollback: set `false` lalu build ulang (tanpa migrasi/skema yang perlu dibalik).
+
+**Verifikasi F8 (kode):**
+- `npm run typecheck` → hijau
+- `npm run check:reuse` → 189 baseline, **0 baru**
+- `npm run build` dashboard → sukses
+- `tests/integration/staff-scorecard-me.test.ts` → 8 tes (termasuk flag OFF/ON)
+- `tests/integration/staff-scorecard-report.test.ts` → 8 tes (report, recalculate, snapshot, RBAC SUPER_ADMIN, audit, error)
 
 ---
 

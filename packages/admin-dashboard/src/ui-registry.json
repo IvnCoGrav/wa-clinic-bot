@@ -335,6 +335,22 @@
       "reviewed": false
     },
     {
+      "name": "ScorecardReportPanel",
+      "layer": "domain",
+      "path": "src/components/staff/ScorecardReportPanel.tsx",
+      "whenToUse": "Raport kinerja bidan untuk review admin: nilai per periode, rincian komponen dan cakupan bukti, hitung ulang, serta pembekuan snapshot FINAL. Dipakai di tab Penilaian pada Staff Management.",
+      "states": [
+        "loading",
+        "empty",
+        "list",
+        "expanded-row",
+        "recalculating",
+        "freezing",
+        "error"
+      ],
+      "reviewed": false
+    },
+    {
       "name": "ScorecardVerificationQueue",
       "layer": "domain",
       "path": "src/components/staff/ScorecardVerificationQueue.tsx",

@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterAll, vi } from 'vitest';
 import { buildApp } from '../../src/app';
 import { StaffAuthService } from '../../src/services/staff-auth.service';
 import { StaffScorecardService } from '../../src/services/staff-scorecard.service';
@@ -84,6 +84,8 @@ describe('GET /api/staff/scorecard/me (F6)', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
     process.env.ADMIN_API_KEY = 'test_admin_key_scorecard_staff';
+    // F8: endpoint staf default OFF. Tes perilaku utama mengaktifkannya eksplisit.
+    process.env.SCORECARD_STAFF_UI_ENABLED = 'true';
 
     reportSpy = vi.spyOn(StaffScorecardService.prototype, 'getReport').mockResolvedValue({
       tenantId: 'tenant-a',
@@ -99,6 +101,10 @@ describe('GET /api/staff/scorecard/me (F6)', () => {
       min_tenure_months: 4,
       formula_version: 'v1',
     } as any);
+  });
+
+  afterAll(() => {
+    delete process.env.SCORECARD_STAFF_UI_ENABLED;
   });
 
   it('menolak permintaan tanpa sesi staff (401)', async () => {
@@ -196,6 +202,37 @@ describe('GET /api/staff/scorecard/me (F6)', () => {
     expect(res.statusCode).toBe(200);
     expect(JSON.parse(res.body).data.item).toBeNull();
     expect(JSON.parse(res.body).data.included).toBe(false);
+  });
+
+  it('F8: fitur tersembunyi (404 FEATURE_DISABLED) saat flag staf OFF', async () => {
+    vi.spyOn(StaffAuthService, 'validateSession').mockResolvedValue(SESSION);
+    delete process.env.SCORECARD_STAFF_UI_ENABLED;
+
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/staff/scorecard/me',
+      headers: { cookie: 'staff_session=valid' },
+    });
+
+    expect(res.statusCode).toBe(404);
+    expect(JSON.parse(res.body).code).toBe('FEATURE_DISABLED');
+    // Tidak boleh menghitung apa pun saat fitur disembunyikan.
+    expect(reportSpy).not.toHaveBeenCalled();
+    expect(policySpy).not.toHaveBeenCalled();
+  });
+
+  it('nilai flag selain "true" tetap menutup fitur', async () => {
+    vi.spyOn(StaffAuthService, 'validateSession').mockResolvedValue(SESSION);
+    process.env.SCORECARD_STAFF_UI_ENABLED = 'TRUE ';
+
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/staff/scorecard/me',
+      headers: { cookie: 'staff_session=valid' },
+    });
+
+    expect(res.statusCode).toBe(404);
+    expect(JSON.parse(res.body).code).toBe('FEATURE_DISABLED');
   });
 
   it('mengembalikan 500 dengan pesan jelas saat agregasi gagal', async () => {

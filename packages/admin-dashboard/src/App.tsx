@@ -12,6 +12,7 @@ import { Layout } from './components/common/Layout';
 import { UiFeedbackProvider } from './components/common/UiFeedback';
 import { StaffAuthProvider } from './contexts/StaffAuthContext';
 import { StaffProtectedRoute } from './components/staff/StaffProtectedRoute';
+import { SCORECARD_STAFF_UI_ENABLED } from './config/features';
 import { Login } from './pages/auth/Login';
 import { BootProgress } from './components/common/BootProgress';
 import { AppErrorBoundary } from './components/common/AppErrorBoundary';
@@ -366,11 +367,15 @@ export const App: React.FC = () => {
               </StaffAuthProvider>
             } />
             <Route path="/admin/staff/scorecard" element={
-              <StaffAuthProvider>
-                <StaffProtectedRoute>
-                  <StaffScorecard />
-                </StaffProtectedRoute>
-              </StaffAuthProvider>
+              SCORECARD_STAFF_UI_ENABLED ? (
+                <StaffAuthProvider>
+                  <StaffProtectedRoute>
+                    <StaffScorecard />
+                  </StaffProtectedRoute>
+                </StaffAuthProvider>
+              ) : (
+                <Navigate to="/admin/staff/today" replace />
+              )
             } />
             <Route path="/staff" element={<Navigate to="/admin/staff/today" replace />} />
             <Route path="/terapis" element={<Navigate to="/admin/staff/today" replace />} />
