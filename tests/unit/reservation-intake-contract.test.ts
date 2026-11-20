@@ -71,7 +71,8 @@ describe('#157a — reservation-intake: buildCustomerReservationIntake', () => {
   it('beda hari → status confirmed + tanpa tag', () => {
     const meta = buildCustomerReservationIntake({
       ...base,
-      bookingDate: new Date('2026-11-20T02:00:00.000Z'),
+      // Relatif terhadap hari ini: fixture tanggal tetap akan lapuk (time-rot).
+      bookingDate: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000),
     });
     expect(meta.isSameDay).toBe(false);
     expect(meta.status).toBe('confirmed');

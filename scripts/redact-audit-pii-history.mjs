@@ -1,4 +1,3 @@
-#!/usr/bin/env node
 /**
  * scripts/redact-audit-pii-history.mjs
  * Task D1 (keputusan owner 2026-11-19): meredaksi PII pada SELURUH baris
