@@ -216,6 +216,37 @@ export function resolveScorecardPeriod(
   return { from, to, daysInMonth, periodDays, isCurrentMonth };
 }
 
+export interface ScorecardVisitBreakdown {
+  newPatients: number;
+  repeatVisits: number;
+  ownRepeat: number;
+  handoffRepeat: number;
+  visitNumbers: Array<{ visitNumber: number; count: number }>;
+  previousPeriodVisits: number | null;
+}
+
+export interface ScorecardLateVisit {
+  reservationId: string;
+  customerName: string | null;
+  bookingDate: string;
+  minutes: number;
+  source: 'JAM' | 'CHAT';
+}
+
+interface VisitHistoryContext {
+  byStaff: Map<
+    string,
+    {
+      newPatients: number;
+      repeatVisits: number;
+      ownRepeat: number;
+      handoffRepeat: number;
+      visitNumberCounts: Map<number, number>;
+    }
+  >;
+  previousVisitsByStaff: Map<string, number>;
+}
+
 export interface StaffScorecardItem {
   staffId: string;
   staffName: string;
@@ -241,6 +272,10 @@ export interface StaffScorecardItem {
   };
   volume: { pct: number | null; visits: number; target: number };
   coveragePct: number;
+  /** Rincian pasien baru/ulang; null untuk snapshot FINAL (tidak tersimpan). */
+  visits: ScorecardVisitBreakdown | null;
+  /** Top 3 keterlambatan pada periode ini; kosong untuk snapshot FINAL. */
+  worstLate: ScorecardLateVisit[];
   score: number | null;
   grade: string | null;
   usedWeights: ScorecardWeights;
@@ -339,6 +374,135 @@ export class StaffScorecardService {
   /**
    * Laporan nilai per periode. Snapshot FINAL dipakai apa adanya (tidak dihitung ulang).
    */
+  /**
+   * Riwayat kunjungan untuk pasien baru/ulang, asal pasien ulang, nomor
+   * kunjungan, dan pembanding bulan sebelumnya. Read-only.
+   */
+  private async loadVisitHistory(
+    tenantId: string,
+    period: ScorecardPeriodInfo,
+    year: number,
+    month: number,
+    staffIds: string[]
+  ): Promise<VisitHistoryContext | null> {
+    try {
+      const periodRows: any[] = await this.prisma.reservation.findMany({
+        where: {
+          tenant_id: tenantId,
+          status: 'completed',
+          booking_date: { gte: period.from, lt: period.to },
+          ...(staffIds.length > 0 ? { assigned_staff_id: { in: staffIds } } : {}),
+        },
+        select: { customer_id: true },
+        distinct: ['customer_id'],
+      });
+      const customerIds = [
+        ...new Set(
+          (periodRows || [])
+            .map((row: any) => row.customer_id)
+            .filter((id: any) => Boolean(id))
+        ),
+      ] as string[];
+
+      const byStaff: VisitHistoryContext['byStaff'] = new Map();
+      if (customerIds.length > 0) {
+        const rows: any[] = await this.prisma.reservation.findMany({
+          where: {
+            tenant_id: tenantId,
+            status: 'completed',
+            booking_date: { lt: period.to },
+            customer_id: { in: customerIds },
+          },
+          select: {
+            id: true,
+            customer_id: true,
+            booking_date: true,
+            assigned_staff_id: true,
+          },
+          orderBy: [{ customer_id: 'asc' }, { booking_date: 'asc' }],
+        });
+
+        const byCustomer = new Map<string, any[]>();
+        for (const row of rows || []) {
+          if (!row?.customer_id) continue;
+          if (!byCustomer.has(row.customer_id)) byCustomer.set(row.customer_id, []);
+          byCustomer.get(row.customer_id)!.push(row);
+        }
+
+        for (const visits of byCustomer.values()) {
+          visits.forEach((visit: any, index: number) => {
+            const bookingDate = visit.booking_date ? new Date(visit.booking_date) : null;
+            if (
+              !bookingDate ||
+              bookingDate < period.from ||
+              bookingDate >= period.to
+            ) {
+              return;
+            }
+            const staffId = visit.assigned_staff_id;
+            if (!staffId) return;
+            if (staffIds.length > 0 && !staffIds.includes(staffId)) return;
+
+            if (!byStaff.has(staffId)) {
+              byStaff.set(staffId, {
+                newPatients: 0,
+                repeatVisits: 0,
+                ownRepeat: 0,
+                handoffRepeat: 0,
+                visitNumberCounts: new Map(),
+              });
+            }
+            const stats = byStaff.get(staffId)!;
+            const visitNumber = index + 1;
+            if (visitNumber === 1) {
+              stats.newPatients += 1;
+              return;
+            }
+
+            stats.repeatVisits += 1;
+            stats.visitNumberCounts.set(
+              visitNumber,
+              (stats.visitNumberCounts.get(visitNumber) ?? 0) + 1
+            );
+            const previousStaff = visits[index - 1]?.assigned_staff_id;
+            if (previousStaff === staffId) stats.ownRepeat += 1;
+            else stats.handoffRepeat += 1;
+          });
+        }
+      }
+
+      const previousVisitsByStaff: VisitHistoryContext['previousVisitsByStaff'] = new Map();
+      try {
+        const prevMonth = month === 1 ? 12 : month - 1;
+        const prevYear = month === 1 ? year - 1 : year;
+        const prevFrom = new Date(`${prevYear}-${pad2(prevMonth)}-01T00:00:00+07:00`);
+        const grouped: any[] = await this.prisma.reservation.groupBy({
+          by: ['assigned_staff_id'],
+          where: {
+            tenant_id: tenantId,
+            status: 'completed',
+            booking_date: { gte: prevFrom, lt: period.from },
+            ...(staffIds.length > 0 ? { assigned_staff_id: { in: staffIds } } : {}),
+          },
+          _count: { _all: true },
+        });
+        for (const row of grouped || []) {
+          if (!row?.assigned_staff_id) continue;
+          previousVisitsByStaff.set(
+            row.assigned_staff_id,
+            Number(row?._count?._all ?? 0)
+          );
+        }
+      } catch {
+        // Pembanding bulan lalu bersifat pelengkap.
+      }
+
+      return { byStaff, previousVisitsByStaff };
+    } catch {
+      return null;
+    }
+  }
+
   async getReport(params: {
     tenantId: string;
     year: number;
@@ -387,6 +551,17 @@ export class StaffScorecardService {
       (snapshots || []).map((snapshot: any) => [snapshot.staff_id, snapshot])
     );
 
+    const now = params.now ?? new Date();
+    const period = resolveScorecardPeriod(year, month, now);
+    const needsLive = (staffList || []).some((staff: any) => {
+      const snapshot = snapshotMap.get(staff.id);
+      return !(snapshot?.status === 'FINAL' && params.includeFrozen !== false);
+    });
+    const history =
+      needsLive && ids.length > 0
+        ? await this.loadVisitHistory(tenantId, period, year, month, ids)
+        : null;
+
     const items: StaffScorecardItem[] = [];
     for (const staff of staffList || []) {
       const snapshot = snapshotMap.get(staff.id);
@@ -398,7 +573,9 @@ export class StaffScorecardService {
         items.push(this.itemFromSnapshot(snapshot));
         continue;
       }
-      items.push(await this.computeItem(tenantId, staff, year, month, policy, params.now ?? new Date()));
+      items.push(
+        await this.computeItem(tenantId, staff, year, month, policy, now, history)
+      );
     }
 
     return { tenantId, periodYear: year, periodMonth: month, policy, items };
@@ -517,7 +694,8 @@ export class StaffScorecardService {
     year: number,
     month: number,
     policy: StaffScorecardPolicyModel,
-    now: Date
+    now: Date,
+    history: VisitHistoryContext | null = null
   ): Promise<StaffScorecardItem> {
     const period = resolveScorecardPeriod(year, month, now);
 
@@ -530,7 +708,12 @@ export class StaffScorecardService {
           status: 'completed',
           booking_date: { gte: period.from, lt: period.to },
         },
-        select: { id: true, booking_date: true, arrived_at: true },
+        select: {
+          id: true,
+          booking_date: true,
+          arrived_at: true,
+          customer: { select: { name: true } },
+        },
       });
     } catch {
       reservations = [];
@@ -539,15 +722,28 @@ export class StaffScorecardService {
     let onTime = 0;
     let lateMeasured = 0;
     const unmeasuredIds: string[] = [];
+    const reservationById = new Map<string, any>();
+    const lateVisits: ScorecardLateVisit[] = [];
 
     for (const reservation of reservations || []) {
+      if (reservation.id) reservationById.set(reservation.id, reservation);
       if (reservation.arrived_at && reservation.booking_date) {
         const diffMinutes =
           (new Date(reservation.arrived_at).getTime() -
             new Date(reservation.booking_date).getTime()) /
           60000;
-        if (diffMinutes <= policy.tolerance_minutes) onTime += 1;
-        else lateMeasured += 1;
+        if (diffMinutes <= policy.tolerance_minutes) {
+          onTime += 1;
+        } else {
+          lateMeasured += 1;
+          lateVisits.push({
+            reservationId: reservation.id,
+            customerName: reservation.customer?.name ?? null,
+            bookingDate: new Date(reservation.booking_date).toISOString(),
+            minutes: Math.round(diffMinutes),
+            source: 'JAM',
+          });
+        }
       } else if (reservation.id) {
         unmeasuredIds.push(reservation.id);
       }
@@ -565,20 +761,55 @@ export class StaffScorecardService {
           },
           select: { reservation_id: true, observed_minutes: true },
         });
-        const reservationsWithChat = new Set<string>();
+        const chatMinutesByReservation = new Map<string, number>();
         for (const evidence of evidences || []) {
           if (
             evidence.reservation_id &&
             (evidence.observed_minutes ?? 0) > policy.chat_evidence_minutes
           ) {
-            reservationsWithChat.add(evidence.reservation_id);
+            const minutes = Number(evidence.observed_minutes);
+            const previous = chatMinutesByReservation.get(evidence.reservation_id) ?? 0;
+            chatMinutesByReservation.set(
+              evidence.reservation_id,
+              Math.max(previous, minutes)
+            );
           }
         }
-        chatLate = reservationsWithChat.size;
+        chatLate = chatMinutesByReservation.size;
+        for (const [reservationId, minutes] of chatMinutesByReservation) {
+          const reservation = reservationById.get(reservationId);
+          lateVisits.push({
+            reservationId,
+            customerName: reservation?.customer?.name ?? null,
+            bookingDate: reservation?.booking_date
+              ? new Date(reservation.booking_date).toISOString()
+              : new Date().toISOString(),
+            minutes,
+            source: 'CHAT',
+          });
+        }
       } catch {
         chatLate = 0;
       }
     }
+
+    lateVisits.sort((a, b) => b.minutes - a.minutes);
+    const worstLate = lateVisits.slice(0, 3);
+
+    const staffHistory = history?.byStaff.get(staff.id);
+    const visits: ScorecardVisitBreakdown | null = staffHistory
+      ? {
+          newPatients: staffHistory.newPatients,
+          repeatVisits: staffHistory.repeatVisits,
+          ownRepeat: staffHistory.ownRepeat,
+          handoffRepeat: staffHistory.handoffRepeat,
+          visitNumbers: [...staffHistory.visitNumberCounts.entries()]
+            .map(([visitNumber, count]) => ({ visitNumber, count }))
+            .sort((a, b) => a.visitNumber - b.visitNumber),
+          previousPeriodVisits:
+            history?.previousVisitsByStaff.get(staff.id) ?? null,
+        }
+      : null;
 
     const unknown = Math.max(0, unmeasuredIds.length - chatLate);
     const punctuality = computePunctuality({
@@ -673,6 +904,8 @@ export class StaffScorecardService {
       },
       volume: { pct: volume.pct, visits: volume.visits, target: volume.target },
       coveragePct,
+      visits,
+      worstLate,
       score: composed.score,
       grade: composed.grade,
       usedWeights: composed.usedWeights,
@@ -712,6 +945,8 @@ export class StaffScorecardService {
       },
       volume: { pct: snapshot.volume_pct ?? null, visits: measured, target: 0 },
       coveragePct: snapshot.coverage_pct ?? 0,
+      visits: null,
+      worstLate: [],
       score: snapshot.weighted_score ?? null,
       grade: snapshot.grade ?? null,
       usedWeights: { punctuality: 0, retention: 0, volume: 0 },
