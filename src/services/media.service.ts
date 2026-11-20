@@ -38,6 +38,56 @@ export function resolveCustomerHonorific(honorific?: string | null): string {
   return clean || DEFAULT_BRAND_IDENTITY.addressTermForCustomer;
 }
 
+/**
+ * Patch referensi media pada payload pesan TANPA operasi JSON Prisma.
+ *
+ * Prisma 5 hanya mendukung penulisan UTUH nilai Json pada `data` — `path`/`set`/
+ * `unset` bukan operasi update (hanya untuk filter). Memakainya di `data` akan
+ * menimpa seluruh objek. Karena itu perubahan dilakukan read-modify-write:
+ * baca payload, ubah `media` di memori, tulis kembali utuh.
+ */
+export function patchMediaRefs(
+  payload: any,
+  hdRelUrl: string,
+  thumbRelUrl: string | null
+): { changed: boolean; next: any } {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+    return { changed: false, next: payload };
+  }
+  const media = (payload as any).media;
+  if (!media || typeof media !== 'object' || Array.isArray(media)) {
+    return { changed: false, next: payload };
+  }
+
+  const nextMedia: any = { ...media };
+  let changed = false;
+
+  if (nextMedia.hdUrl === hdRelUrl) {
+    delete nextMedia.hdUrl;
+    changed = true;
+  }
+  if (nextMedia.url === hdRelUrl) {
+    if (thumbRelUrl) nextMedia.url = thumbRelUrl;
+    else delete nextMedia.url;
+    changed = true;
+  }
+  if (!changed) return { changed: false, next: payload };
+
+  // Pertahankan pratinjau: bila `url` kosong, promosikan thumbUrl.
+  if (nextMedia.url === undefined && nextMedia.thumbUrl) {
+    nextMedia.url = nextMedia.thumbUrl;
+  }
+
+  // Tidak ada satu pun URL tersisa (mis. video/audio tanpa thumb) → buang `media`
+  // agar UI tidak merender elemen gambar kosong.
+  if (!nextMedia.url && !nextMedia.hdUrl && !nextMedia.thumbUrl) {
+    const { media: _dropped, ...rest } = payload as Record<string, any>;
+    return { changed: true, next: rest };
+  }
+
+  return { changed: true, next: { ...payload, media: nextMedia } };
+}
+
 function truncateForBanner(text: string, maxChars: number): string {
   if (text.length <= maxChars) return text;
   if (maxChars <= 3) return '...'.slice(0, Math.max(0, maxChars));
@@ -309,7 +359,9 @@ export class MediaService {
   }
 
   /**
-   * Generate blur thumbnail (~10KB, JPEG) server-side via sharp.
+   * Generate thumbnail pratinjau (JPEG, default lebar 480px kualitas 60).
+   * Ukuran target ±35–50 KB — cukup untuk pratinjau Live Chat, jauh lebih kecil
+   * dari HD sehingga kuota tidak habis oleh thumbnail (insiden 2026-11-20).
    * Best-effort: null bila gagal (mis. file korup / sharp tidak tersedia).
    */
   public async createBlurThumb(
@@ -350,10 +402,14 @@ export class MediaService {
 
     try {
       let pipeline = sharp(buffer, { failOn: 'none' });
-      if (meta.width > 640 || meta.height > 640) {
-        pipeline = pipeline.resize({ width: 640, withoutEnlargement: true });
+      // Ukuran/kuantitas thumbnail dapat diatur tanpa deploy (env), default
+      // 480px/q60 agar 1 thumbnail ±35–50 KB, bukan ±90 KB seperti sebelumnya.
+      const maxWidth = Math.max(120, Number(process.env.MEDIA_THUMB_MAX_WIDTH ?? 480) || 480);
+      const quality = Math.min(95, Math.max(30, Number(process.env.MEDIA_THUMB_QUALITY ?? 60) || 60));
+      if (meta.width > maxWidth || meta.height > maxWidth) {
+        pipeline = pipeline.resize({ width: maxWidth, withoutEnlargement: true });
       }
-      const data = await pipeline.jpeg({ quality: 80 }).toBuffer();
+      const data = await pipeline.jpeg({ quality }).toBuffer();
       if (!data || data.length === 0) {
         return { ok: false, reason: 'invalid', message: 'output JPEG kosong' };
       }
@@ -823,6 +879,8 @@ export class MediaService {
 
     let freedBytes = 0;
     let filesRemoved = 0;
+    let skippedNew = 0;
+    const minAgeMs = Math.max(0, Number(process.env.MEDIA_HD_MIN_AGE_HOURS ?? 24)) * 3600_000;
 
     // Proteksi pricelist image (config tenant permanen)
     let pricelistRel: string | undefined;
@@ -883,6 +941,13 @@ export class MediaService {
 
       for (const candidate of candidates) {
         if (currentUsage <= targetUsage) break;
+        // Foto/berkas yang baru masuk tidak boleh menjadi korban pemangkasan kuota.
+        // Tanpa guard ini, kuota yang penuh oleh thumbnail akan menghapus SEMUA HD,
+        // termasuk foto yang baru dikirim beberapa menit lalu (insiden 2026-11-20).
+        if (Date.now() - candidate.mtimeMs < minAgeMs) {
+          skippedNew++;
+          continue;
+        }
         const relUrl = toRelativeUrl(candidate.scope, tenantId, candidate.name);
 
         if (candidate.scope === 'inbound') {
@@ -920,7 +985,7 @@ export class MediaService {
     }
 
     this.mediaUsageCache.delete(tenantId);
-    console.log(`[MEDIA WATERMARK PRUNE] Tenant ${tenantId}: freed ${(freedBytes / (1024 * 1024)).toFixed(1)} MB (${filesRemoved} files removed). New usage: ${(currentUsage / (1024 * 1024)).toFixed(1)} MB.`);
+    console.log(`[MEDIA WATERMARK PRUNE] Tenant ${tenantId}: freed ${(freedBytes / (1024 * 1024)).toFixed(1)} MB (${filesRemoved} files removed, ${skippedNew} file baru dilewati). New usage: ${(currentUsage / (1024 * 1024)).toFixed(1)} MB.`);
     return { freedBytes, filesRemoved };
   }
 
@@ -1104,30 +1169,46 @@ export class MediaService {
     thumbRelUrl: string | null
   ): Promise<void> {
     try {
-      await prisma.message.updateMany({
-        where: { tenant_id: tenantId, payload_raw: { path: ['media', 'hdUrl'], equals: hdRelUrl } },
-        data: { payload_raw: { unset: ['media', 'hdUrl'] } },
+      // 1) Pesan: baca → ubah `media` di memori → tulis payload utuh.
+      //    DILARANG memakai operasi JSON Prisma (`path`/`set`/`unset`) di `data`:
+      //    Prisma 5 menyimpannya sebagai nilai literal dan menimpa seluruh payload.
+      const rows = await prisma.message.findMany({
+        where: {
+          tenant_id: tenantId,
+          OR: [
+            { payload_raw: { path: ['media', 'hdUrl'], equals: hdRelUrl } },
+            { payload_raw: { path: ['media', 'url'], equals: hdRelUrl } },
+          ],
+        },
+        select: { id: true, payload_raw: true },
       });
-      if (thumbRelUrl) {
+      for (const row of rows) {
+        const patched = patchMediaRefs(row.payload_raw, hdRelUrl, thumbRelUrl);
+        if (!patched.changed) continue;
         await prisma.message.updateMany({
-          where: { tenant_id: tenantId, payload_raw: { path: ['media', 'url'], equals: hdRelUrl } },
-          data: { payload_raw: { path: ['media', 'url'], set: thumbRelUrl } },
+          where: { id: row.id, tenant_id: tenantId },
+          data: { payload_raw: patched.next },
         });
-        // Rewrite Customer.preferences.house_photo_url jika menunjuk ke HD yang dihapus
-        await prisma.customer.updateMany({
+      }
+
+      // 2) Customer: rewrite house_photo_url tanpa menimpa key preferences lain.
+      if (thumbRelUrl) {
+        const customers = await prisma.customer.findMany({
           where: {
             tenant_id: tenantId,
             preferences: { path: ['house_photo_url'], equals: hdRelUrl },
           },
-          data: {
-            preferences: { path: ['house_photo_url'], set: thumbRelUrl },
-          },
+          select: { id: true, preferences: true },
         });
-      } else {
-        await prisma.message.updateMany({
-          where: { tenant_id: tenantId, payload_raw: { path: ['media', 'url'], equals: hdRelUrl } },
-          data: { payload_raw: { unset: ['media', 'url'] } },
-        });
+        for (const c of customers) {
+          const pref = (c.preferences && typeof c.preferences === 'object' && !Array.isArray(c.preferences))
+            ? (c.preferences as Record<string, any>)
+            : {};
+          await prisma.customer.updateMany({
+            where: { id: c.id, tenant_id: tenantId },
+            data: { preferences: { ...pref, house_photo_url: thumbRelUrl } },
+          });
+        }
       }
     } catch {
       // DB offline / best-effort
@@ -1176,6 +1257,136 @@ export class MediaService {
       // DB offline → best-effort
     }
     return { deleted, mediaFiles };
+  }
+
+  /**
+   * Sapu file media yang TIDAK direferensikan pesan/customer/pricelist mana pun
+   * (yatim). Dipakai untuk membebaskan kuota tanpa menyentuh media yang masih
+   * dipakai Live Chat. Aman: hanya menghapus file yatim yang lebih tua dari
+   * `minAgeHours` dan TIDAK pernah menyentuh folder payment-proofs.
+   *
+   * GERBANG KESELAMATAN: menolak berjalan bila masih ada pesan dengan
+   * payload_raw rusak (`unset`) — jalankan backfill dulu agar thumbnail tidak
+   * dianggap yatim lalu terhapus.
+   */
+  public async sweepOrphanMedia(
+    tenantId: string,
+    opts: { dryRun?: boolean; minAgeHours?: number; force?: boolean } = {}
+  ): Promise<{
+    scanned: number;
+    orphans: number;
+    deleted: number;
+    freedBytes: number;
+    skippedBecauseCorrupt: number;
+    aborted?: boolean;
+  }> {
+    const dryRun = opts.dryRun !== false;
+    const minAgeMs = Math.max(0, opts.minAgeHours ?? 1) * 3600_000;
+
+    let skippedBecauseCorrupt = 0;
+    try {
+      const corrupt = await prisma.$queryRaw<Array<{ n: bigint }>>`
+        SELECT count(*)::bigint AS n FROM messages
+        WHERE tenant_id = ${tenantId} AND payload_raw->>'unset' IS NOT NULL
+      `;
+      skippedBecauseCorrupt = Number(corrupt?.[0]?.n ?? 0);
+    } catch {
+      skippedBecauseCorrupt = 0;
+    }
+    if (skippedBecauseCorrupt > 0 && !opts.force) {
+      console.warn(
+        `[MEDIA ORPHAN SWEEP] Dibatalkan: ${skippedBecauseCorrupt} pesan masih ber-payload rusak. Jalankan backfill media dulu (atau --force).`
+      );
+      return { scanned: 0, orphans: 0, deleted: 0, freedBytes: 0, skippedBecauseCorrupt, aborted: true };
+    }
+
+    const refs = new Set<string>();
+    const refStems = new Set<string>();
+    const addRef = (u: unknown) => {
+      if (typeof u === 'string' && u.startsWith('/media/')) {
+        refs.add(u);
+        // Stem dipakai untuk melindungi thumbnail dari HD yang masih dirujuk,
+        // termasuk saat ekstensi thumb berbeda (mis. HD .png → thumb .jpg).
+        refStems.add(u.replace(/\.\w+$/, '').replace(/_thumb$/, ''));
+      }
+    };
+
+    try {
+      const msgRefs = await prisma.$queryRaw<Array<{ u: string | null }>>`
+        SELECT payload_raw->'media'->>'url' AS u FROM messages WHERE tenant_id = ${tenantId}
+        UNION SELECT payload_raw->'media'->>'hdUrl' FROM messages WHERE tenant_id = ${tenantId}
+        UNION SELECT payload_raw->'media'->>'thumbUrl' FROM messages WHERE tenant_id = ${tenantId}
+      `;
+      msgRefs.forEach((r) => addRef(r.u));
+
+      const custRefs = await prisma.$queryRaw<Array<{ u: string | null }>>`
+        SELECT preferences->>'house_photo_url' AS u FROM customers WHERE tenant_id = ${tenantId}
+      `;
+      custRefs.forEach((r) => addRef(r.u));
+
+      const tenantRow = await prisma.tenant.findUnique({
+        where: { id: tenantId },
+        select: { pricelist_image_url: true },
+      });
+      addRef(tenantRow?.pricelist_image_url);
+    } catch {
+      // DB offline → sweep tidak aman dijalankan
+      return { scanned: 0, orphans: 0, deleted: 0, freedBytes: 0, skippedBecauseCorrupt, aborted: true };
+    }
+
+    let scanned = 0;
+    let orphans = 0;
+    let deleted = 0;
+    let freedBytes = 0;
+    const now = Date.now();
+
+    for (const scope of ['inbound', 'outbound'] as const) {
+      const base = path.join(MEDIA_ROOT, scope, tenantId);
+      let entries: fs.Dirent[] = [];
+      try {
+        entries = fs.readdirSync(base, { withFileTypes: true });
+      } catch {
+        continue;
+      }
+      for (const entry of entries) {
+        if (!entry.isFile()) continue;
+        scanned++;
+        const relUrl = toRelativeUrl(scope, tenantId, entry.name);
+        if (refs.has(relUrl)) continue;
+
+        // Thumbnail dari HD yang masih dirujuk pesan WAJIB dipertahankan,
+        // meski URL thumbnail-nya sendiri tidak tersimpan di payload.
+        if (isThumbName(entry.name)) {
+          const stem = relUrl.replace(/\.\w+$/, '').replace(/_thumb$/, '');
+          if (refStems.has(stem)) continue;
+        }
+
+        const full = path.join(base, entry.name);
+        let st: fs.Stats;
+        try {
+          st = fs.statSync(full);
+        } catch {
+          continue;
+        }
+        if (now - st.mtimeMs < minAgeMs) continue;
+        orphans++;
+
+        if (dryRun) continue;
+        try {
+          fs.unlinkSync(full);
+          deleted++;
+          freedBytes += st.size;
+        } catch {
+          // best-effort
+        }
+      }
+    }
+
+    this.mediaUsageCache.delete(tenantId);
+    console.log(
+      `[MEDIA ORPHAN SWEEP] Tenant ${tenantId} (${dryRun ? 'DRY-RUN' : 'APPLY'}): scanned=${scanned} orphans=${orphans} deleted=${deleted} freed=${(freedBytes / (1024 * 1024)).toFixed(1)} MB`
+    );
+    return { scanned, orphans, deleted, freedBytes, skippedBecauseCorrupt };
   }
 
   /**

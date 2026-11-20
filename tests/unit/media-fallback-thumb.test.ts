@@ -23,7 +23,9 @@ describe('Media Fallback Thumbnail — Transparent HD→Thumb', () => {
     delete process.env.PUBLIC_BASE_URL;
     vi.spyOn(prisma.tenant, 'findUnique').mockResolvedValue(null as any);
     vi.spyOn(prisma.customer, 'updateMany').mockResolvedValue({ count: 0 } as any);
+    vi.spyOn(prisma.customer, 'findMany').mockResolvedValue([] as any);
     vi.spyOn(prisma.message, 'updateMany').mockResolvedValue({ count: 0 } as any);
+    vi.spyOn(prisma.message, 'findMany').mockResolvedValue([] as any);
   });
 
   afterEach(() => {
@@ -140,7 +142,7 @@ describe('Media Fallback Thumbnail — Transparent HD→Thumb', () => {
     expect(fs.existsSync(thumbPath!)).toBe(true);
   });
 
-  it('Test 9: Retensi → house_photo_url ter-rewrite ke thumb (integrasi DB)', async () => {
+  it('Test 9: Retensi → house_photo_url ter-rewrite ke thumb tanpa menimpa key preferences lain', async () => {
     // Setup: customer dengan house_photo_url menunjuk HD
     const hdRelUrl = `/media/outbound/${TEST_TENANT_ID}/test-house.jpg`;
     const thumbRelUrl = `/media/outbound/${TEST_TENANT_ID}/test-house_thumb.jpg`;
@@ -150,19 +152,32 @@ describe('Media Fallback Thumbnail — Transparent HD→Thumb', () => {
     fs.writeFileSync(hdPath, Buffer.alloc(100000));
     fs.writeFileSync(thumbPath, Buffer.alloc(15000));
 
+    (prisma.customer.findMany as any).mockResolvedValue([
+      {
+        id: 'cust-1',
+        preferences: { house_photo_url: hdRelUrl, address: 'Jl. Melati 1', customerName: 'Bunda Leliy' },
+      },
+    ]);
+
     // Panggil updateMediaRefsAfterHdDelete (private, tapi bisa via instance)
     // @ts-ignore - akses private method untuk test
     await mediaService.updateMediaRefsAfterHdDelete(TEST_TENANT_ID, hdRelUrl, thumbRelUrl);
 
-    // Verifikasi prisma.customer.updateMany dipanggil dengan argumen benar
+    // Read-modify-write: seluruh objek preferences ditulis utuh, key lain selamat.
     expect(prisma.customer.updateMany).toHaveBeenCalledWith({
-      where: {
-        tenant_id: TEST_TENANT_ID,
-        preferences: { path: ['house_photo_url'], equals: hdRelUrl },
-      },
+      where: { id: 'cust-1', tenant_id: TEST_TENANT_ID },
       data: {
-        preferences: { path: ['house_photo_url'], set: thumbRelUrl },
+        preferences: {
+          house_photo_url: thumbRelUrl,
+          address: 'Jl. Melati 1',
+          customerName: 'Bunda Leliy',
+        },
       },
     });
+    const calls = (prisma.customer.updateMany as any).mock.calls as any[];
+    for (const [arg] of calls) {
+      expect(JSON.stringify(arg?.data?.preferences ?? {})).not.toContain('"path"');
+      expect(JSON.stringify(arg?.data?.preferences ?? {})).not.toContain('"set"');
+    }
   });
 });
