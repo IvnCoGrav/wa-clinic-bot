@@ -6,7 +6,14 @@
 
 import { prisma as defaultPrisma } from '../db/client';
 import { DEFAULT_TENANT_ID } from '../config/tenant';
-import { validateWeights } from '../domain/staff-scorecard';
+import {
+  composeScore,
+  computePunctuality,
+  computeVolume,
+  validateWeights,
+  type ScorecardWeights,
+} from '../domain/staff-scorecard';
+import { staffRetentionService } from './staff-retention.service';
 
 export interface StaffScorecardPolicyModel {
   id?: string;
@@ -177,8 +184,90 @@ export function validateStaffScorecardPolicy(
   };
 }
 
-class StaffScorecardService {
-  constructor(private readonly prisma: any = defaultPrisma) {}
+export interface ScorecardPeriodInfo {
+  from: Date;
+  to: Date;
+  daysInMonth: number;
+  periodDays: number;
+  isCurrentMonth: boolean;
+}
+
+function pad2(value: number): string {
+  return String(value).padStart(2, '0');
+}
+
+/** Rentang bulan WIB + jumlah hari berjalan (untuk prorata target). */
+export function resolveScorecardPeriod(
+  year: number,
+  month: number,
+  now: Date = new Date()
+): ScorecardPeriodInfo {
+  const daysInMonth = new Date(Date.UTC(year, month, 0)).getUTCDate();
+  const from = new Date(`${year}-${pad2(month)}-01T00:00:00+07:00`);
+  const next = month === 12 ? { y: year + 1, m: 1 } : { y: year, m: month + 1 };
+  const to = new Date(`${next.y}-${pad2(next.m)}-01T00:00:00+07:00`);
+
+  const wibKey = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jakarta' }).format(now);
+  const [cy, cm, cd] = wibKey.split('-').map(Number);
+  const isCurrentMonth = cy === year && cm === month;
+  const isPast = cy * 12 + cm > year * 12 + month;
+  const periodDays = isCurrentMonth ? cd : isPast ? daysInMonth : 0;
+
+  return { from, to, daysInMonth, periodDays, isCurrentMonth };
+}
+
+export interface StaffScorecardItem {
+  staffId: string;
+  staffName: string;
+  periodYear: number;
+  periodMonth: number;
+  punctuality: {
+    pct: number | null;
+    onTime: number;
+    lateMeasured: number;
+    chatLate: number;
+    unknown: number;
+    assessed: number;
+    total: number;
+    status: string;
+  };
+  retention: {
+    pct: number | null;
+    eligible: boolean;
+    status: string;
+    cohortN: number;
+    retainedN: number;
+    benchmarkPct: number | null;
+  };
+  volume: { pct: number | null; visits: number; target: number };
+  coveragePct: number;
+  score: number | null;
+  grade: string | null;
+  usedWeights: ScorecardWeights;
+  excluded: string[];
+  status: 'PREVIEW' | 'FINAL';
+  computedAt: string;
+}
+
+export interface StaffScorecardReport {
+  tenantId: string;
+  periodYear: number;
+  periodMonth: number;
+  policy: StaffScorecardPolicyModel;
+  items: StaffScorecardItem[];
+}
+
+export interface FreezeScorecardResult {
+  written: number;
+  skipped: number;
+  items: StaffScorecardItem[];
+}
+
+export class StaffScorecardService {
+  constructor(
+    private readonly prisma: any = defaultPrisma,
+    private readonly retention: any = staffRetentionService
+  ) {}
 
   /** Policy aktif pada tanggal tertentu; fallback ke default bila DB kosong/offline. */
   async getPolicy(
@@ -228,6 +317,361 @@ class StaffScorecardService {
     });
     return created;
   }
+
+  /**
+   * Laporan nilai per periode. Snapshot FINAL dipakai apa adanya (tidak dihitung ulang).
+   */
+  async getReport(params: {
+    tenantId: string;
+    year: number;
+    month: number;
+    staffId?: string | null;
+    includeFrozen?: boolean;
+    now?: Date;
+  }): Promise<StaffScorecardReport> {
+    const { tenantId, year, month } = params;
+    const policy = await this.getPolicy(tenantId);
+
+    let staffList: any[] = [];
+    try {
+      staffList = await this.prisma.staff.findMany({
+        where: {
+          tenant_id: tenantId,
+          active: true,
+          incentive_eligible: true,
+          ...(params.staffId ? { id: params.staffId } : {}),
+        },
+        select: { id: true, name: true },
+        orderBy: { name: 'asc' },
+      });
+    } catch {
+      staffList = [];
+    }
+
+    const ids = (staffList || []).map((staff: any) => staff.id);
+    let snapshots: any[] = [];
+    if (ids.length > 0) {
+      try {
+        snapshots = await this.prisma.staffScorecardSnapshot.findMany({
+          where: {
+            tenant_id: tenantId,
+            period_year: year,
+            period_month: month,
+            staff_id: { in: ids },
+          },
+        });
+      } catch {
+        snapshots = [];
+      }
+    }
+
+    const snapshotMap = new Map<string, any>(
+      (snapshots || []).map((snapshot: any) => [snapshot.staff_id, snapshot])
+    );
+
+    const items: StaffScorecardItem[] = [];
+    for (const staff of staffList || []) {
+      const snapshot = snapshotMap.get(staff.id);
+      if (
+        snapshot &&
+        snapshot.status === 'FINAL' &&
+        params.includeFrozen !== false
+      ) {
+        items.push(this.itemFromSnapshot(snapshot));
+        continue;
+      }
+      items.push(await this.computeItem(tenantId, staff, year, month, policy, params.now ?? new Date()));
+    }
+
+    return { tenantId, periodYear: year, periodMonth: month, policy, items };
+  }
+
+  private async computeItem(
+    tenantId: string,
+    staff: any,
+    year: number,
+    month: number,
+    policy: StaffScorecardPolicyModel,
+    now: Date
+  ): Promise<StaffScorecardItem> {
+    const period = resolveScorecardPeriod(year, month, now);
+
+    let reservations: any[] = [];
+    try {
+      reservations = await this.prisma.reservation.findMany({
+        where: {
+          tenant_id: tenantId,
+          assigned_staff_id: staff.id,
+          status: 'completed',
+          booking_date: { gte: period.from, lt: period.to },
+        },
+        select: { id: true, booking_date: true, arrived_at: true },
+      });
+    } catch {
+      reservations = [];
+    }
+
+    let onTime = 0;
+    let lateMeasured = 0;
+    const unmeasuredIds: string[] = [];
+
+    for (const reservation of reservations || []) {
+      if (reservation.arrived_at && reservation.booking_date) {
+        const diffMinutes =
+          (new Date(reservation.arrived_at).getTime() -
+            new Date(reservation.booking_date).getTime()) /
+          60000;
+        if (diffMinutes <= policy.tolerance_minutes) onTime += 1;
+        else lateMeasured += 1;
+      } else if (reservation.id) {
+        unmeasuredIds.push(reservation.id);
+      }
+    }
+
+    let chatLate = 0;
+    if (unmeasuredIds.length > 0) {
+      try {
+        const evidences = await this.prisma.visitArrivalEvidence.findMany({
+          where: {
+            tenant_id: tenantId,
+            source: 'CHAT',
+            review_status: 'APPROVED',
+            reservation_id: { in: unmeasuredIds },
+          },
+          select: { reservation_id: true, observed_minutes: true },
+        });
+        const reservationsWithChat = new Set<string>();
+        for (const evidence of evidences || []) {
+          if (
+            evidence.reservation_id &&
+            (evidence.observed_minutes ?? 0) > policy.chat_evidence_minutes
+          ) {
+            reservationsWithChat.add(evidence.reservation_id);
+          }
+        }
+        chatLate = reservationsWithChat.size;
+      } catch {
+        chatLate = 0;
+      }
+    }
+
+    const unknown = Math.max(0, unmeasuredIds.length - chatLate);
+    const punctuality = computePunctuality({
+      onTime,
+      lateMeasured,
+      chatLate,
+      unknown,
+      minSample: policy.min_sample_punctuality,
+    });
+
+    const volume = computeVolume({
+      visits: (reservations || []).length,
+      periodDays: period.periodDays,
+      daysInMonth: period.daysInMonth,
+      targetPerDay: policy.target_visits_per_day,
+      workingDaysPerMonth: policy.working_days_per_month,
+    });
+
+    const retentionMonth =
+      month === 1 ? { year: year - 1, month: 12 } : { year, month: month - 1 };
+
+    let retentionItem: any = null;
+    try {
+      const retentionReport = await this.retention.computeForPeriod(
+        tenantId,
+        retentionMonth.year,
+        retentionMonth.month
+      );
+      retentionItem =
+        (retentionReport?.report?.items || []).find(
+          (item: any) => item.staffId === staff.id
+        ) || null;
+    } catch {
+      retentionItem = null;
+    }
+
+    const retentionPct = retentionItem?.retentionPct ?? null;
+    const retentionEligible = retentionItem?.status === 'OK';
+    const retentionStatus = retentionItem
+      ? retentionItem.status === 'OK'
+        ? 'OK'
+        : `${retentionItem.status}${retentionItem.skipReason ? ':' + retentionItem.skipReason : ''}`
+      : 'NO_DATA';
+
+    const composed = composeScore({
+      punctuality: {
+        pct: punctuality.pct,
+        assessed: punctuality.assessed,
+        minSample: policy.min_sample_punctuality,
+      },
+      retention: { pct: retentionPct, eligible: retentionEligible },
+      volume: { pct: volume.pct },
+      weights: {
+        punctuality: policy.weight_punctuality,
+        retention: policy.weight_retention,
+        volume: policy.weight_volume,
+      },
+      thresholds: {
+        aMin: policy.grade_a_min,
+        bMin: policy.grade_b_min,
+        cMin: policy.grade_c_min,
+        dMin: policy.grade_d_min,
+      },
+    });
+
+    const total = punctuality.total;
+    const coveragePct =
+      total > 0 ? Math.round((punctuality.assessed / total) * 1000) / 10 : 0;
+
+    return {
+      staffId: staff.id,
+      staffName: staff.name,
+      periodYear: year,
+      periodMonth: month,
+      punctuality: {
+        pct: punctuality.pct,
+        onTime,
+        lateMeasured,
+        chatLate,
+        unknown,
+        assessed: punctuality.assessed,
+        total,
+        status: punctuality.status,
+      },
+      retention: {
+        pct: retentionPct,
+        eligible: retentionEligible,
+        status: retentionStatus,
+        cohortN: retentionItem?.cohortN ?? 0,
+        retainedN: retentionItem?.retainedN ?? 0,
+        benchmarkPct: retentionItem?.benchmarkPct ?? null,
+      },
+      volume: { pct: volume.pct, visits: volume.visits, target: volume.target },
+      coveragePct,
+      score: composed.score,
+      grade: composed.grade,
+      usedWeights: composed.usedWeights,
+      excluded: composed.excluded,
+      status: 'PREVIEW',
+      computedAt: new Date().toISOString(),
+    };
+  }
+
+  private itemFromSnapshot(snapshot: any): StaffScorecardItem {
+    const measured = snapshot.measured_n ?? 0;
+    const chat = snapshot.chat_late_n ?? 0;
+    const unknown = snapshot.unknown_n ?? 0;
+
+    return {
+      staffId: snapshot.staff_id,
+      staffName: snapshot.staff_name,
+      periodYear: snapshot.period_year,
+      periodMonth: snapshot.period_month,
+      punctuality: {
+        pct: snapshot.punctuality_pct ?? null,
+        onTime: 0,
+        lateMeasured: measured,
+        chatLate: chat,
+        unknown,
+        assessed: measured + chat,
+        total: measured + chat + unknown,
+        status: 'FROZEN',
+      },
+      retention: {
+        pct: snapshot.retention_pct ?? null,
+        eligible: snapshot.retention_pct != null,
+        status: 'FROZEN',
+        cohortN: 0,
+        retainedN: 0,
+        benchmarkPct: null,
+      },
+      volume: { pct: snapshot.volume_pct ?? null, visits: measured, target: 0 },
+      coveragePct: snapshot.coverage_pct ?? 0,
+      score: snapshot.weighted_score ?? null,
+      grade: snapshot.grade ?? null,
+      usedWeights: { punctuality: 0, retention: 0, volume: 0 },
+      excluded: [],
+      status: 'FINAL',
+      computedAt: snapshot.computed_at
+        ? new Date(snapshot.computed_at).toISOString()
+        : new Date().toISOString(),
+    };
+  }
+
+  /**
+   * Membekukan nilai per periode. Snapshot FINAL yang sudah ada tidak ditimpa.
+   */
+  async freezePeriod(params: {
+    tenantId: string;
+    year: number;
+    month: number;
+    staffId?: string | null;
+    actor: string;
+  }): Promise<FreezeScorecardResult> {
+    const report = await this.getReport({
+      tenantId: params.tenantId,
+      year: params.year,
+      month: params.month,
+      staffId: params.staffId,
+      includeFrozen: false,
+    });
+
+    let written = 0;
+    let skipped = 0;
+
+    for (const item of report.items) {
+      const where = {
+        tenant_id_staff_id_period_year_period_month: {
+          tenant_id: params.tenantId,
+          staff_id: item.staffId,
+          period_year: params.year,
+          period_month: params.month,
+        },
+      };
+
+      let existing: any = null;
+      try {
+        existing = await this.prisma.staffScorecardSnapshot.findUnique({ where });
+      } catch {
+        existing = null;
+      }
+
+      if (existing?.status === 'FINAL') {
+        skipped += 1;
+        continue;
+      }
+
+      const data = {
+        staff_name: item.staffName,
+        punctuality_pct: item.punctuality.pct,
+        retention_pct: item.retention.eligible ? item.retention.pct : null,
+        volume_pct: item.volume.pct,
+        weighted_score: item.score,
+        grade: item.grade,
+        coverage_pct: item.coveragePct,
+        measured_n: Math.max(0, item.punctuality.assessed - item.punctuality.chatLate),
+        chat_late_n: item.punctuality.chatLate,
+        unknown_n: item.punctuality.unknown,
+        status: 'FINAL',
+        computed_by: params.actor,
+        computed_at: new Date(),
+      };
+
+      await this.prisma.staffScorecardSnapshot.upsert({
+        where,
+        create: {
+          tenant_id: params.tenantId,
+          staff_id: item.staffId,
+          period_year: params.year,
+          period_month: params.month,
+          ...data,
+        },
+        update: data,
+      });
+      written += 1;
+    }
+
+    return { written, skipped, items: report.items };
+  }
 }
 
-export const staffScorecardService = new StaffScorecardService();

@@ -333,6 +333,20 @@
         "invalid-weights"
       ],
       "reviewed": false
+    },
+    {
+      "name": "ScorecardVerificationQueue",
+      "layer": "domain",
+      "path": "src/components/staff/ScorecardVerificationQueue.tsx",
+      "whenToUse": "Antrean verifikasi bukti keterlambatan dari chat. Admin menyetujui atau menolak sebelum bukti masuk perhitungan nilai.",
+      "states": [
+        "loading",
+        "empty",
+        "list",
+        "review-modal",
+        "error"
+      ],
+      "reviewed": false
     }
   ],
   "pages": [

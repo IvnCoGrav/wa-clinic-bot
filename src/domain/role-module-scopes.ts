@@ -182,7 +182,7 @@ export const MODULE_PATH_TO_API_SCOPES: Readonly<Record<string, readonly Derived
     // Tulis akun staf diblokir Layer 1; baca daftar & retensi diperbolehkan
     { apiPrefix: '/api/admin/staff', methods: 'GET' },
     { apiPrefix: '/api/admin/staff-retention', methods: 'GET' },
-    { apiPrefix: '/api/admin/staff-scorecard', methods: 'GET' },
+    { apiPrefix: '/api/admin/staff-scorecard', methods: 'GET,POST' },
   ],
   '/admin/services': [
     { apiPrefix: '/api/admin/services', methods: 'GET' },

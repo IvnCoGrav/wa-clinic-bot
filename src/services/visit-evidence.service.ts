@@ -39,6 +39,28 @@ export interface CollectPeriodSummary {
   skippedReviewed: number;
 }
 
+export interface EvidenceReviewItem {
+  id: string;
+  source: string;
+  evidenceAt: Date;
+  observedMinutes: number | null;
+  confidence: number | null;
+  reviewStatus: string;
+  message: { id: string; content: string; createdAt: Date } | null;
+  reservation: {
+    id: string;
+    bookingDate: Date | null;
+    customerName: string | null;
+    staffName: string | null;
+  };
+}
+
+export interface ReviewEvidenceResult {
+  ok: boolean;
+  code?: 'NOT_FOUND' | 'ALREADY_REVIEWED' | 'INVALID_ACTION';
+  data?: any;
+}
+
 export class VisitEvidenceService {
   constructor(private readonly prisma: any = defaultPrisma) {}
 
@@ -158,6 +180,130 @@ export class VisitEvidenceService {
     }
 
     return { persisted, skippedReviewed };
+  }
+
+  /**
+   * Daftar bukti untuk antrean review admin. Hanya membaca.
+   */
+  async listForReview(params: {
+    tenantId: string;
+    status?: 'AUTO' | 'NEEDS_REVIEW' | 'APPROVED' | 'REJECTED';
+    staffId?: string | null;
+    from?: Date | null;
+    to?: Date | null;
+    limit?: number;
+  }): Promise<EvidenceReviewItem[]> {
+    const take = Math.min(Math.max(params.limit ?? 50, 1), 200);
+    const where: any = {
+      tenant_id: params.tenantId,
+      review_status: params.status ?? 'NEEDS_REVIEW',
+    };
+
+    const reservationFilter: any = {};
+    if (params.staffId) reservationFilter.assigned_staff_id = params.staffId;
+    if (params.from || params.to) {
+      reservationFilter.booking_date = {
+        ...(params.from ? { gte: params.from } : {}),
+        ...(params.to ? { lte: params.to } : {}),
+      };
+    }
+    if (Object.keys(reservationFilter).length > 0) {
+      where.reservation = reservationFilter;
+    }
+
+    const rows = await this.prisma.visitArrivalEvidence.findMany({
+      where,
+      orderBy: { evidence_at: 'desc' },
+      take,
+      include: {
+        reservation: {
+          select: {
+            id: true,
+            booking_date: true,
+            customer: { select: { name: true } },
+            assigned_staff: { select: { name: true } },
+          },
+        },
+      },
+    });
+
+    const messageIds = (rows || [])
+      .map((row: any) => row.message_id)
+      .filter((id: any) => Boolean(id));
+
+    const messages = messageIds.length
+      ? await this.prisma.message.findMany({
+          where: { id: { in: messageIds } },
+          select: { id: true, content: true, created_at: true },
+        })
+      : [];
+
+    const messageMap = new Map<string, any>(
+      (messages || []).map((message: any) => [message.id, message])
+    );
+
+    return (rows || []).map((row: any) => {
+      const message = row.message_id ? messageMap.get(row.message_id) : null;
+      return {
+        id: row.id,
+        source: String(row.source),
+        evidenceAt: new Date(row.evidence_at),
+        observedMinutes: row.observed_minutes ?? null,
+        confidence: row.confidence ?? null,
+        reviewStatus: String(row.review_status),
+        message: message
+          ? {
+              id: message.id,
+              content: message.content,
+              createdAt: new Date(message.created_at),
+            }
+          : null,
+        reservation: {
+          id: row.reservation?.id ?? row.reservation_id,
+          bookingDate: row.reservation?.booking_date
+            ? new Date(row.reservation.booking_date)
+            : null,
+          customerName: row.reservation?.customer?.name ?? null,
+          staffName: row.reservation?.assigned_staff?.name ?? null,
+        },
+      };
+    });
+  }
+
+  /**
+   * Menyetujui/menolak bukti. Hanya mengubah baris bukti; tidak menyentuh reservasi.
+   */
+  async reviewEvidence(params: {
+    tenantId: string;
+    evidenceId: string;
+    action: 'APPROVE' | 'REJECT';
+    note?: string | null;
+    actor: string;
+  }): Promise<ReviewEvidenceResult> {
+    if (params.action !== 'APPROVE' && params.action !== 'REJECT') {
+      return { ok: false, code: 'INVALID_ACTION' };
+    }
+
+    const existing = await this.prisma.visitArrivalEvidence.findFirst({
+      where: { id: params.evidenceId, tenant_id: params.tenantId },
+    });
+
+    if (!existing) return { ok: false, code: 'NOT_FOUND' };
+    if (existing.review_status === 'APPROVED' || existing.review_status === 'REJECTED') {
+      return { ok: false, code: 'ALREADY_REVIEWED' };
+    }
+
+    const updated = await this.prisma.visitArrivalEvidence.update({
+      where: { id: params.evidenceId },
+      data: {
+        review_status: params.action === 'APPROVE' ? 'APPROVED' : 'REJECTED',
+        reviewed_by: params.actor,
+        reviewed_at: new Date(),
+        review_note: params.note ?? null,
+      },
+    });
+
+    return { ok: true, data: updated };
   }
 
   /**

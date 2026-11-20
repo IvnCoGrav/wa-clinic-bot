@@ -324,20 +324,40 @@ Komponen baru wajib didaftarkan di `packages/admin-dashboard/src/ui-registry.jso
 - `npm run build` di `packages/admin-dashboard` → sukses
 - Tes F3 + F1 + F2 → 62/62
 
-### F4 — Antrean verifikasi (2 hari)
+### F4 — Antrean verifikasi (2 hari) — **SELESAI 2026-11-20**
 
-- [ ] `ScorecardVerificationQueue.tsx` + drawer rincian.
-- [ ] Endpoint evidence list + review.
-- [ ] Tes integrasi: approve/reject mengubah status, tidak mengubah `arrived_at`.
-- **Lulus jika:** antrean dapat diselesaikan; keputusan tersimpan + audit.
+- [x] `VisitEvidenceService.listForReview` + `reviewEvidence` — baca antrean, keputusan admin, tidak menyentuh reservasi.
+- [x] `GET /api/admin/staff-scorecard/evidence` + `POST /api/admin/staff-scorecard/evidence/:id/review`.
+- [x] Audit `REVIEW_ARRIVAL_EVIDENCE` pada setiap keputusan.
+- [x] `ScorecardVerificationQueue.tsx` + modal catatan; ditempel di tab **Penilaian Bidan**.
+- [x] Scope RBAC `/api/admin/staff-scorecard` → `GET,POST`.
+- [x] Migrasi seed `20261120100000_seed_staff_scorecard_scopes` untuk ADMIN_CS (GET policy/evidence + POST review; PUT policy tetap Super Admin).
+- [x] Tes integrasi `tests/integration/staff-scorecard-evidence.test.ts` — **7 tes hijau** (list + kutipan pesan, approve, reject, 409 review ulang, 400 aksi invalid, 404, 400 status invalid).
 
-### F5 — Agregasi + snapshot (2 hari)
+**Jaminan:** keputusan review hanya mengubah `visit_arrival_evidence`; `reservations.update` tidak pernah dipanggil.
 
-- [ ] `staff-scorecard.service.ts` (komponen + normalisasi bobot + snapshot).
-- [ ] Endpoint report/recalculate/snapshot.
-- [ ] Retensi yang berstatus `SKIPPED` (tenure/sampel) **tidak diberi grade**; bobot komponen lain dinormalisasi.
-- [ ] Tes: snapshot FINAL tidak berubah saat dihitung ulang.
-- **Lulus jika:** angka API sama dengan query SQL verifikasi untuk November 2026.
+**Verifikasi F4:**
+- `npm run typecheck` → hijau
+- `npm run build` dashboard → sukses
+- `npm run check:reuse` → 189 baseline, **0 baru**
+- Tes F4 + F1–F3 → 69/69
+
+### F5 — Agregasi + snapshot (2 hari) — **SELESAI 2026-11-20**
+
+- [x] `StaffScorecardService.getReport` — ketepatan (jam + bukti chat APPROVED), volume prorata, retensi bulan sebelumnya dari policy kanonis.
+- [x] Retensi `SKIPPED` (tenure/sampel) tidak diberi grade; bobot dinormalisasi.
+- [x] `freezePeriod` — snapshot FINAL immutable; periode yang sudah FINAL dilewati.
+- [x] Endpoint `GET /api/admin/staff-scorecard/report`, `POST .../recalculate`, `POST .../snapshot` (+ audit `FREEZE_STAFF_SCORECARD`).
+- [x] Tes `tests/unit/staff-scorecard-aggregate.test.ts` — **9 tes** (agregasi Thabita, hanya chat APPROVED, retensi OK, snapshot FINAL dipakai apa adanya, freeze skip/tulis, periode).
+
+**Verifikasi F5:**
+- `npm run typecheck` → hijau
+- `npm run check:reuse` → 189 baseline, **0 baru**
+- `npm test` → **1043 file / 8177 tes hijau**, 0 gagal
+
+**Perbaikan prasyarat (di luar fitur, ditemukan saat gate):**
+- Shebang `#!/usr/bin/env node` pada dua skrip `.mjs` membuat Vitest gagal meng-import-nya. Shebang dihapus; skrip tetap dijalankan via `node <file>`.
+- Fixture tanggal tetap di `reservation-intake-contract.test.ts` diganti relatif (time-rot pada 20 Nov).
 
 ### F6 — Dashboard HP (2 hari)
 
