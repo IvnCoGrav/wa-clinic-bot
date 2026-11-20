@@ -4,6 +4,18 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### 2026-11-20 - UX: Antrean Verifikasi Bukti Chat (Filter, Konteks, Pagination, Preview Dampak)
+
+- **Konteks:** Setelah antrean dipakai, review 19–78 bukti satu per satu terasa lambat: hanya 1 kutipan pesan, tanpa filter, maksimal 50 item tanpa "muat lagi", dan tidak ada gambaran dampak ke nilai.
+- **Backend:**
+  - `listForReview` mendukung `onlyScored` (hanya staf aktif + `incentive_eligible`), `offset`, dan mengembalikan `{ items, total }`.
+  - Setiap item menyertakan `conversationId` dan **konteks maksimal 3 pesan sebelum + 3 sesudah** pesan bukti. Kegagalan baca konteks tidak menghilangkan bukti (fail-soft).
+  - Endpoint baru `GET /api/admin/staff-scorecard/evidence/impact?year=&month=` menghitung preview ketepatan, grade, dan cakupan bila seluruh kandidat disetujui — memakai policy/bobot yang sama dengan raport.
+- **UI:** filter bidan + bulan/tahun, default hanya staf dinilai, pagination 15 dengan total, thread percakapan (label Customer/Bot/Admin-Bidan/Catatan internal), tombol **Buka chat**, dan panel **preview dampak** sebelum menyetujui. Keputusan tetap final dan wajib review manusia.
+- **Deploy produksi (2026-11-20):** merge `origin/master` → build app+worker → recreate; `prisma migrate deploy` tanpa migrasi baru; `/health` OK dan `/ready` READY (DB `CONNECTED`, WAHA `WORKING`).
+- **Verifikasi produksi:** antrean staf dinilai **19** (Thabita 18, Hanifah 1; Yusi 14 tidak dinilai disembunyikan default); setiap item memuat **7 pesan konteks** dan `conversationId`. Preview dampak: Thabita 18 menunggu → ketepatan **50% → 21,9%**, grade **D → E**, cakupan **36,8% → 84,2%**.
+- **Gerbang:** `npm run typecheck`, dashboard build, `check:reuse` (189 baseline / 0 baru) hijau; **49 tes scorecard** hijau. `check:architecture` melaporkan 4 pelanggaran dari pekerjaan paralel delay watchdog (bukan scorecard).
+
 #### 2026-11-20 - Fitur & Deploy: Raport Kinerja Bidan (F1–F8) + Gate Rollout
 
 - **Konteks:** Menindaklanjuti audit #359 (raport lama memberi nilai A dari data kosong). Fitur dibangun bertahap F1–F8: skema + domain nilai, collector bukti kedatangan, policy admin, antrean verifikasi bukti chat, agregasi + snapshot FINAL, raport mobile, dan gate rollout.

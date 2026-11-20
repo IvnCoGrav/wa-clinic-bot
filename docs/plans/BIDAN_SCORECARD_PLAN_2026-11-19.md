@@ -404,6 +404,13 @@ Komponen baru wajib didaftarkan di `packages/admin-dashboard/src/ui-registry.jso
 4. **Hak akses UI:** owner (ADMIN_CS) bisa review bukti, tetapi **pembekuan snapshot dan simpan policy hanya untuk Super Admin** (akun `Admin`). Bila owner ingin memakai akun sendiri untuk dua aksi itu, keputusan RBAC perlu diambil terpisah.
 5. **Bidan tanpa kunjungan** (contoh: Cindy, 0 kunjungan) saat ini tampil grade **E / skor 0**. Perlu keputusan owner apakah bidan 0 kunjungan dikecualikan (mis. cuti/baru masuk) daripada dinilai E.
 
+**Perbaikan UX antrean verifikasi (2026-11-20, sudah terdepoy):**
+- Filter **bidan + bulan/tahun**; default hanya staf dinilai (14 bukti Yusi/owner disembunyikan).
+- **Pagination 15 + total**; sebelumnya UI memuat maksimal 50 tanpa "muat lagi" sehingga 28 item bisa tak terlihat.
+- **Konteks percakapan**: maksimal 3 pesan sebelum + 3 sesudah pesan bukti, label pengirim, dan tombol **Buka chat**.
+- **Preview dampak** per bidan sebelum menyetujui (ketepatan, grade, cakupan).
+- Verifikasi produksi: antrean staf dinilai **19**, tiap item **7 pesan konteks** + `conversationId`; preview Thabita 18 menunggu → ketepatan 50% → 21,9%, grade D → E, cakupan 36,8% → 84,2%.
+
 **Cara aktivasi portal bidan (setelah owner memvalidasi dashboard admin):**
 1. Set `SCORECARD_STAFF_UI_ENABLED=true` di `.env` server.
 2. Build ulang dashboard dengan `SCORECARD_STAFF_UI_ENABLED=true` (compose meneruskan sebagai `VITE_SCORECARD_STAFF_UI_ENABLED`).
@@ -422,6 +429,9 @@ Komponen baru wajib didaftarkan di `packages/admin-dashboard/src/ui-registry.jso
 - `tests/integration/staff-scorecard-me.test.ts` → 8 tes (termasuk flag OFF/ON)
 - `tests/integration/staff-scorecard-report.test.ts` → 8 tes (report, recalculate, snapshot, RBAC SUPER_ADMIN, audit, error)
 - `tests/unit/scorecard-verification.test.ts` → 7 tes (PASS, selisih total/chat, bidan tanpa kunjungan, klaim tanpa data SQL, invarian, periode kosong)
+- `tests/integration/staff-scorecard-evidence-queue.test.ts` → 7 tes (meta total/offset, konteks 3+3, onlyScored, fail-soft, impact)
+- `tests/unit/staff-scorecard-impact.test.ts` → 3 tes (dampak 18 kandidat, filter query, DB offline)
+- Seluruh suite scorecard → **49 tes hijau**
 - Full suite hijau **1046 file / 8199 tes** pada commit `6c29becb` (sebelum perbaikan alat). Setelah perbaikan alat, tes terkait **7/7 hijau** + typecheck hijau; full suite berikutnya tidak stabil karena working tree sedang diedit paralel oleh pekerjaan lain (delay watchdog), bukan oleh perubahan scorecard.
 
 ---
