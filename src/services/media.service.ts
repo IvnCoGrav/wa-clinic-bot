@@ -1339,7 +1339,7 @@ export class MediaService {
           UNION ALL
           SELECT regexp_matches(session_data::text, '/media/[^"\\ ]+', 'g') FROM conversations WHERE tenant_id = ${tenantId}
           UNION ALL
-          SELECT regexp_matches(session_data::text, '/media/[^"\\ ]+', 'g') FROM reservations WHERE tenant_id = ${tenantId}
+          SELECT regexp_matches(payload::text, '/media/[^"\\ ]+', 'g') FROM reservation_archives WHERE tenant_id = ${tenantId}
           UNION ALL
           SELECT regexp_matches(coalesce(proof_url, ''), '/media/[^"\\ ]+', 'g') FROM reservations WHERE tenant_id = ${tenantId}
           UNION ALL
