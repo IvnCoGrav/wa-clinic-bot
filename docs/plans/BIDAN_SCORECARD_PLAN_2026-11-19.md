@@ -388,7 +388,7 @@ Komponen baru wajib didaftarkan di `packages/admin-dashboard/src/ui-registry.jso
 - [x] Build-arg Docker + compose + `.env.example` disiapkan agar aktivasi tidak perlu ubah kode.
 - [x] Alat verifikasi read-only `npm run verify:scorecard -- --year=2026 --month=11` (bandingkan angka service vs SQL mentah, exit code 1 bila ada selisih; `--json` untuk mesin).
 - [x] Deploy produksi 2026-11-20: merge `origin/master` ke branch `deploy/2026-11-13-merged` (tanpa konflik, `Caddyfile` server dipertahankan), build app+worker, `prisma migrate deploy` (123 migrasi; seed scope `admin_cs` diterapkan), recreate app+worker.
-- [x] Validasi dua periode di produksi: **Oktober 2026 PASS** (53/16/16/0/21) dan **November 2026 PASS** (38/7/7/0/24) — 0 selisih API vs SQL.
+- [x] Validasi dua periode di produksi: **Oktober 2026 PASS** — Bidan Thabita 53 kunjungan/16 tepat/16 telat jam/0 telat chat/21 belum terbukti; **November 2026 PASS** — Bidan Thabita 38/7/7/0/24. Semua bidan dinilai: 0 selisih API vs SQL.
 - **Lulus jika:** dua periode berturut-turut tanpa selisih angka. **TERPENUHI.**
 
 **Hasil deploy:**
