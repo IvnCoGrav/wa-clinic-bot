@@ -4,6 +4,16 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### 2026-11-20 - Raport Admin Sesuai Prototipe (F9)
+
+- **Konteks:** Prototipe `docs/audit/2026-11-19/raport-bidan-v2.html` belum diimplementasikan; panel admin sebelumnya hanya tabel ringkas. Layout disesuaikan (hybrid): struktur prototipe, tetapi **grade tetap** sesuai keputusan D5.
+- **Ringkasan:** kartu kunjungan/baru-ulang/cakupan/telat/tanpa bukti, tabel perbandingan dengan tiga sumber bukti terpisah, retensi kohort vs benchmark, dan daftar "perlu perhatian".
+- **Per bidan:** split pasien baru vs ulang + pembanding bulan lalu, retensi kohort, tiga status bukti, **top 3 keterlambatan terburuk**, asal pasien ulang (sendiri/titipan), nomor kunjungan, grade & bobot, serta rekomendasi otomatis.
+- **Data & Metode:** cara hitung, tiga status bukti, retensi, grade & batas data, sumber data.
+- **Backend:** item raport menambah `visits` (baru/ulang/origin/nomor kunjungan/pembanding bulan lalu) dan `worstLate`; snapshot FINAL tidak mengarang rincian (`visits=null`, `worstLate=[]`).
+- **Batas:** "Catatan & tindakan" masih **rekomendasi otomatis**, belum catatan tersimpan; dedup identitas pasien tetap keterbatasan metode.
+- **Verifikasi:** 54 tes scorecard hijau (2 tes baru riwayat kunjungan), typecheck, dashboard build, `check:reuse` 0 pelanggaran baru.
+
 #### 2026-11-20 - UX: Antrean Verifikasi Bukti Chat (Filter, Konteks, Pagination, Preview Dampak)
 
 - **Konteks:** Setelah antrean dipakai, review 19–78 bukti satu per satu terasa lambat: hanya 1 kutipan pesan, tanpa filter, maksimal 50 item tanpa "muat lagi", dan tidak ada gambaran dampak ke nilai.

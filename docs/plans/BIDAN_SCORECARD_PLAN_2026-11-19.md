@@ -1,7 +1,7 @@
 # Plan: Bidan Scorecard (Penilaian + Verifikasi via Admin)
 
 - **Tanggal:** 2026-11-19
-- **Status:** **F1–F8 SELESAI & TERDEPLOY (2026-11-20).** Dashboard admin sudah live di tab **Penilaian Bidan**; portal mobile bidan tetap disembunyikan di balik `SCORECARD_STAFF_UI_ENABLED` (default off). Migrasi diterapkan di produksi. Verifikasi dua periode (Okt & Nov 2026) PASS 0 selisih. Tersisa: konfigurasi `RetentionPolicy` aktif, penjadwalan collector bukti chat, dan review 78 kandidat chat.
+- **Status:** **F1–F8 SELESAI & TERDEPLOY; F9 (raport admin sesuai prototipe) SELESAI (2026-11-20).** Dashboard admin kini memakai layout prototipe: tab Ringkasan/per bidan/Data & Metode, pasien baru vs ulang, retensi, top 3 keterlambatan, dan rekomendasi. Portal mobile bidan tetap disembunyikan di balik `SCORECARD_STAFF_UI_ENABLED` (default off). Migrasi diterapkan di produksi. Verifikasi dua periode (Okt & Nov 2026) PASS 0 selisih. Tersisa: konfigurasi `RetentionPolicy` aktif, penjadwalan collector bukti chat, dan review kandidat chat.
 - **Prototipe acuan:** `docs/audit/2026-11-19/dashboard-bidan-mobile.html`, `docs/audit/2026-11-19/raport-bidan-v2.html`
 - **Temuan audit:** `docs/KNOWN_ISSUES.md` #359
 
@@ -435,6 +435,22 @@ Komponen baru wajib didaftarkan di `packages/admin-dashboard/src/ui-registry.jso
 - `tests/unit/staff-scorecard-impact.test.ts` → 3 tes (dampak 18 kandidat, filter query, DB offline)
 - Seluruh suite scorecard → **49 tes hijau**
 - Full suite hijau **1046 file / 8199 tes** pada commit `6c29becb` (sebelum perbaikan alat). Setelah perbaikan alat, tes terkait **7/7 hijau** + typecheck hijau; full suite berikutnya tidak stabil karena working tree sedang diedit paralel oleh pekerjaan lain (delay watchdog), bukan oleh perubahan scorecard.
+
+### F9 — Raport admin sesuai prototipe (2026-11-20) — **SELESAI**
+
+- [x] Tab **Ringkasan / per bidan / Data & Metode** mengikuti `docs/audit/2026-11-19/raport-bidan-v2.html`.
+- [x] Ringkasan: kunjungan, pasien baru vs ulang, cakupan bukti, terbukti telat, tanpa bukti, tabel perbandingan tiga sumber bukti, retensi kohort, dan daftar "perlu perhatian".
+- [x] Per bidan: split baru/ulang + pembanding bulan lalu, retensi vs benchmark, tiga status bukti, **top 3 keterlambatan terburuk**, asal pasien ulang (sendiri/titipan), nomor kunjungan, grade & bobot, rekomendasi otomatis.
+- [x] Data & Metode: cara hitung, tiga status bukti, retensi, grade & batas data, sumber data.
+- [x] Backend: `visits` (baru/ulang/origin/nomor kunjungan/pembanding bulan lalu) dan `worstLate` di item raport; snapshot FINAL tidak mengarang rincian (`visits=null`, `worstLate=[]`).
+- [x] Grade tetap ditampilkan terpisah dari tiga status bukti (keputusan D5), bukan dihapus seperti prototipe lama.
+- **Catatan:** "Catatan & tindakan" saat ini **rekomendasi otomatis**, bukan catatan tersimpan. Dedup identitas pasien masih keterbatasan metode.
+
+**Verifikasi F9:**
+- `npm run typecheck` → hijau
+- Dashboard build → sukses
+- 54 tes scorecard hijau (termasuk 2 tes baru riwayat kunjungan: baru/ulang/origin/top telat + snapshot FINAL)
+- `check:reuse` → 189 baseline, **0 baru**
 
 ---
 

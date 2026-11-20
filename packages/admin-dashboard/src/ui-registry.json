@@ -342,8 +342,12 @@
       "states": [
         "loading",
         "empty",
-        "list",
-        "expanded-row",
+        "summary-tab",
+        "staff-tab",
+        "method-tab",
+        "visit-breakdown",
+        "top-late",
+        "recommendations",
         "recalculating",
         "freezing",
         "error"
