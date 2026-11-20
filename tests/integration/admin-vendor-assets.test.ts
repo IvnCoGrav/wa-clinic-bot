@@ -34,8 +34,22 @@ describe('Aset vendor lokal (Leaflet) — KNOWN #344', () => {
     expect(res.headers['content-type']).toContain('image/png');
   });
 
+  it('alias /vendor/leaflet/* juga diserve untuk kompatibilitas', async () => {
+    const resJs = await app.inject({ method: 'GET', url: '/vendor/leaflet/leaflet.js' });
+    expect(resJs.statusCode).toBe(200);
+    expect(resJs.headers['content-type']).toContain('application/javascript');
+    expect(resJs.body).toContain('Leaflet');
+
+    const resCss = await app.inject({ method: 'GET', url: '/vendor/leaflet/leaflet.css' });
+    expect(resCss.statusCode).toBe(200);
+    expect(resCss.headers['content-type']).toContain('text/css');
+  });
+
   it('path traversal ditolak (tidak membaca file di luar vendor)', async () => {
     const res = await app.inject({ method: 'GET', url: '/admin/vendor/%2e%2e/index.html' });
     expect(res.statusCode).toBe(404);
+
+    const resAlias = await app.inject({ method: 'GET', url: '/vendor/%2e%2e/index.html' });
+    expect(resAlias.statusCode).toBe(404);
   });
 });

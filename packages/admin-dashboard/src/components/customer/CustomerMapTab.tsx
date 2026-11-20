@@ -185,7 +185,8 @@ export const CustomerMapTab: React.FC<CustomerMapTabProps> = ({ onSelectCustomer
       setLeafletFailed(false);
       try {
         await loadLeaflet();
-      } catch {
+      } catch (err) {
+        console.error('[CustomerMapTab] Gagal memuat library Leaflet vendor lokal:', err);
         if (!disposed) setLeafletFailed(true);
         return;
       }
@@ -200,6 +201,7 @@ export const CustomerMapTab: React.FC<CustomerMapTabProps> = ({ onSelectCustomer
 
       const L = (window as any).L;
       if (!L) {
+        console.error('[CustomerMapTab] window.L tidak ditemukan setelah loadLeaflet');
         if (!disposed) setLeafletFailed(true);
         return;
       }
@@ -863,7 +865,7 @@ export const CustomerMapTab: React.FC<CustomerMapTabProps> = ({ onSelectCustomer
         <div className="bg-surface border border-divider rounded-2xl overflow-hidden shadow-xs relative">
           <div
             ref={mapContainerRef}
-            className="customer-map-osm-gray"
+            className="w-full h-full relative"
             style={{
               height: '580px',
               width: '100%',
