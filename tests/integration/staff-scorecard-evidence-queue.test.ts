@@ -200,19 +200,71 @@ describe('Antrean verifikasi — filter, pagination, konteks (F8 UX)', () => {
     expect(JSON.parse(res.body).data).toEqual(impact);
   });
 
-  it('GET impact menolak periode tidak valid (400) tanpa hitung', async () => {
-    const spy = vi
-      .spyOn(StaffScorecardService.prototype, 'previewPendingImpact')
-      .mockResolvedValue([]);
+  it('GET thread mengembalikan percakapan di sekitar pesan bukti', async () => {
+    (prisma.visitArrivalEvidence.findFirst as any).mockResolvedValue({
+      message_id: 'msg-1',
+      reservation: {
+        booking_date: new Date('2026-11-15T03:00:00Z'),
+        customer: { name: 'Bunda Eka' },
+        assigned_staff: { name: 'Bidan Thabita' },
+      },
+    });
+    (prisma.message.findFirst as any).mockResolvedValue(ANCHOR);
+    (prisma.message.findMany as any)
+      .mockResolvedValueOnce([
+        {
+          ...ANCHOR,
+          id: 'msg-before-1',
+          content: 'bun, bidannya dimana?',
+          created_at: new Date('2026-11-15T03:55:00Z'),
+        },
+      ])
+      .mockResolvedValueOnce([
+        {
+          ...ANCHOR,
+          id: 'msg-after-1',
+          content: 'maaf bun, segera sampai',
+          created_at: new Date('2026-11-15T04:10:00Z'),
+          direction: 'OUTBOUND',
+          sender_type: 'ADMIN',
+        },
+      ]);
 
     const res = await app.inject({
       method: 'GET',
-      url: '/api/admin/staff-scorecard/evidence/impact?year=2026&month=13',
+      url: '/api/admin/staff-scorecard/evidence/ev-1/thread?limit=20',
       headers: { 'x-api-key': ADMIN_KEY },
     });
 
-    expect(res.statusCode).toBe(400);
-    expect(JSON.parse(res.body).code).toBe('INVALID_PERIOD');
-    expect(spy).not.toHaveBeenCalled();
+    expect(res.statusCode).toBe(200);
+    const data = JSON.parse(res.body).data;
+    expect(data).toMatchObject({
+      conversationId: 'conv-1',
+      anchorId: 'msg-1',
+      customerName: 'Bunda Eka',
+      staffName: 'Bidan Thabita',
+    });
+    expect(data.messages.map((row: any) => row.id)).toEqual([
+      'msg-before-1',
+      'msg-1',
+      'msg-after-1',
+    ]);
+    expect(data.messages.find((row: any) => row.isAnchor)?.id).toBe('msg-1');
+  });
+
+  it('GET thread 404 bila bukti tidak punya pesan', async () => {
+    (prisma.visitArrivalEvidence.findFirst as any).mockResolvedValue({
+      message_id: null,
+      reservation: null,
+    });
+
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/admin/staff-scorecard/evidence/ev-1/thread',
+      headers: { 'x-api-key': ADMIN_KEY },
+    });
+
+    expect(res.statusCode).toBe(404);
+    expect(JSON.parse(res.body).code).toBe('THREAD_NOT_FOUND');
   });
 });

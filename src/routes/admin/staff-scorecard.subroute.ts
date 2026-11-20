@@ -193,10 +193,43 @@ export async function staffScorecardAdminRoutes(fastify: FastifyInstance) {
     }
   );
 
+  fastify.get(
+    '/api/admin/staff-scorecard/evidence/:id/thread',
+    async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
+      const tenantId = resolveSessionTenantId(request);
+      const query = (request.query || {}) as Record<string, any>;
+      const limit = Math.min(Math.max(Number(query.limit || 60), 10), 100);
+
+      try {
+        const data = await evidenceService.getConversationThread({
+          tenantId,
+          evidenceId: request.params.id,
+          limit,
+        });
+        if (!data) {
+          return reply.status(404).send({
+            success: false,
+            code: 'THREAD_NOT_FOUND',
+            error: 'Thread percakapan tidak ditemukan untuk bukti ini.',
+          });
+        }
+        return reply.send({ success: true, data });
+      } catch (err: any) {
+        return reply.status(500).send({
+          success: false,
+          error: err?.message || 'Gagal memuat percakapan.',
+        });
+      }
+    }
+  );
+
   fastify.post(
     '/api/admin/staff-scorecard/evidence/:id/review',
     async (
-      request: FastifyRequest<{ Params: { id: string }; Body: { action?: string; note?: string } }>,
+      request: FastifyRequest<{
+        Params: { id: string };
+        Body: { action?: string; note?: string; observedMinutes?: number | string | null };
+      }>,
       reply: FastifyReply
     ) => {
       const evidenceId = request.params?.id;
@@ -211,6 +244,23 @@ export async function staffScorecardAdminRoutes(fastify: FastifyInstance) {
         });
       }
 
+      let observedMinutes: number | null | undefined;
+      if (
+        body.observedMinutes !== undefined &&
+        body.observedMinutes !== null &&
+        String(body.observedMinutes).trim() !== ''
+      ) {
+        const parsed = Number(body.observedMinutes);
+        if (!Number.isFinite(parsed) || parsed < 0 || parsed > 1440) {
+          return reply.status(400).send({
+            success: false,
+            code: 'INVALID_MINUTES',
+            error: 'Selisih waktu harus antara 0 dan 1440 menit.',
+          });
+        }
+        observedMinutes = Math.round(parsed);
+      }
+
       const tenantId = resolveSessionTenantId(request);
 
       try {
@@ -219,12 +269,18 @@ export async function staffScorecardAdminRoutes(fastify: FastifyInstance) {
           evidenceId,
           action,
           note: body.note ?? null,
+          observedMinutes,
           actor: (request as any).adminIdentity || 'Admin',
         });
 
         if (!result.ok) {
           const code = result.code || 'INVALID_ACTION';
-          const statusCode = code === 'NOT_FOUND' ? 404 : code === 'ALREADY_REVIEWED' ? 409 : 400;
+          const statusCode =
+            code === 'NOT_FOUND'
+              ? 404
+              : code === 'ALREADY_REVIEWED'
+                ? 409
+                : 400;
           return reply.status(statusCode).send({
             success: false,
             code,
@@ -233,7 +289,9 @@ export async function staffScorecardAdminRoutes(fastify: FastifyInstance) {
                 ? 'Bukti tidak ditemukan.'
                 : code === 'ALREADY_REVIEWED'
                   ? 'Bukti ini sudah direview dan tidak dapat diubah.'
-                  : 'Aksi tidak valid.',
+                  : code === 'INVALID_MINUTES'
+                    ? 'Selisih waktu harus antara 0 dan 1440 menit.'
+                    : 'Aksi tidak valid.',
           });
         }
 
@@ -248,6 +306,8 @@ export async function staffScorecardAdminRoutes(fastify: FastifyInstance) {
             note: body.note ?? null,
             reservationId: result.data?.reservation_id ?? null,
             source: result.data?.source ?? null,
+            previousObservedMinutes: result.previousObservedMinutes ?? null,
+            observedMinutes: result.data?.observed_minutes ?? null,
           },
         });
 

@@ -116,6 +116,60 @@ describe('Staff Scorecard Evidence Review (F4)', () => {
     expect(prisma.reservation.update).not.toHaveBeenCalled();
   });
 
+  it('POST setujui dapat mengoreksi selisih waktu dan mencatat before/after di audit', async () => {
+    (prisma.visitArrivalEvidence.findFirst as any).mockResolvedValue({
+      id: 'ev-1',
+      review_status: 'NEEDS_REVIEW',
+      observed_minutes: 45,
+    });
+    (prisma.visitArrivalEvidence.update as any).mockResolvedValue({
+      id: 'ev-1',
+      reservation_id: 'res-1',
+      source: 'CHAT',
+      review_status: 'APPROVED',
+      observed_minutes: 55,
+    });
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/admin/staff-scorecard/evidence/ev-1/review',
+      headers: { 'x-api-key': ADMIN_KEY },
+      payload: { action: 'APPROVE', note: 'Chat menunjukkan 55 menit.', observedMinutes: 55 },
+    });
+
+    expect(res.statusCode).toBe(200);
+    const updateArg = (prisma.visitArrivalEvidence.update as any).mock.calls[0][0];
+    expect(updateArg.data.observed_minutes).toBe(55);
+    expect(auditService.logAdminAction).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'REVIEW_ARRIVAL_EVIDENCE',
+        payload: expect.objectContaining({
+          previousObservedMinutes: 45,
+          observedMinutes: 55,
+        }),
+      })
+    );
+  });
+
+  it('POST menolak selisih waktu di luar 0–1440 (400) tanpa menulis', async () => {
+    (prisma.visitArrivalEvidence.findFirst as any).mockResolvedValue({
+      id: 'ev-1',
+      review_status: 'NEEDS_REVIEW',
+      observed_minutes: 45,
+    });
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/admin/staff-scorecard/evidence/ev-1/review',
+      headers: { 'x-api-key': ADMIN_KEY },
+      payload: { action: 'APPROVE', observedMinutes: 1441 },
+    });
+
+    expect(res.statusCode).toBe(400);
+    expect(JSON.parse(res.body).code).toBe('INVALID_MINUTES');
+    expect(prisma.visitArrivalEvidence.update).not.toHaveBeenCalled();
+  });
+
   it('POST tolak menyimpan status REJECTED + catatan', async () => {
     (prisma.visitArrivalEvidence.findFirst as any).mockResolvedValue({
       id: 'ev-1',

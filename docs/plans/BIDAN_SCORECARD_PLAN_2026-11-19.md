@@ -407,7 +407,9 @@ Komponen baru wajib didaftarkan di `packages/admin-dashboard/src/ui-registry.jso
 **Perbaikan UX antrean verifikasi (2026-11-20, sudah terdepoy):**
 - Filter **bidan + bulan/tahun**; default hanya staf dinilai (14 bukti Yusi/owner disembunyikan).
 - **Pagination 15 + total**; sebelumnya UI memuat maksimal 50 tanpa "muat lagi" sehingga 28 item bisa tak terlihat.
-- **Konteks percakapan**: maksimal 3 pesan sebelum + 3 sesudah pesan bukti, label pengirim, dan tombol **Buka chat**.
+- **Konteks percakapan**: maksimal 3 pesan sebelum + 3 sesudah pesan bukti, label pengirim, dan tombol **Buka chat** yang membuka **modal thread** (60 pesan) tanpa meninggalkan halaman.
+- **Edit selisih waktu**: admin dapat mengoreksi menit telat (0–1440) sebelum menyetujui; nilai sebelum/sesudah tercatat di audit `REVIEW_ARRIVAL_EVIDENCE`.
+- **Alasan tolak cepat**: tombol preset (bukan soal menunggu, jadwal berikutnya, salah customer, di luar konteks, bukti tidak jelas) sehingga tidak perlu mengetik.
 - **Preview dampak** per bidan sebelum menyetujui (ketepatan, grade, cakupan).
 - Verifikasi produksi: antrean staf dinilai **19**, tiap item **7 pesan konteks** + `conversationId`; preview Thabita 18 menunggu → ketepatan 50% → 21,9%, grade D → E, cakupan 36,8% → 84,2%.
 

@@ -362,7 +362,10 @@
         "filtered",
         "pagination",
         "chat-context",
+        "thread-modal",
         "impact-preview",
+        "edit-observed-minutes",
+        "quick-reject",
         "review-modal",
         "error"
       ],
