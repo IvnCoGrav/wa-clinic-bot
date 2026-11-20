@@ -95,6 +95,13 @@ const REJECT_REASONS = [
   'Bukti tidak jelas',
 ];
 
+const APPROVE_REASONS = [
+  'Customer jelas menunggu bidan',
+  'Bukti sesuai keterlambatan',
+  'Sudah dikonfirmasi ke bidan',
+  'Pesan valid',
+];
+
 const PAGE_SIZE = 15;
 
 function formatWib(value: string | null | undefined): string {
@@ -277,6 +284,13 @@ export const ScorecardVerificationQueue: React.FC = () => {
   };
 
   const closeThread = () => setThread(null);
+
+  const reviewFromThread = (action: 'APPROVE' | 'REJECT') => {
+    if (!thread) return;
+    const item = thread.item;
+    setThread(null);
+    openReview(item, action);
+  };
 
   useEffect(() => {
     if (thread?.data) {
@@ -647,27 +661,34 @@ export const ScorecardVerificationQueue: React.FC = () => {
             </label>
           )}
 
-          {pending?.action === 'REJECT' && (
-            <div className="space-y-1.5">
-              <span className="text-xs font-bold text-ink">Alasan cepat</span>
-              <div className="flex flex-wrap gap-1.5">
-                {REJECT_REASONS.map((reason) => (
+          <div className="space-y-1.5">
+            <span className="text-xs font-bold text-ink">
+              Alasan cepat {pending?.action === 'REJECT' ? '' : '(opsional)'}
+            </span>
+            <div className="flex flex-wrap gap-1.5">
+              {(pending?.action === 'REJECT' ? REJECT_REASONS : APPROVE_REASONS).map((reason) => {
+                const selected = note === reason;
+                const activeClass =
+                  pending?.action === 'REJECT'
+                    ? 'bg-danger-soft text-danger border-danger-line'
+                    : 'bg-accent-soft text-accent border-accent/30';
+                return (
                   <button
                     key={reason}
                     type="button"
                     onClick={() => setNote(reason)}
                     className={`px-2 py-1 rounded-full text-[10px] font-bold border transition ${
-                      note === reason
-                        ? 'bg-danger-soft text-danger border-danger-line'
+                      selected
+                        ? activeClass
                         : 'bg-fill-1 text-ink-2 border-divider hover:bg-fill-2'
                     }`}
                   >
                     {reason}
                   </button>
-                ))}
-              </div>
+                );
+              })}
             </div>
-          )}
+          </div>
 
           <label className="text-xs font-bold text-ink block">
             Catatan {pending?.action === 'REJECT' ? '(wajib)' : '(opsional)'}
@@ -761,9 +782,25 @@ export const ScorecardVerificationQueue: React.FC = () => {
               })}
             </div>
 
-            <div className="flex justify-end">
-              <Button variant="secondary" onClick={closeThread}>
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              <Button variant="ghost" onClick={closeThread}>
                 Tutup
+              </Button>
+              <Button
+                variant="danger"
+                size="sm"
+                icon={<XCircle size={14} />}
+                onClick={() => reviewFromThread('REJECT')}
+              >
+                Tolak
+              </Button>
+              <Button
+                variant="primary"
+                size="sm"
+                icon={<CheckCircle2 size={14} />}
+                onClick={() => reviewFromThread('APPROVE')}
+              >
+                Setujui
               </Button>
             </div>
           </div>
