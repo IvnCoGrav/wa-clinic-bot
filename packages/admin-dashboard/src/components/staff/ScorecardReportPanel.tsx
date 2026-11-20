@@ -801,7 +801,11 @@ function StaffTab(props: { item: ScorecardItem; policy: ScorecardPolicy; periodL
             </>
           ) : (
             <p className="mt-2 text-[11px] text-ink-3">
-              Rincian pasien baru/ulang tidak tersimpan pada snapshot FINAL.
+              {item.status === 'FINAL'
+                ? 'Rincian pasien baru/ulang tidak tersimpan pada snapshot FINAL.'
+                : item.punctuality.total === 0
+                  ? 'Belum ada kunjungan selesai pada periode ini.'
+                  : 'Rincian kunjungan tidak tersedia.'}
             </p>
           )}
         </section>
@@ -934,7 +938,11 @@ function StaffTab(props: { item: ScorecardItem; policy: ScorecardPolicy; periodL
             </>
           ) : (
             <p className="mt-2 text-[11px] text-ink-3">
-              Rincian peran tim tidak tersimpan pada snapshot FINAL.
+              {item.status === 'FINAL'
+                ? 'Rincian peran tim tidak tersimpan pada snapshot FINAL.'
+                : item.punctuality.total === 0
+                  ? 'Belum ada kunjungan ulang pada periode ini.'
+                  : 'Rincian peran tim tidak tersedia.'}
             </p>
           )}
         </section>
