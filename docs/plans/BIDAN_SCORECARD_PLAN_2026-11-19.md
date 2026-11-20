@@ -386,6 +386,7 @@ Komponen baru wajib didaftarkan di `packages/admin-dashboard/src/ui-registry.jso
 - [x] Portal mobile bidan **disembunyikan** saat flag off: tombol "Raport Saya" tidak dirender, rute `/admin/staff/scorecard` dialihkan ke `/admin/staff/today`, dan `GET /api/staff/scorecard/me` menjawab `404 FEATURE_DISABLED`.
 - [x] Dashboard admin menjadi kanal utama review: `ScorecardReportPanel` di tab **Penilaian Bidan** (nilai per periode, rincian komponen + cakupan bukti, hitung ulang, bekukan snapshot khusus Super Admin).
 - [x] Build-arg Docker + compose + `.env.example` disiapkan agar aktivasi tidak perlu ubah kode.
+- [x] Alat verifikasi read-only `npm run verify:scorecard -- --year=2026 --month=11` (bandingkan angka service vs SQL mentah, exit code 1 bila ada selisih; `--json` untuk mesin).
 - [ ] Aktifkan untuk tenant uji, bandingkan 1 periode di server (butuh PostgreSQL produksi).
 - **Lulus jika:** dua periode berturut-turut tanpa selisih angka.
 
@@ -395,12 +396,19 @@ Komponen baru wajib didaftarkan di `packages/admin-dashboard/src/ui-registry.jso
 3. `docker compose build app && docker compose up -d --no-deps app`.
 4. Rollback: set `false` lalu build ulang (tanpa migrasi/skema yang perlu dibalik).
 
+**Validasi angka sebelum aktivasi:**
+1. `npm run verify:scorecard -- --year=2026 --month=11`
+2. Harus `HASIL: PASS — 0 selisih` untuk dua periode berturut-turut.
+3. Bila FAIL, selisih per bidang (total/tepat/telat jam/telat chat/belum terbukti) dicetak per bidan; periksa bukti yang belum direview di antrean verifikasi.
+
 **Verifikasi F8 (kode):**
 - `npm run typecheck` → hijau
 - `npm run check:reuse` → 189 baseline, **0 baru**
 - `npm run build` dashboard → sukses
 - `tests/integration/staff-scorecard-me.test.ts` → 8 tes (termasuk flag OFF/ON)
 - `tests/integration/staff-scorecard-report.test.ts` → 8 tes (report, recalculate, snapshot, RBAC SUPER_ADMIN, audit, error)
+- `tests/unit/scorecard-verification.test.ts` → 6 tes (PASS, selisih total/chat, baris hilang, invarian, periode kosong)
+- `npm test` → **1046 file / 8199 tes hijau**, 28 skipped, 0 gagal
 
 ---
 

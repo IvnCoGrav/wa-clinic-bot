@@ -48,6 +48,7 @@
     "sync:from-live": "node scripts/sync-from-live.mjs",
     "security:scan:staged": "tsx scripts/scan-secrets.ts --staged",
     "verify:backlog": "node scripts/verify-backlog-evidence.mjs",
+    "verify:scorecard": "tsx scripts/verify-scorecard-period.ts",
     "audit:verify-claims": "node scripts/verify-audit-claims.mjs --all",
     "audit:reservation-lock": "tsx scripts/audit/reservation-lock-probe.ts",
     "find:module": "node scripts/reuse/find-module.mjs",
