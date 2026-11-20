@@ -1,7 +1,7 @@
 # Plan: Bidan Scorecard (Penilaian + Verifikasi via Admin)
 
 - **Tanggal:** 2026-11-19
-- **Status:** **F1–F6 SELESAI, F8 SELESAI DI KODE (2026-11-20).** Portal mobile bidan disembunyikan di balik flag `SCORECARD_STAFF_UI_ENABLED` (default off); dashboard admin jadi kanal review utama. Migrasi belum diterapkan (DB lokal tidak tersedia); validasi angka dua periode di server tertunda. F7 (klasifikasi AI chat) opsional, belum dikerjakan.
+- **Status:** **F1–F8 SELESAI & TERDEPLOY (2026-11-20).** Dashboard admin sudah live di tab **Penilaian Bidan**; portal mobile bidan tetap disembunyikan di balik `SCORECARD_STAFF_UI_ENABLED` (default off). Migrasi diterapkan di produksi. Verifikasi dua periode (Okt & Nov 2026) PASS 0 selisih. Tersisa: konfigurasi `RetentionPolicy` aktif, penjadwalan collector bukti chat, dan review 78 kandidat chat.
 - **Prototipe acuan:** `docs/audit/2026-11-19/dashboard-bidan-mobile.html`, `docs/audit/2026-11-19/raport-bidan-v2.html`
 - **Temuan audit:** `docs/KNOWN_ISSUES.md` #359
 
@@ -380,15 +380,29 @@ Komponen baru wajib didaftarkan di `packages/admin-dashboard/src/ui-registry.jso
 - [ ] Hasil hanya `VisitArrivalEvidence` (bukan `arrived_at`).
 - **Lulus jika:** presisi ≥95%, nol false positive pada kunjungan tepat waktu.
 
-### F8 — Rollout (1 hari) — **KODE SELESAI 2026-11-20, validasi lapangan tertunda**
+### F8 — Rollout (1 hari) — **TERDEPLOY & TERVALIDASI 2026-11-20**
 
 - [x] Feature flag `SCORECARD_STAFF_UI_ENABLED` (default off) di backend + `VITE_SCORECARD_STAFF_UI_ENABLED` (build-time, default off) di dashboard.
 - [x] Portal mobile bidan **disembunyikan** saat flag off: tombol "Raport Saya" tidak dirender, rute `/admin/staff/scorecard` dialihkan ke `/admin/staff/today`, dan `GET /api/staff/scorecard/me` menjawab `404 FEATURE_DISABLED`.
 - [x] Dashboard admin menjadi kanal utama review: `ScorecardReportPanel` di tab **Penilaian Bidan** (nilai per periode, rincian komponen + cakupan bukti, hitung ulang, bekukan snapshot khusus Super Admin).
 - [x] Build-arg Docker + compose + `.env.example` disiapkan agar aktivasi tidak perlu ubah kode.
 - [x] Alat verifikasi read-only `npm run verify:scorecard -- --year=2026 --month=11` (bandingkan angka service vs SQL mentah, exit code 1 bila ada selisih; `--json` untuk mesin).
-- [ ] Aktifkan untuk tenant uji, bandingkan 1 periode di server (butuh PostgreSQL produksi).
-- **Lulus jika:** dua periode berturut-turut tanpa selisih angka.
+- [x] Deploy produksi 2026-11-20: merge `origin/master` ke branch `deploy/2026-11-13-merged` (tanpa konflik, `Caddyfile` server dipertahankan), build app+worker, `prisma migrate deploy` (123 migrasi; seed scope `admin_cs` diterapkan), recreate app+worker.
+- [x] Validasi dua periode di produksi: **Oktober 2026 PASS** — Bidan Thabita 53 kunjungan/16 tepat/16 telat jam/0 telat chat/21 belum terbukti; **November 2026 PASS** — Bidan Thabita 38/7/7/0/24. Semua bidan dinilai: 0 selisih API vs SQL.
+- **Lulus jika:** dua periode berturut-turut tanpa selisih angka. **TERPENUHI.**
+
+**Hasil deploy:**
+- `/health` → `OK`; `/ready` → `READY` (database `CONNECTED`, WAHA `WORKING`, queue `CONNECTED`, cron tanpa job gagal).
+- Portal bidan tetap **tersembunyi** (`SCORECARD_STAFF_UI_ENABLED` tidak diset / default false); dashboard admin sudah memuat panel raport.
+- Rollback point: tag git `pre-scorecard-deploy-20261120` di server.
+- Catatan drift: `migrate diff` masih melaporkan perbedaan **pre-existing** (tabel backup audit & default kolom), bukan dari migrasi scorecard; `prisma migrate status` menyatakan up to date.
+
+**Temuan operasional pasca-deploy (belum ditindaklanjuti):**
+1. Belum ada baris `RetentionPolicy` aktif untuk `default-tenant`; raport memakai default kode (benchmark 34,6%, sampel 40, tenure 4 bulan). Konfigurasikan lewat admin bila ingin policy kanonis.
+2. Collector bukti chat belum dijadwalkan (cron). Dry-run 1 Okt–20 Nov: 232 kunjungan selesai, 54 terukur, **78 kandidat chat**, 100 tanpa bukti. Selama belum dijalankan, kolom telat chat tetap 0.
+3. 78 kandidat chat perlu direview admin di antrean verifikasi sebelum masuk nilai.
+4. **Hak akses UI:** owner (ADMIN_CS) bisa review bukti, tetapi **pembekuan snapshot dan simpan policy hanya untuk Super Admin** (akun `Admin`). Bila owner ingin memakai akun sendiri untuk dua aksi itu, keputusan RBAC perlu diambil terpisah.
+5. **Bidan tanpa kunjungan** (contoh: Cindy, 0 kunjungan) saat ini tampil grade **E / skor 0**. Perlu keputusan owner apakah bidan 0 kunjungan dikecualikan (mis. cuti/baru masuk) daripada dinilai E.
 
 **Cara aktivasi portal bidan (setelah owner memvalidasi dashboard admin):**
 1. Set `SCORECARD_STAFF_UI_ENABLED=true` di `.env` server.
@@ -407,8 +421,8 @@ Komponen baru wajib didaftarkan di `packages/admin-dashboard/src/ui-registry.jso
 - `npm run build` dashboard → sukses
 - `tests/integration/staff-scorecard-me.test.ts` → 8 tes (termasuk flag OFF/ON)
 - `tests/integration/staff-scorecard-report.test.ts` → 8 tes (report, recalculate, snapshot, RBAC SUPER_ADMIN, audit, error)
-- `tests/unit/scorecard-verification.test.ts` → 6 tes (PASS, selisih total/chat, baris hilang, invarian, periode kosong)
-- `npm test` → **1046 file / 8199 tes hijau**, 28 skipped, 0 gagal
+- `tests/unit/scorecard-verification.test.ts` → 7 tes (PASS, selisih total/chat, bidan tanpa kunjungan, klaim tanpa data SQL, invarian, periode kosong)
+- Full suite hijau **1046 file / 8199 tes** pada commit `6c29becb` (sebelum perbaikan alat). Setelah perbaikan alat, tes terkait **7/7 hijau** + typecheck hijau; full suite berikutnya tidak stabil karena working tree sedang diedit paralel oleh pekerjaan lain (delay watchdog), bukan oleh perubahan scorecard.
 
 ---
 

@@ -137,15 +137,25 @@ export async function staffScorecardAdminRoutes(fastify: FastifyInstance) {
     }
 
     try {
-      const items = await evidenceService.listForReview({
+      const limit = Math.min(Math.max(Number(query.limit || 20), 1), 50);
+      const offset = Math.max(Number(query.offset || 0), 0);
+      const onlyScored = String(query.onlyScored ?? 'false') === 'true';
+
+      const { items, total } = await evidenceService.listForReview({
         tenantId,
         status,
         staffId: typeof query.staffId === 'string' && query.staffId ? query.staffId : null,
         from,
         to,
-        limit: Number(query.limit || 50),
+        limit,
+        offset,
+        onlyScored,
       });
-      return reply.send({ success: true, data: items });
+      return reply.send({
+        success: true,
+        data: items,
+        meta: { total, limit, offset },
+      });
     } catch (err: any) {
       return reply.status(500).send({
         success: false,
@@ -153,6 +163,35 @@ export async function staffScorecardAdminRoutes(fastify: FastifyInstance) {
       });
     }
   });
+
+  fastify.get(
+    '/api/admin/staff-scorecard/evidence/impact',
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const tenantId = resolveSessionTenantId(request);
+      const period = parsePeriod((request.query || {}) as Record<string, any>);
+      if (!period) {
+        return reply.status(400).send({
+          success: false,
+          code: 'INVALID_PERIOD',
+          error: 'Parameter year/month tidak valid.',
+        });
+      }
+
+      try {
+        const data = await staffScorecardService.previewPendingImpact({
+          tenantId,
+          year: period.year,
+          month: period.month,
+        });
+        return reply.send({ success: true, data });
+      } catch (err: any) {
+        return reply.status(500).send({
+          success: false,
+          error: err?.message || 'Gagal menghitung preview dampak.',
+        });
+      }
+    }
+  );
 
   fastify.post(
     '/api/admin/staff-scorecard/evidence/:id/review',

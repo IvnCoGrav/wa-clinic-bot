@@ -4,6 +4,21 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### 2026-11-20 - Fitur & Deploy: Raport Kinerja Bidan (F1–F8) + Gate Rollout
+
+- **Konteks:** Menindaklanjuti audit #359 (raport lama memberi nilai A dari data kosong). Fitur dibangun bertahap F1–F8: skema + domain nilai, collector bukti kedatangan, policy admin, antrean verifikasi bukti chat, agregasi + snapshot FINAL, raport mobile, dan gate rollout.
+- **Yang dikirim:**
+  - Tabel `staff_scorecard_policies`, `visit_arrival_evidence`, `staff_scorecard_snapshots` + enum; domain murni `src/domain/staff-scorecard.ts` dan `src/domain/visit-evidence.ts`.
+  - Agregasi: ketepatan (jam tiba + bukti chat `APPROVED`), volume prorata, retensi kohort bulan sebelumnya dari policy kanonis. Komponen `SKIPPED`/sampel kurang tidak dinilai; bobot dinormalisasi.
+  - Endpoint admin `policy`, `evidence` (list/review), `report`, `recalculate`, `snapshot` (+ audit); endpoint staf `GET /api/staff/scorecard/me`.
+  - Dashboard admin: `ScorecardReportPanel`, `ScorecardVerificationQueue`, `ScorecardPolicyPanel` di tab **Penilaian Bidan**.
+  - Portal mobile bidan (`StaffScorecard.tsx`) **disembunyikan** di balik flag `SCORECARD_STAFF_UI_ENABLED` (default off); rute dialihkan dan endpoint staf menjawab `404 FEATURE_DISABLED`.
+  - Alat verifikasi read-only `npm run verify:scorecard`.
+- **Deploy produksi (2026-11-20):** merge `origin/master` ke branch server `deploy/2026-11-13-merged` tanpa konflik (`Caddyfile` server dipertahankan), tag rollback `pre-scorecard-deploy-20261120`, build app+worker, `prisma migrate deploy` (123 migrasi; seed scope `admin_cs` diterapkan), recreate app+worker. `/health` OK dan `/ready` READY (DB `CONNECTED`, WAHA `WORKING`, queue `CONNECTED`).
+- **Validasi data:** `verify:scorecard` **PASS 0 selisih** untuk **Oktober 2026** (Bidan Thabita: 53 kunjungan; 16 tepat; 16 telat jam; 0 telat chat; 21 belum terbukti) dan **November 2026** (38; 7; 7; 0; 24). Saat verifikasi pertama, alat menemukan bug pada dirinya sendiri: bidan tanpa kunjungan dianggap selisih; diperbaiki dan diuji (7 tes).
+- **Temuan pasca-deploy:** (1) belum ada `RetentionPolicy` aktif untuk `default-tenant`, raport memakai default kode; (2) collector bukti chat belum dijadwalkan — dry-run 1 Okt–20 Nov menemukan **78 kandidat chat** dari 232 kunjungan (54 terukur, 100 tanpa bukti); (3) drift `migrate diff` yang dilaporkan adalah **pre-existing** (tabel backup audit & default kolom), bukan dari migrasi scorecard.
+- **Gerbang Regresi:** `npm run typecheck`, `check:reuse` (189 baseline / 0 baru), `check:ui-reuse` (0 pelanggaran), `check:architecture` (59 baseline / 0 baru). Full suite hijau **1046 file / 8199 tes** pada commit `6c29becb`; setelah perbaikan alat verifikasi, tes terkait 7/7 hijau. Full suite berikutnya terganggu oleh pekerjaan paralel (delay watchdog) di working tree yang sama.
+
 #### 2026-11-19 - Ops: Eksekusi Data Historis P1 Meta CAPI di Produksi (D1 Redaksi PII + D2 Backfill `purchase_occurred_at`)
 
 - **Konteks:** Melanjutkan remediasi P1 #356 setelah Fase 0–1 (kode) selesai. Eksekusi dijalankan pada server produksi `43.173.11.79` dengan backup penuh lebih dulu. Tidak ada deploy aplikasi dan tidak ada perubahan pada WAHA.

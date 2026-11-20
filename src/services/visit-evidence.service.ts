@@ -39,6 +39,15 @@ export interface CollectPeriodSummary {
   skippedReviewed: number;
 }
 
+export interface EvidenceMessageContext {
+  id: string;
+  content: string;
+  createdAt: Date;
+  direction: string | null;
+  senderType: string | null;
+  isAnchor: boolean;
+}
+
 export interface EvidenceReviewItem {
   id: string;
   source: string;
@@ -46,12 +55,16 @@ export interface EvidenceReviewItem {
   observedMinutes: number | null;
   confidence: number | null;
   reviewStatus: string;
+  conversationId: string | null;
   message: { id: string; content: string; createdAt: Date } | null;
+  /** Hingga 3 pesan sebelum & sesudah pesan bukti, untuk konteks review. */
+  context: EvidenceMessageContext[];
   reservation: {
     id: string;
     bookingDate: Date | null;
     customerName: string | null;
     staffName: string | null;
+    staffId: string | null;
   };
 }
 
@@ -182,25 +195,34 @@ export class VisitEvidenceService {
     return { persisted, skippedReviewed };
   }
 
-  /**
-   * Daftar bukti untuk antrean review admin. Hanya membaca.
-   */
-  async listForReview(params: {
+  private async buildReviewWhere(params: {
     tenantId: string;
     status?: 'AUTO' | 'NEEDS_REVIEW' | 'APPROVED' | 'REJECTED';
     staffId?: string | null;
     from?: Date | null;
     to?: Date | null;
-    limit?: number;
-  }): Promise<EvidenceReviewItem[]> {
-    const take = Math.min(Math.max(params.limit ?? 50, 1), 200);
+    onlyScored?: boolean;
+  }): Promise<any> {
     const where: any = {
       tenant_id: params.tenantId,
       review_status: params.status ?? 'NEEDS_REVIEW',
     };
 
     const reservationFilter: any = {};
-    if (params.staffId) reservationFilter.assigned_staff_id = params.staffId;
+    if (params.staffId) {
+      reservationFilter.assigned_staff_id = params.staffId;
+    } else if (params.onlyScored) {
+      try {
+        const staff = await this.prisma.staff.findMany({
+          where: { tenant_id: params.tenantId, active: true, incentive_eligible: true },
+          select: { id: true },
+        });
+        reservationFilter.assigned_staff_id = { in: (staff || []).map((row: any) => row.id) };
+      } catch {
+        // Fail-closed: jangan tampilkan staf yang tidak jelas statusnya.
+        reservationFilter.assigned_staff_id = { in: [] };
+      }
+    }
     if (params.from || params.to) {
       reservationFilter.booking_date = {
         ...(params.from ? { gte: params.from } : {}),
@@ -210,16 +232,97 @@ export class VisitEvidenceService {
     if (Object.keys(reservationFilter).length > 0) {
       where.reservation = reservationFilter;
     }
+    return where;
+  }
+
+  private async loadMessageContext(anchor: any): Promise<EvidenceMessageContext[]> {
+    const toContext = (row: any, anchorId: string): EvidenceMessageContext => ({
+      id: row.id,
+      content: row.content,
+      createdAt: new Date(row.created_at),
+      direction: row.direction ?? null,
+      senderType: row.sender_type ?? null,
+      isAnchor: row.id === anchorId,
+    });
+
+    if (!anchor?.conversation_id) {
+      return anchor ? [toContext(anchor, anchor.id)] : [];
+    }
+
+    const select = {
+      id: true,
+      content: true,
+      created_at: true,
+      direction: true,
+      sender_type: true,
+    };
+
+    try {
+      const [before, after] = await Promise.all([
+        this.prisma.message.findMany({
+          where: {
+            conversation_id: anchor.conversation_id,
+            created_at: { lt: anchor.created_at },
+          },
+          orderBy: { created_at: 'desc' },
+          take: 3,
+          select,
+        }),
+        this.prisma.message.findMany({
+          where: {
+            conversation_id: anchor.conversation_id,
+            created_at: { gt: anchor.created_at },
+          },
+          orderBy: { created_at: 'asc' },
+          take: 3,
+          select,
+        }),
+      ]);
+
+      const ordered = [...(before || []).reverse(), anchor, ...(after || [])];
+      const seen = new Set<string>();
+      return ordered
+        .filter((row: any) => {
+          if (!row?.id || seen.has(row.id)) return false;
+          seen.add(row.id);
+          return true;
+        })
+        .map((row: any) => toContext(row, anchor.id));
+    } catch {
+      // Konteks bersifat pelengkap; kegagalan baca tidak boleh menghilangkan bukti.
+      return [toContext(anchor, anchor.id)];
+    }
+  }
+
+  /**
+   * Halaman antrean review admin. Hanya membaca.
+   * `onlyScored` membatasi ke staf aktif + incentive_eligible (daftar dinilai).
+   */
+  async listForReview(params: {
+    tenantId: string;
+    status?: 'AUTO' | 'NEEDS_REVIEW' | 'APPROVED' | 'REJECTED';
+    staffId?: string | null;
+    from?: Date | null;
+    to?: Date | null;
+    limit?: number;
+    offset?: number;
+    onlyScored?: boolean;
+  }): Promise<{ items: EvidenceReviewItem[]; total: number }> {
+    const take = Math.min(Math.max(params.limit ?? 20, 1), 50);
+    const skip = Math.min(Math.max(params.offset ?? 0, 0), 10_000);
+    const where = await this.buildReviewWhere(params);
 
     const rows = await this.prisma.visitArrivalEvidence.findMany({
       where,
       orderBy: { evidence_at: 'desc' },
+      skip,
       take,
       include: {
         reservation: {
           select: {
             id: true,
             booking_date: true,
+            assigned_staff_id: true,
             customer: { select: { name: true } },
             assigned_staff: { select: { name: true } },
           },
@@ -227,30 +330,48 @@ export class VisitEvidenceService {
       },
     });
 
+    let total: number | null = null;
+    try {
+      total = await this.prisma.visitArrivalEvidence.count({ where });
+    } catch {
+      total = null;
+    }
+
     const messageIds = (rows || [])
       .map((row: any) => row.message_id)
       .filter((id: any) => Boolean(id));
 
     const messages = messageIds.length
-      ? await this.prisma.message.findMany({
-          where: { id: { in: messageIds } },
-          select: { id: true, content: true, created_at: true },
-        })
+      ? await this.prisma.message
+          .findMany({
+            where: { id: { in: messageIds } },
+            select: {
+              id: true,
+              content: true,
+              created_at: true,
+              conversation_id: true,
+              direction: true,
+              sender_type: true,
+            },
+          })
+          .catch(() => [])
       : [];
 
     const messageMap = new Map<string, any>(
       (messages || []).map((message: any) => [message.id, message])
     );
 
-    return (rows || []).map((row: any) => {
+    const items: EvidenceReviewItem[] = [];
+    for (const row of rows || []) {
       const message = row.message_id ? messageMap.get(row.message_id) : null;
-      return {
+      items.push({
         id: row.id,
         source: String(row.source),
         evidenceAt: new Date(row.evidence_at),
         observedMinutes: row.observed_minutes ?? null,
         confidence: row.confidence ?? null,
         reviewStatus: String(row.review_status),
+        conversationId: message?.conversation_id ?? null,
         message: message
           ? {
               id: message.id,
@@ -258,6 +379,7 @@ export class VisitEvidenceService {
               createdAt: new Date(message.created_at),
             }
           : null,
+        context: message ? await this.loadMessageContext(message) : [],
         reservation: {
           id: row.reservation?.id ?? row.reservation_id,
           bookingDate: row.reservation?.booking_date
@@ -265,9 +387,12 @@ export class VisitEvidenceService {
             : null,
           customerName: row.reservation?.customer?.name ?? null,
           staffName: row.reservation?.assigned_staff?.name ?? null,
+          staffId: row.reservation?.assigned_staff_id ?? null,
         },
-      };
-    });
+      });
+    }
+
+    return { items, total: Number(total ?? items.length) };
   }
 
   /**
