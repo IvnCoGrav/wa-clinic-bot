@@ -42,13 +42,25 @@ function listThumbFiles(tenantId) {
       try {
         const st = fs.statSync(fullPath);
         if (!st.isFile()) continue;
-        out.push({ relUrl: `/media/${scope}/${tenantId}/${name}`, fullPath, mtimeMs: st.mtimeMs });
+        out.push({ relUrl: `/media/${scope}/${tenantId}/${name}`, fullPath, mtimeMs: st.mtimeMs, scope });
       } catch {
         /* file hilang saat dibaca */
       }
     }
   }
   return out;
+}
+
+/**
+ * Folder penyimpanan yang benar untuk sebuah pesan:
+ * - customer masuk → inbound
+ * - balasan dari WhatsApp HP (webhook) → inbound (memakai saveInboundMedia)
+ * - bot / admin dashboard → outbound
+ */
+function expectedScope(msg) {
+  if (msg.direction === 'INBOUND') return 'inbound';
+  if (String(msg.sender_name || '').includes('WhatsApp HP')) return 'inbound';
+  return 'outbound';
 }
 
 function esc(v) {
@@ -66,7 +78,7 @@ async function main() {
   console.log(`[BACKFILL-MEDIA] Mode: ${dryRun ? 'DRY-RUN' : 'APPLY'} | tenant=${tenantId} | toleransi=${toleranceMs}ms`);
 
   const affected = await prisma.$queryRaw`
-    SELECT id, conversation_id, left(coalesce(content,''), 120) AS content, created_at
+    SELECT id, conversation_id, direction, sender_name, left(coalesce(content,''), 120) AS content, created_at
     FROM messages
     WHERE tenant_id = ${tenantId} AND payload_raw->>'unset' IS NOT NULL
     ORDER BY created_at ASC
@@ -115,7 +127,10 @@ async function main() {
 
   for (const msg of affected) {
     const t = new Date(msg.created_at).getTime();
-    const candidates = orphans.filter((f) => !used.has(f.relUrl) && Math.abs(f.mtimeMs - t) <= toleranceMs);
+    const scope = expectedScope(msg);
+    const candidates = orphans.filter(
+      (f) => f.scope === scope && !used.has(f.relUrl) && Math.abs(f.mtimeMs - t) <= toleranceMs
+    );
     if (candidates.length === 1) {
       matches.push({ msg, file: candidates[0] });
       used.add(candidates[0].relUrl);
@@ -126,11 +141,13 @@ async function main() {
     }
   }
 
-  const csv = ['message_id,conversation_id,created_at,content,matched_thumb,status'];
+  const csv = ['message_id,conversation_id,direction,sender_name,created_at,content,matched_thumb,status'];
   for (const m of matches) {
     csv.push([
       m.msg.id,
       m.msg.conversation_id,
+      m.msg.direction,
+      m.msg.sender_name,
       new Date(m.msg.created_at).toISOString(),
       m.msg.content,
       m.file.relUrl,
