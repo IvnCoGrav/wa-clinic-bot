@@ -1,43 +1,44 @@
-#!/usr/bin/env tsx
+#!/usr/bin/env node
 /**
  * Backfill: pulihkan `customers.preferences.house_photo_url` yang rusak akibat
- * operasi JSON Prisma yang tidak sah (`{ path, set }` disimpan sebagai nilai
+ * operasi JSON Prisma yang tidak sah (`{ path, set }` tersimpan sebagai nilai
  * literal sehingga seluruh `preferences` tertimpa).
  *
- * Sumber kebenaran URL thumbnail: `preferences.set` (berisi thumb URL valid).
+ * Sumber kebenaran URL thumbnail: `preferences.set`.
  *
- * Jalankan: npx tsx scripts/backfill-house-photo-from-corrupt-pref.ts --dry-run
- * Apply:     npx tsx scripts/backfill-house-photo-from-corrupt-pref.ts --apply
+ * Jalankan (di container produksi):
+ *   docker cp scripts/backfill-house-photo-from-corrupt-pref.js wa-clinic-bot-app-1:/app/bf-pref.js
+ *   docker exec wa-clinic-bot-app-1 node /app/bf-pref.js --dry-run
+ *   docker exec wa-clinic-bot-app-1 node /app/bf-pref.js --apply
  */
+'use strict';
 
-import { PrismaClient } from '@prisma/client';
-import fs from 'fs';
-import path from 'path';
+const { PrismaClient } = require('@prisma/client');
+const fs = require('fs');
+const path = require('path');
 
 const prisma = new PrismaClient();
 const MEDIA_ROOT = path.join(process.cwd(), 'storage', 'media');
 
-interface CorruptRow {
-  id: string;
-  phone: string | null;
-  name: string | null;
-  preferences: any;
-}
-
-function fileExistsForUrl(url: string): boolean {
-  const m = url.match(/^\/media\/(outbound|inbound)\/([^/]+)\/([^/]+)$/);
+function fileExistsForUrl(url) {
+  const m = /^\/media\/(outbound|inbound)\/([^/]+)\/([^/]+)$/.exec(url || '');
   if (!m) return false;
   return fs.existsSync(path.join(MEDIA_ROOT, m[1], m[2], m[3]));
+}
+
+function esc(v) {
+  return `"${String(v == null ? '' : v).replace(/"/g, '""')}"`;
 }
 
 async function main() {
   const args = process.argv.slice(2);
   const dryRun = !args.includes('--apply');
-  const tenantId = args.find((a) => a.startsWith('--tenant='))?.split('=')[1] || 'default-tenant';
+  const tenantArg = args.find((a) => a.startsWith('--tenant='));
+  const tenantId = tenantArg ? tenantArg.split('=')[1] : 'default-tenant';
 
   console.log(`[BACKFILL-PREF] Mode: ${dryRun ? 'DRY-RUN' : 'APPLY'} | tenant=${tenantId}`);
 
-  const rows = await prisma.$queryRaw<CorruptRow[]>`
+  const rows = await prisma.$queryRaw`
     SELECT id, phone, name, preferences
     FROM customers
     WHERE tenant_id = ${tenantId} AND preferences->'path' IS NOT NULL
@@ -46,14 +47,14 @@ async function main() {
 
   console.log(`[BACKFILL-PREF] Baris rusak: ${rows.length}`);
 
-  let ok = 0;
+  let ready = 0;
+  let applied = 0;
   let skipped = 0;
-  const csv: string[] = ['customer_id,phone,name,thumb_url,file_exists,status'];
+  const csv = ['customer_id,phone,name,thumb_url,file_exists,status'];
 
   for (const row of rows) {
-    const pref = (row.preferences && typeof row.preferences === 'object') ? row.preferences : {};
+    const pref = row.preferences && typeof row.preferences === 'object' ? row.preferences : {};
     const thumbUrl = typeof pref.set === 'string' ? pref.set : null;
-    const esc = (v: any) => `"${String(v ?? '').replace(/"/g, '""')}"`;
 
     if (!thumbUrl || !thumbUrl.startsWith('/media/')) {
       skipped++;
@@ -62,7 +63,7 @@ async function main() {
     }
 
     const exists = fileExistsForUrl(thumbUrl);
-    const next: Record<string, any> = { ...pref, house_photo_url: thumbUrl };
+    const next = { ...pref, house_photo_url: thumbUrl };
     delete next.path;
     delete next.set;
 
@@ -72,34 +73,31 @@ async function main() {
       skipped++;
       continue;
     }
-    if (dryRun) {
-      ok++;
-      continue;
-    }
+    ready++;
+    if (dryRun) continue;
 
     await prisma.customer.updateMany({
       where: { id: row.id, tenant_id: tenantId },
       data: { preferences: next },
     });
-    ok++;
+    applied++;
   }
 
-  const outDir = path.join(process.cwd(), 'logs');
   try {
-    fs.mkdirSync(outDir, { recursive: true });
-    const outFile = path.join(outDir, `backfill-pref-${Date.now()}.csv`);
+    fs.mkdirSync(path.join(process.cwd(), 'logs'), { recursive: true });
+    const outFile = path.join(process.cwd(), 'logs', `backfill-pref-${Date.now()}.csv`);
     fs.writeFileSync(outFile, csv.join('\n'), 'utf8');
     console.log(`[BACKFILL-PREF] CSV: ${outFile}`);
-  } catch (e: any) {
-    console.warn(`[BACKFILL-PREF] Gagal menulis CSV: ${e?.message || e}`);
+  } catch (e) {
+    console.warn(`[BACKFILL-PREF] Gagal menulis CSV: ${(e && e.message) || e}`);
   }
 
-  console.log(`[BACKFILL-PREF] ${dryRun ? 'Siap dipulihkan' : 'Dipulihkan'}: ${ok} | dilewati: ${skipped}`);
+  console.log(`[BACKFILL-PREF] siap=${ready} | ${dryRun ? 'belum diterapkan' : `diterapkan=${applied}`} | dilewati=${skipped}`);
   await prisma.$disconnect();
 }
 
 main().catch(async (e) => {
-  console.error('[BACKFILL-PREF] FATAL:', e?.message || e);
+  console.error('[BACKFILL-PREF] FATAL:', (e && e.message) || e);
   await prisma.$disconnect();
   process.exit(1);
 });
