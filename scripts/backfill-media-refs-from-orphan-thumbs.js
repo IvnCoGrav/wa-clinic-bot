@@ -124,8 +124,16 @@ async function main() {
   const matches = [];
   let ambiguous = 0;
   let noMatch = 0;
+  let skippedNonImage = 0;
+  const NON_IMAGE_MARKER = /^\[(VIDEO|AUDIO|VOICE|DOCUMENT|STICKER)\]/i;
 
   for (const msg of affected) {
+    // Media non-gambar tidak punya thumbnail — pencocokan berbasis thumb
+    // hanya akan salah tempel, jadi lewati.
+    if (NON_IMAGE_MARKER.test(String(msg.content || ''))) {
+      skippedNonImage++;
+      continue;
+    }
     const t = new Date(msg.created_at).getTime();
     const scope = expectedScope(msg);
     const candidates = orphans.filter(
@@ -185,7 +193,7 @@ async function main() {
   }
 
   console.log(
-    `[BACKFILL-MEDIA] cocok=${matches.length} | ambigu=${ambiguous} | tanpa_file=${noMatch} | ${dryRun ? 'belum diterapkan' : `diterapkan=${applied}`}`
+    `[BACKFILL-MEDIA] cocok=${matches.length} | ambigu=${ambiguous} | tanpa_file=${noMatch} | non_gambar=${skippedNonImage} | ${dryRun ? 'belum diterapkan' : `diterapkan=${applied}`}`
   );
 
   if (matches.length > 0) {
