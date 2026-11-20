@@ -1,4 +1,3 @@
-#!/usr/bin/env node
 /**
  * scripts/backfill-purchase-occurred-at.mjs
  * Task 2.6 (A-014b) + keputusan owner D2 (2026-11-19): mengisi `purchase_occurred_at`

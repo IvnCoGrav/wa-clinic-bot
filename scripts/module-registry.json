@@ -618,7 +618,7 @@
       "canonical": "src/services/staff-scorecard.service.ts",
       "exports": [
         "validateStaffScorecardPolicy",
-        "staffScorecardService"
+        "StaffScorecardService"
       ],
       "forbiddenDeclarations": [
         "validateStaffScorecardPolicy"

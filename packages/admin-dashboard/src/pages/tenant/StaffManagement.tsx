@@ -5,6 +5,8 @@ import { Modal } from '../../components/ui/Modal';
 import { FormErrorSummary } from '../../components/ui/FormErrorSummary';
 import { StaffRoleModal } from './StaffRoleModal';
 import { ScorecardPolicyPanel } from '../../components/staff/ScorecardPolicyPanel';
+import { ScorecardReportPanel } from '../../components/staff/ScorecardReportPanel';
+import { ScorecardVerificationQueue } from '../../components/staff/ScorecardVerificationQueue';
 import type { FieldIssue } from '../../lib/validateReservation';
 import { ToggleSwitch } from '../../components/common/ToggleSwitch';
 import {
@@ -1112,7 +1114,13 @@ export const StaffManagement: React.FC = () => {
       {/* ========================================================================= */}
       {/* TAB 3: PENILAIAN BIDAN */}
       {/* ========================================================================= */}
-      {activeTab === 'PENILAIAN' && <ScorecardPolicyPanel />}
+      {activeTab === 'PENILAIAN' && (
+        <div className="space-y-6">
+          <ScorecardReportPanel />
+          <ScorecardVerificationQueue />
+          <ScorecardPolicyPanel />
+        </div>
+      )}
 
       {/* ========================================================================= */}
       {/* MODAL: TAMBAH / EDIT ROLE & HAK AKSES */}

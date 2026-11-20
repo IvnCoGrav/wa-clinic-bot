@@ -23,6 +23,10 @@ RUN NODE_OPTIONS="--max-old-space-size=2048" npm run build
 WORKDIR /app/packages/admin-dashboard
 ARG VITE_CARTO_API_KEY=""
 ENV VITE_CARTO_API_KEY=$VITE_CARTO_API_KEY
+# F8 rollout gate portal bidan. Default OFF; isi "true" hanya setelah angka
+# raport divalidasi owner. Backend memakai env runtime bernama sama.
+ARG VITE_SCORECARD_STAFF_UI_ENABLED=""
+ENV VITE_SCORECARD_STAFF_UI_ENABLED=$VITE_SCORECARD_STAFF_UI_ENABLED
 RUN npm ci --prefer-offline && npm run build
 WORKDIR /app
 

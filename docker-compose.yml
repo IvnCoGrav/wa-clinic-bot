@@ -6,6 +6,7 @@ services:
       # Build-time var untuk Admin Dashboard (Vite inline). Sumber: .env server.
       args:
         VITE_CARTO_API_KEY: ${VITE_CARTO_API_KEY:-}
+        VITE_SCORECARD_STAFF_UI_ENABLED: ${SCORECARD_STAFF_UI_ENABLED:-false}
     expose:
       - "3000"
     restart: unless-stopped
