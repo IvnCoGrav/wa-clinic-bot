@@ -84,10 +84,31 @@ describe('compareScorecardPeriod (F8 gate)', () => {
     expect(fields).toContain('unknown');
   });
 
-  it('menandai bidan yang ada di API tetapi tidak muncul di SQL', () => {
+  it('bidan tanpa kunjungan (tidak ada baris SQL) bukan selisih', () => {
+    const item = buildItem({
+      punctuality: {
+        pct: null,
+        onTime: 0,
+        lateMeasured: 0,
+        chatLate: 0,
+        unknown: 0,
+        assessed: 0,
+        total: 0,
+        status: 'INSUFFICIENT_SAMPLE',
+      },
+    });
+    const result = compareScorecardPeriod([item], []);
+    expect(result).toEqual({ ok: true, mismatches: [], checkedStaff: 1 });
+  });
+
+  it('menandai klaim kunjungan API yang tidak punya data SQL', () => {
     const result = compareScorecardPeriod([buildItem()], []);
     expect(result.ok).toBe(false);
-    expect(result.mismatches[0]).toMatchObject({ staffId: 'staff-1', field: 'row', api: 1, raw: 0 });
+    expect(result.mismatches.map((m) => m.field)).toContain('totalVisits');
+    expect(result.mismatches.find((m) => m.field === 'totalVisits')).toMatchObject({
+      api: 37,
+      raw: 0,
+    });
   });
 
   it('menandai invarian assessed yang tidak konsisten walau field mentah cocok', () => {

@@ -37,9 +37,15 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
 
 ## 359. [Audit Bidan / Raport] Raport Kinerja Bidan v1 tidak valid sebagai alat penilaian (2026-11-19, OPEN — UI/UX dirombak lebih dulu)
 
-- **Status:** **F1–F6 SELESAI, F8 (gate rollout) SELESAI DI KODE (2026-11-20).** F1: skema + domain nilai. F2: collector bukti + backfill. F3: policy penilaian + tab admin. F4: antrean verifikasi bukti chat. F5: agregasi + snapshot FINAL immutable. F6: endpoint `/api/staff/scorecard/me` + halaman Raport Bidan mobile. F8: `SCORECARD_STAFF_UI_ENABLED` (default **off**) menyembunyikan portal bidan; dashboard admin (`ScorecardReportPanel`) menjadi kanal review utama (nilai, rincian, hitung ulang, bekukan). Migrasi belum diterapkan (DB lokal tidak tersedia). Validasi angka dua periode di server masih tertunda. F7 (klasifikasi AI chat) opsional dan belum dikerjakan. Plan: `docs/plans/BIDAN_SCORECARD_PLAN_2026-11-19.md`.
-- **Gate rollout:** portal bidan disembunyikan sampai owner memvalidasi angka dashboard admin. Aktivasi: `SCORECARD_STAFF_UI_ENABLED=true` di `.env` server **dan** build ulang dashboard dengan flag yang sama (lihat plan F8).
-- **Validasi angka:** jalankan `npm run verify:scorecard -- --year=2026 --month=11` di server (read-only). Harus PASS dua periode berturut-turut sebelum portal bidan diaktifkan; selisih dicetak per bidan/bidang.
+- **Status:** **F1–F8 SELESAI & TERDEPLOY (2026-11-20).** Dashboard admin live di tab **Penilaian Bidan**; portal mobile bidan tetap **tersembunyi** (`SCORECARD_STAFF_UI_ENABLED` default off). Migrasi produksi diterapkan (seed scope `admin_cs`). Verifikasi `verify:scorecard` **PASS 0 selisih** untuk Okt & Nov 2026.
+- **Gate rollout:** portal bidan disembunyikan sampai owner memvalidasi angka dashboard admin. Aktivasi: `SCORECARD_STAFF_UI_ENABLED=true` di `.env` server **dan** build ulang dashboard dengan flag yang sama (lihat plan F8). Rollback point server: tag `pre-scorecard-deploy-20261120`.
+- **Temuan operasional pasca-deploy (2026-11-20):**
+  1. Belum ada `RetentionPolicy` aktif untuk `default-tenant`; raport memakai default kode (benchmark 34,6%, sampel 40, tenure 4 bulan). Perlu dikonfigurasi lewat admin bila ingin policy kanonis.
+  2. Collector bukti chat (`VisitEvidenceService`) belum dijadwalkan; dry-run 1 Okt–20 Nov: 232 kunjungan, 54 terukur, **78 kandidat chat**, 100 tanpa bukti. Tanpa eksekusi, kolom telat chat tetap 0.
+  3. 78 kandidat chat menunggu review admin di antrean verifikasi sebelum masuk nilai.
+  4. Drift `migrate diff` yang dilaporkan saat deploy adalah **pre-existing** (tabel backup audit & default kolom), bukan dari migrasi scorecard.
+  5. Owner (ADMIN_CS) bisa review bukti, tetapi pembekuan snapshot dan simpan policy hanya untuk **Super Admin** (akun `Admin`). Perlu keputusan RBAC bila owner ingin memakai akunnya sendiri.
+  6. Bidan tanpa kunjungan (Cindy, 0 kunjungan) saat ini tampil **E / skor 0**; perlu keputusan apakah dikecualikan (cuti/baru masuk) daripada dinilai E.
 - **Konteks:** `raport_bidan.html` (artefak Antigravity) + `.agents/skills/audit-treatment-repeat/scripts/run-audit.mjs` diverifikasi ulang terhadap DB production (`wa_clinic_db`, status `completed`, cutoff 18 Nov 2026).
 - **Temuan kritis (terverifikasi query, bukan dugaan):**
   1. **Nilai A dari data kosong.** Bidan Yusi: `arrived_at` terisi **0 dari 125** kunjungan selesai (Okt–Nov); `otw_sent_at` 2 dari 125. Raport menampilkan "100% tepat jam, 0 komplain, nilai A". Insentif terbalik: tidak memakai tracking = nilai sempurna.

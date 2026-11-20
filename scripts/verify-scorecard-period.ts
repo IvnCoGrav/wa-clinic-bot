@@ -59,16 +59,17 @@ export function compareScorecardPeriod(
   const mismatches: ScorecardMismatch[] = [];
 
   for (const item of apiItems) {
-    const raw = rawById.get(item.staffId);
-    if (!raw) {
-      mismatches.push({
-        staffId: item.staffId,
-        field: 'row',
-        api: 1,
-        raw: 0,
-      });
-      continue;
-    }
+    // Bidan tanpa kunjungan tidak punya baris GROUP BY di SQL. Itu bukan
+    // selisih: bandingkan dengan nol. Bila API mengklaim ada kunjungan,
+    // field totalVisits akan tetap memicu mismatch.
+    const raw = rawById.get(item.staffId) ?? {
+      staffId: item.staffId,
+      totalVisits: 0,
+      onTime: 0,
+      lateMeasured: 0,
+      chatLate: 0,
+      unknown: 0,
+    };
 
     for (const { field, api } of FIELDS) {
       const apiValue = api(item);
