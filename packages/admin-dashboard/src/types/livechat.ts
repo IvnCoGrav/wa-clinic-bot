@@ -3,16 +3,9 @@ import type { ChatLocationData } from '../utils/mediaExtractor';
 import { extractMedia } from '../utils/mediaExtractor';
 import type { StaffOwnership } from '../utils/staffOwnershipBadge';
 import { formatChatDateSeparatorWib, isDifferentDayWib } from '../utils/dateWib';
-
-export interface QuotedMessageData {
-  id?: string;
-  wa_message_id?: string | null;
-  direction?: 'INBOUND' | 'OUTBOUND';
-  sender_name?: string | null;
-  sender_type?: string | null;
-  content?: string;
-  media?: ChatMediaData;
-}
+import type { QuotedMessageData } from '../utils/quotedMessage';
+export type { QuotedMessageData } from '../utils/quotedMessage';
+export { extractQuotedMessage } from '../utils/quotedMessage';
 
 export interface ChatMessage {
   id: string;
@@ -128,29 +121,6 @@ export interface LiveChatItem {
   pinFromCustomerAt?: string | null;
   pinFromStaffAt?: string | null;
   sharelocRequestedAt?: string | null;
-}
-
-export function extractQuotedMessage(msg: any): QuotedMessageData | undefined {
-  const q = msg?.quoted_message ??
-            msg?.payload_raw?.quoted_message ??
-            msg?.payloadRaw?.quoted_message ??
-            msg?.payload_raw?.quotedMsg ??
-            msg?.payload_raw?._data?.quotedMsg;
-  if (!q) return undefined;
-
-  const content = q.content ?? q.body ?? q.text ?? (q.message?.conversation || q.message?.extendedTextMessage?.text) ?? '';
-  const senderName = q.sender_name ?? q.senderName ?? q.pushName ?? (q.fromMe ? 'Bidan / CS' : undefined);
-  const media = extractMedia(q);
-
-  return {
-    id: q.id ?? q.messageId ?? q.key?.id,
-    wa_message_id: q.wa_message_id ?? q.id ?? q.key?.id,
-    direction: q.direction ?? (q.fromMe ? 'OUTBOUND' : 'INBOUND'),
-    sender_name: senderName,
-    sender_type: q.sender_type ?? (q.fromMe ? 'ADMIN' : 'CUSTOMER'),
-    content,
-    media,
-  };
 }
 
 export function formatChatDateSeparator(dateStr: string): string {

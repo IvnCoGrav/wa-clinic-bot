@@ -10,6 +10,7 @@ import { AiModelConfigService, supportsThinkingParam } from '../../../config/ai-
 import { ContextGrounder, GroundingOutput } from './context-grounder';
 import { salvageToolCallsFromDsml } from './dsml-tool-salvage';
 import type { V3RetrievedChunk, AgentRunnerOutput } from '../agent-runner';
+import type { NormalizedQuotedMessage } from '../../../utils/canonical-message-normalizer';
 
 const GLM_TIMEOUT_MS = Math.max(1000, parseInt(process.env.LLM_TIMEOUT_GLM_MS || '60000', 10) || 60000);
 const V3_DEFAULT_TIMEOUT_MS = 25000;
@@ -908,9 +909,10 @@ export class GenerationStage {
       /** Fase 2b: selaraskan prompt Call 2 dengan skema tool yang nyata di-mask. */
       isSaveReservationMasked?: boolean;
       isCalculateDeliveryMasked?: boolean;
+      quotedContext?: NormalizedQuotedMessage;
     }
   ): Promise<GenerationOutput> {
-    const { session, isFollowUp, cleanIncomingText, conversationHistory, messages, preGroundingBlock, tenantId, isSaveReservationMasked, isCalculateDeliveryMasked } = opts;
+    const { session, isFollowUp, cleanIncomingText, conversationHistory, messages, preGroundingBlock, tenantId, isSaveReservationMasked, isCalculateDeliveryMasked, quotedContext } = opts;
     // 6. Panggilan Kedua: Menyusun teks balasan ramah Bidan Yusi menggunakan fakta tool
     // Perbarui system prompt di messages[0] dengan session terbaru yang telah di-grounding hasil tools
     // (async agar blok contoh dinamis bank tetap dipakai, bukan revert ke statis).
@@ -930,7 +932,7 @@ export class GenerationStage {
     turn.fewShotExemplars = refreshedPrompt.exemplars;
 
     // Tempel ulang ringkasan + phase directive dari session terbaru
-    const contextSummary = ContextGrounder.buildContextSummary(session, cleanIncomingText, conversationHistory);
+    const contextSummary = ContextGrounder.buildContextSummary(session, cleanIncomingText, conversationHistory, quotedContext);
     const phaseDirective = ContextGrounder.buildPhaseDirective(
       ContextGrounder.deriveConversationPhase(session, isFollowUp),
       session

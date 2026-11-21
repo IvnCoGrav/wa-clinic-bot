@@ -1,0 +1,31 @@
+{
+  "event": "message",
+  "session": "default",
+  "payload": {
+    "id": "false_6281200000001@c.us_3EB0A1B2C3D4E5F67891",
+    "timestamp": 1732150005,
+    "from": "6281200000001@c.us",
+    "fromMe": false,
+    "to": "6289900000000@c.us",
+    "body": "Bisa untuk bayi usia 3 bulan?",
+    "hasMedia": false,
+    "_data": {
+      "notifyName": "Bunda Pasien",
+      "message": {
+        "extendedTextMessage": {
+          "text": "Bisa untuk bayi usia 3 bulan?",
+          "contextInfo": {
+            "stanzaId": "true_6281200000001@c.us_3EB0BOT222222222222",
+            "participant": "6289900000000@c.us",
+            "quotedMessage": {
+              "imageMessage": {
+                "caption": "Pricelist Layanan Homecare & Spa Bayi",
+                "mimetype": "image/jpeg"
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

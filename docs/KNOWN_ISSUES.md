@@ -3,6 +3,51 @@
 Catatan temuan yang sengaja dipisah dari fitur aktif, supaya tidak hilang dan
 tidak disalahartikan sebagai bug dari perubahan terbaru.
 
+## 366. [Test Hygiene] Fixture tanggal tetap membuat `reservation-series-core-gates` gagal setelah 2026-11-20 (2026-11-21, RESOLVED)
+
+- **Gejala:** `npm test` penuh 2026-11-21 menghasilkan 1 failure: `tests/unit/reservation-series-core-gates.test.ts` → `PAST_SESSION_DATE` (expected `DUPLICATE_BOOKING`). Fixture memakai `new Date('2026-11-20T10:00:00Z')` (baris 22), sehingga setelah tanggal tersebut service menolak sebagai sesi lampau sebelum mencapai gate duplikasi.
+- **Dampak:** klaim "full suite hijau" tidak bisa diverifikasi. Ini **bukan regresi quote**: file test & `reservation-series.service.ts` tidak diubah oleh pekerjaan quote, dan run penuh sebelum maupun sesudah perubahan quote sama-sama menghasilkan 1 failure yang sama.
+- **Perbaikan (2026-11-21):** fixture diganti tanggal relatif `futureDate(30)` / `futureDate(37)` (bukan hardcode). Test lulus; logika `reservationSeriesService` tidak diubah.
+- **Verifikasi:** `npx vitest run tests/unit/reservation-series-core-gates.test.ts` → 1/1 PASS.
+
+## 365. [Live Chat / WAHA] Pengiriman Pesan Gagal HTTP 500 akibat ID Sematan Quote Sementara (temp_*) Diteruskan ke WAHA reply_to (2026-11-21, RESOLVED)
+
+- **Status:** FIXED (2026-11-21). Selesai diimplementasikan dan diverifikasi menyeluruh melalui rencana revisi `docs/plans/LIVECHAT_REPLY_QUOTED_MESSAGE_PLAN_2026-11-21.md` (Fase 0 s/d 5).
+- **Gejala:** Admin/Bidan membalas chat pasien lewat Live Chat dashboard dengan teks *"berikut pricelist kami bunda, Kalau boleh tau rumahnya dimana ya bunda? kami bantu cekkan ongkrinya. 😊"*. Pengiriman gagal total dengan error WAHA HTTP 500: `Message id be in format false_11111111111@c.us_AAAAAAAAAAAAAAAAAAAA[_participant]`, retry 2x lalu gagal.
+- **Akar Masalah:**
+  1. Di frontend (`useLiveChatComposerHandler.ts`), gelembung pesan optimistik dibuat dengan ID sementara `temp_${Date.now()}` (mis. `temp_1795220000994`).
+  2. Ketika admin me-reply bubble yang belum memiliki `wa_message_id` valid (misalnya bubble optimistik yang baru dikirim atau pesan yang belum selesai sinkronisasi), frontend mengirimkan `replyToMessageId = currentReplyingTo.wa_message_id || currentReplyingTo.id` -> nilai `temp_1795220000994` terkirim ke backend.
+  3. Di backend (`live-chat.service.ts`), pencarian `messageService.getMessageById("temp_...")` menghasilkan null atau tidak memiliki `wa_message_id`. Blok `catch`/`else` melakukan fallback berbahaya: `replyToWaMessageId = replyToMessageId` (tetap string `"temp_..."` atau UUID internal DB).
+  4. Driver WAHA (`waha.driver.ts` & `client.ts`) meneruskan string tersebut ke parameter `reply_to` di endpoint `/api/sendText`.
+  5. Engine WAHA NOWEB (Baileys) memanggil fungsi `parseMessageIdSerialized(reply_to)` yang mewajibkan format serialized WhatsApp key (`false_11111111111@c.us_AAAAAAAAAAAAAAAAAAAA`). String `temp_...` gagal di-parse sehingga melempar exception 500.
+  6. Tidak ada mekanisme *graceful degradation* (jika `reply_to` tidak valid atau gagal di WAHA, pesan teks seharusnya tetap terkirim tanpa quote, bukan membatalkan pengiriman pesan pasien seutuhnya).
+- **Solusi Komprehensif yang Diimplementasikan:**
+  1. **Leaf Utility Validasi ID Provider-Aware** (`src/utils/whatsapp-message-id.ts`): Memvalidasi format serialized WAHA (`(true|false)_...`) dan WABA (`wamid...`). ID sementara (`temp_*`), UUID DB, dan stanza mentah XML ditolak deterministik.
+  2. **Driver Graceful Degradation (Fail-Open)** (`src/integrations/whatsapp/waha.driver.ts`): Jika WAHA menolak format ID (`Message id be in format...`), driver otomatis melakukan retry 1x tanpa `reply_to`, mengembalikan `replyToDropped: true`. Pesan teks utama dijamin tidak pernah gagal terkirim.
+  3. **Guard Service & Cross-Conversation Isolation** (`src/services/live-chat.service.ts`): Menolak quote lintas percakapan, menghapus fallback ke `temp_*`, mencatat `reply_to_status: "dropped_after_provider_reject"`, dan memberi toast peringatan ke admin jika sematan dilepas provider.
+  4. **Normalisasi Quote Inbound Kanonis** (`src/utils/canonical-message-normalizer.ts`, `src/routes/webhook.route.ts`, `src/routes/waba-webhook.route.ts`): Memindai `contextInfo` di seluruh tipe pesan (teks, gambar, video, dokumen, PTT, stiker, kontak, lokasi) untuk WAHA dan meresolve `context.id` ke DB untuk WABA via seam tunggal. Quote outbound dari HP WA admin juga ditangkap secara konsisten.
+  5. **Konsolidasi Frontend Tunggal** (`packages/admin-dashboard/src/utils/quotedMessage.ts`): Mengeliminasi duplikasi parser di Live Chat, PWA Staf (`StaffChatBubble.tsx`), dan SSE `StaffToday.tsx`, dengan perlindungan masking PII terapis.
+  6. **Grounding AI Bersih** (`src/v3/agent/pipeline/context-grounder.ts`): Menyuntikkan blok `[PESAN YANG DIBALAS CUSTOMER]` ke `buildContextSummary` tanpa mencemari `incomingText`.
+- **Hardening P1 (pasca-audit 2026-11-21):**
+  1. **Error WAHA asli** (`src/integrations/waha/client.ts`): `extractWahaErrorDetail()` membaca `exception.message` (bentuk body Issue #365), bukan hanya `error.message` axios. Sebelumnya fallback tidak akan terpicu pada error 500 yang sebenarnya.
+  2. **Dua root payload** (`src/utils/canonical-message-normalizer.ts`, `packages/admin-dashboard/src/utils/quotedMessage.ts`): `contextInfo` dipindai dari `message` DAN `_data.message`, dan contextInfo non-quote (mis. `externalAdReply`) tidak lagi memblokir quote yang sah.
+  3. **Burst coalescing** (`src/services/burst-coalesce.service.ts`): `quoted` dibawa ke `mergedMessage`, sehingga AI grounding tidak kehilangan konteks saat pesan dibuffer (`BURST_COALESCE_MS` aktif).
+  4. **Observability** (`src/services/live-chat.service.ts`): quote yang dibatalkan sebelum kirim dicatat sebagai `reply_to_status: "dropped_before_send"`; penolakan provider tetap `dropped_after_provider_reject`.
+- **Bukti Pengujian & Verifikasi:**
+  - `tests/unit/whatsapp-message-id.test.ts` (9 tests)
+  - `tests/unit/waha-client-error-detail.test.ts` (7 tests — body error asli WAHA)
+  - `tests/unit/waha-reply-fallback.test.ts` (5 tests — termasuk end-to-end error asli)
+  - `tests/unit/live-chat.service.test.ts` (20 tests)
+  - `tests/unit/quoted-message-normalizer.test.ts` (9 tests — termasuk dua root payload)
+  - `tests/unit/waha-inbound-quoted-payload.test.ts` (2 tests)
+  - `tests/integration/waba-webhook-quoted.test.ts` (3 tests)
+  - `tests/unit/quoted-message-dashboard.test.ts` (8 tests — termasuk dua root payload)
+  - `tests/unit/v3-quoted-grounding.test.ts` (4 tests)
+  - `tests/unit/burst-coalesce.test.ts` (termasuk regresi `quoted` terbawa saat merge)
+  - Suite quote terkait: **12 file / 95 tests PASS**.
+  - Gate: `npm run typecheck`, `npm run build`, `npm run check:reuse` (0 pelanggaran baru), frontend build PASS.
+  - Full suite 2026-11-21: **8334 pass / 1 failure load-sensitive bergantian** (pernah `production_edge_cases.test.ts` #13, pernah `media-watermark-autoprune.test.ts` 4.11; keduanya lulus saat dijalankan sendiri), 28 skipped. Failure tanggal #366 sudah diperbaiki.
+
 ## 364. [Deploy] Rilis Dashboard Staf "Opsi C" Terpasang sebagai Artifact, Belum Lewat Image (2026-11-20, OPEN — MENUNGGU RILIS BERIKUTNYA)
 
 - **Status:** perbaikan **sudah aktif di produksi**, tetapi hanya sebagai artifact `dist` yang disalin ke container `app` (backup lama: `/app/packages/admin-dashboard/dist.bak`).
@@ -23,6 +68,13 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
 - **Batasan permanen:** foto **resolusi penuh** yang sudah dihapus prune **tidak dapat dipulihkan**; yang kembali hanya thumbnail. Retensi pesan 120 hari tetap **NONAKTIF** (keputusan bisnis belum diambil) sehingga thumbnail akan terus bertambah.
 - **Kapasitas jangka panjang (OPEN):** setelah pemulihan, ±1.372 pesan mereferensikan thumbnail (±116 MB dari kuota 200 MB). Thumbnail baru hanya ±45 KB, tetapi thumbnail lama tetap ±85 KB. Opsi yang perlu keputusan bisnis: (a) naikkan `media_quota_bytes` tenant, (b) aktifkan retensi pesan 120 hari, atau (c) rekompresi batch thumbnail lama ke 480px/q60. Tanpa salah satunya, kuota diperkirakan penuh dalam ±4–6 bulan pada volume ±13 gambar/hari.
 - **Verifikasi:** `tests/unit/media-refs-patch.test.ts`, `media-thumb-size.test.ts`, `media-watermark-autoprune.test.ts` (guard 24 jam), `media-fallback-thumb.test.ts`; typecheck + suite penuh.
+
+## 363. [Test Hygiene] Dua gerbang suite sensitif beban mesin (2026-11-20, OPEN)
+
+- **Gejala:** pada `npm test` paralel penuh, `tests/unit/rbac-livechat-contract.test.ts` (timeout 15 dtk) dan `tests/unit/reuse-gate.test.ts` (assert gate <60 dtk) dapat gagal palsu. Keduanya **lulus saat dijalankan sendiri** (12/12 dan 14/14) — dibuktikan 2026-11-20 pada mesin yang sama.
+- **Dampak:** klaim "full suite hijau" wajib disertai bukti *revert-and-rerun*/run terisolasi. Jangan mengubah kode fitur untuk mengejar kegagalan ini.
+- **Rekomendasi (belum dieksekusi):** naikkan `testTimeout` khusus test RBAC tersebut dan/atau jalankan gate reuse secara serial di CI (`maxWorkers` terbatas). Tidak mengubah ambang fungsional.
+- **Tambahan 2026-11-21:** `tests/unit/production_edge_cases.test.ts` #13 (`LOCATION_CONFIRMED lenient override via V3 Agent`) timeout 30 dtk pada full suite paralel, tetapi lulus saat dijalankan sendiri. Timeout khusus test itu **sudah dinaikkan ke 60 dtk** (test-only, bukan logika fitur). Full suite paralel masih dapat memunculkan flaky lain (mis. `media-watermark-autoprune` 4.11) — jalankan test terkait secara terisolasi untuk membuktikan bukan regresi.
 
 ## 362. [Departure Watchdog] Early Warning Keterlambatan Keberangkatan & Batasan Pengiriman WhatsApp Admin (2026-11-20)
 

@@ -37,6 +37,7 @@ import {
   extractMedia,
   maskPhoneInTextClient,
 } from '../../utils/mediaExtractor';
+import { extractQuotedMessage } from '../../utils/quotedMessage';
 import { emitBootPhase } from '../../lib/bootProgress';
 import { fireAndForget, mustSucceed } from '../../services/errorPolicy';
 import { APP_VERSION, BUILD_TIME } from '../../config/version';
@@ -923,15 +924,18 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
             read_at: payload.readAt || payload.read_at || null,
             is_revoked: payload.isRevoked ?? payload.is_revoked ?? false,
             quoted_message: (() => {
-              const q = payload.quoted_message || payload.quotedMessage || payload.payloadRaw?.quoted_message || payload.payload_raw?.quoted_message || null;
+              const q = extractQuotedMessage(payload);
               if (q && typeof q === 'object') {
                 const qc: any = { ...q };
                 if (typeof qc.content === 'string') qc.content = maskP(qc.content);
                 if (typeof qc.sender_name === 'string') qc.sender_name = maskP(qc.sender_name);
                 if (typeof qc.senderName === 'string') qc.senderName = maskP(qc.senderName);
+                if (qc.media && typeof qc.media.caption === 'string') {
+                  qc.media = { ...qc.media, caption: maskP(qc.media.caption) };
+                }
                 return qc;
               }
-              return q;
+              return q || undefined;
             })(),
             payload_raw: payload.payloadRaw || payload.payload_raw || payload.payload_raw || undefined,
           };

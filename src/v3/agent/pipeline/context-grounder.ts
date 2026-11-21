@@ -15,6 +15,7 @@ import { PatientProfileExtractor } from '../../state/patient-extractor';
 import { V3ConversationSummarizer } from '../../state/conversation-summarizer';
 import { ConversationState } from '@prisma/client';
 import type { AgentRunnerOutput, V3RetrievedChunk } from '../agent-runner';
+import type { NormalizedQuotedMessage } from '../../../utils/canonical-message-normalizer';
 import {
   deriveConversationPhase,
   buildPhaseDirective,
@@ -137,6 +138,16 @@ export class ContextGrounder {
     return false;
   }
 
+  private static buildQuotedBlock(q?: NormalizedQuotedMessage): string {
+    const raw = (q?.content || '').replace(/\s+/g, ' ').trim();
+    if (!raw) return '';
+    const snippet = raw.length > 140 ? `${raw.slice(0, 137)}...` : raw;
+    return (
+      `[PESAN YANG DIBALAS CUSTOMER]: "${snippet}"\n` +
+      '(Respon dan pilihan customer di bawah ini merujuk langsung pada pesan yang dikutip tersebut.)\n'
+    );
+  }
+
   /**
    * Ringkasan konteks deterministik (0 token): apa yang SUDAH dibahas, FOKUS saat ini,
    * dan apa yang DILARANG diulang — anti kaset-rusak & anti amnesia antar turn.
@@ -144,13 +155,16 @@ export class ContextGrounder {
   public static buildContextSummary(
     session: CustomerGoalSession,
     cleanIncomingText: string,
-    conversationHistory: Array<{ role: string; content: string }>
+    conversationHistory: Array<{ role: string; content: string }>,
+    quotedContext?: NormalizedQuotedMessage
   ): string {
     try {
       const summary = V3ConversationSummarizer.summarize(session, cleanIncomingText, {
         history: conversationHistory.map((h) => ({ role: h.role as 'user' | 'assistant', content: h.content })),
         customerInput: cleanIncomingText,
       });
+      const quotedBlock = this.buildQuotedBlock(quotedContext);
+      const body = quotedBlock ? `${quotedBlock}${summary}` : summary;
       // Pin lokasi permanen di baris teratas grounding (Rule 16 anti-amnesia):
       // begitu lokasi tersimpan di sesi, LLM melihatnya SEBELUM ringkasan lain.
       const loc = (session as any)?.location;
@@ -162,9 +176,9 @@ export class ContextGrounder {
         // wilayah kasar (anti "sebut jarak tanpa ditanya").
         const isPrecise = Boolean(loc.kelurahan || loc.kecamatan || loc.kota);
         const dist = (isPrecise && loc.distanceKm != null) ? ` (${loc.distanceKm} km, rute aktif)` : '';
-        return `[LOKASI TERKUNCI]: ${label}${dist}\n${summary}`;
+        return `[LOKASI TERKUNCI]: ${label}${dist}\n${body}`;
       }
-      return summary;
+      return body;
     } catch (e) {
       return '';
     }

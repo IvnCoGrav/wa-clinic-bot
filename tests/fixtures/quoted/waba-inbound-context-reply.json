@@ -1,0 +1,43 @@
+{
+  "object": "whatsapp_business_account",
+  "entry": [
+    {
+      "id": "100000000000001",
+      "changes": [
+        {
+          "field": "messages",
+          "value": {
+            "messaging_product": "whatsapp",
+            "metadata": {
+              "display_phone_number": "6289900000000",
+              "phone_number_id": "100000000000002"
+            },
+            "contacts": [
+              {
+                "profile": {
+                  "name": "Bunda Pasien"
+                },
+                "wa_id": "6281200000001"
+              }
+            ],
+            "messages": [
+              {
+                "from": "6281200000001",
+                "id": "wamid.HBgMNTY4MTIwMDAwMDAwMRUAElggM0VCMDAwMDAwMDAwMDAwMDAAA==",
+                "timestamp": "1732150010",
+                "type": "text",
+                "text": {
+                  "body": "Saya mau ambil paket yang ini ya"
+                },
+                "context": {
+                  "from": "6289900000000",
+                  "id": "wamid.HBgMNTY4OTkwMDAwMDAwMBUAElggM0VCMDAwMDAwMDAwMDAwMDEAA=="
+                }
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

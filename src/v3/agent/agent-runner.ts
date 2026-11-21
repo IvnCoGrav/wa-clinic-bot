@@ -14,6 +14,7 @@ import { evaluatePricelistTrigger } from './pipeline/pricelist-gate';
 import { GenerationStage, TurnState, createTelemetry, persistTurnMessages, reportTurnError } from './pipeline/generation-stage';
 import { telemetryService } from '../../services/telemetry.service';
 import { buildSanitizedHistory, wrapCustomerMessage } from '../../utils/prompt-injection-sanitizer';
+import type { NormalizedQuotedMessage } from '../../utils/canonical-message-normalizer';
 
 /**
  * Detektor semantik token-based (sesi 951450): apakah pesan adalah komitmen
@@ -56,6 +57,8 @@ export interface AgentRunnerInput {
   forceModel?: string;
   skipDbLogging?: boolean;
   preExtractedIntents?: string[];
+  /** Konteks pesan yang dikutip customer — HANYA untuk grounding, bukan untuk gate deterministik. */
+  quotedContext?: NormalizedQuotedMessage;
 }
 
 export interface V3RetrievedChunk {
@@ -175,7 +178,7 @@ export class V3AgentRunner {
     } catch { /* best-effort — jangan gagalkan turn */ }
 
     // Ringkasan + direktif fase + prompt router Call 1.
-    const contextSummary = ContextGrounder.buildContextSummary(session, cleanIncomingText, conversationHistory);
+    const contextSummary = ContextGrounder.buildContextSummary(session, cleanIncomingText, conversationHistory, input.quotedContext);
     let lastContextSummary = contextSummary;
     const phaseDirective = ContextGrounder.buildPhaseDirective(
       ContextGrounder.deriveConversationPhase(session, isFollowUp), session
@@ -489,6 +492,7 @@ export class V3AgentRunner {
             session, isFollowUp, cleanIncomingText, conversationHistory,
             messages, preGroundingBlock, tenantId,
             isSaveReservationMasked, isCalculateDeliveryMasked,
+            quotedContext: input.quotedContext,
           });
           lastContextSummary = gen.contextSummary;
           lastPhaseDirective = gen.phaseDirective;
@@ -542,6 +546,7 @@ export class V3AgentRunner {
             session, isFollowUp, cleanIncomingText, conversationHistory,
             messages, preGroundingBlock, tenantId,
             isSaveReservationMasked, isCalculateDeliveryMasked,
+            quotedContext: input.quotedContext,
           });
           lastContextSummary = gen.contextSummary;
           lastPhaseDirective = gen.phaseDirective;

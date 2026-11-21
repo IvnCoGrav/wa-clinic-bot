@@ -1,0 +1,31 @@
+{
+  "event": "message",
+  "session": "default",
+  "payload": {
+    "id": "true_6281200000001@c.us_3EB0ADM333333333333",
+    "timestamp": 1732150020,
+    "from": "6289900000000@c.us",
+    "fromMe": true,
+    "to": "6281200000001@c.us",
+    "chatId": "6281200000001@c.us",
+    "body": "Bisa Bunda, untuk usia 3 bulan sangat cocok dengan Baby Massage & Gym ya",
+    "hasMedia": false,
+    "_data": {
+      "notifyName": "Admin Klinik",
+      "message": {
+        "extendedTextMessage": {
+          "text": "Bisa Bunda, untuk usia 3 bulan sangat cocok dengan Baby Massage & Gym ya",
+          "contextInfo": {
+            "stanzaId": "false_6281200000001@c.us_3EB0A1B2C3D4E5F67891",
+            "participant": "6281200000001@c.us",
+            "quotedMessage": {
+              "extendedTextMessage": {
+                "text": "Bisa untuk bayi usia 3 bulan?"
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

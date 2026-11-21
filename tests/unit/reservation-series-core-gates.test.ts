@@ -19,7 +19,15 @@ describe('A-004: Reservation Series Core Gates (Fase 0)', () => {
   });
 
   it('0.4: createSeries harus menolak dengan DUPLICATE_BOOKING bila customer sudah memiliki reservasi aktif di slot yang sama', async () => {
-    const bookingDate = new Date('2026-11-20T10:00:00Z');
+    // Tanggal relatif (bukan hardcode) agar test tidak menjadi time-bomb setelah
+    // tanggal tertentu. Lihat KNOWN_ISSUES #366.
+    const futureDate = (daysAhead: number, hourUtc = 10): Date => {
+      const d = new Date();
+      d.setUTCDate(d.getUTCDate() + daysAhead);
+      d.setUTCHours(hourUtc, 0, 0, 0);
+      return d;
+    };
+    const bookingDate = futureDate(30);
 
     // Customer sudah memiliki reservasi di jam tersebut
     vi.mocked(prisma.reservation.findMany).mockResolvedValue([
@@ -57,8 +65,7 @@ describe('A-004: Reservation Series Core Gates (Fase 0)', () => {
       return cb(tx);
     });
 
-    // Pada kode saat ini (A-004), createSeries tidak mengecek customer duplicate booking
-    // sehingga berhasil (resolves). Pada Fase 3, harus menolak dengan code: 'DUPLICATE_BOOKING'.
+    // Gate A-004: createSeries harus menolak duplikasi slot customer yang sama.
     await expect(
       reservationSeriesService.createSeries({
         tenantId: 'default-tenant',
@@ -67,7 +74,7 @@ describe('A-004: Reservation Series Core Gates (Fase 0)', () => {
         totalSessions: 2,
         sessions: [
           { sessionNumber: 1, bookingDate: bookingDate },
-          { sessionNumber: 2, bookingDate: new Date('2026-11-27T10:00:00Z') },
+          { sessionNumber: 2, bookingDate: futureDate(37) },
         ],
       })
     ).rejects.toMatchObject({

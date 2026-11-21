@@ -628,6 +628,24 @@
         "src/routes/admin/staff-scorecard.subroute.ts"
       ],
       "test": "tests/integration/staff-scorecard-policy.test.ts"
+    },
+    {
+      "id": "whatsapp.message_id",
+      "title": "Validasi & klasifikasi format WhatsApp Message ID",
+      "description": "Leaf util murni tanpa I/O untuk validasi format message ID reply_to per provider (WAHA serialized vs WABA wamid) dan deteksi error format ID untuk fallback fail-open.",
+      "canonical": "src/utils/whatsapp-message-id.ts",
+      "exports": [
+        "isValidReplyToForProvider",
+        "isReplyIdFormatError"
+      ],
+      "forbiddenDeclarations": [
+        "isValidReplyToForProvider",
+        "isReplyIdFormatError"
+      ],
+      "allowedFiles": [
+        "src/utils/whatsapp-message-id.ts"
+      ],
+      "test": "tests/unit/whatsapp-message-id.test.ts"
     }
   ]
 }

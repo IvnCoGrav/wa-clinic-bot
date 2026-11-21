@@ -1,0 +1,28 @@
+{
+  "event": "message",
+  "session": "default",
+  "payload": {
+    "id": "false_6281200000001@c.us_3EB0A1B2C3D4E5F67890",
+    "timestamp": 1732150000,
+    "from": "6281200000001@c.us",
+    "fromMe": false,
+    "to": "6289900000000@c.us",
+    "body": "Mau yang no 2 ya kak",
+    "hasMedia": false,
+    "_data": {
+      "notifyName": "Bunda Pasien",
+      "message": {
+        "extendedTextMessage": {
+          "text": "Mau yang no 2 ya kak",
+          "contextInfo": {
+            "stanzaId": "true_6281200000001@c.us_3EB0BOT111111111111",
+            "participant": "6289900000000@c.us",
+            "quotedMessage": {
+              "conversation": "Halo Bunda, untuk tindik bayi ada 2 pilihan:\n1. Tindik Steril Jarum Rp 75.000\n2. Tindik Medis Blomdahl Rp 175.000\nMau ambil paket yang mana Bunda?"
+            }
+          }
+        }
+      }
+    }
+  }
+}

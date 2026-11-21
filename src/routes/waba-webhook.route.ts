@@ -17,6 +17,7 @@ import {
   resolveMaxInboundAgeSeconds,
 } from '../services/ingress/inbound-guard.service';
 import { contextStorage } from '../utils/context';
+import type { NormalizedQuotedMessage } from '../utils/canonical-message-normalizer';
 import crypto from 'crypto';
 import dotenv from 'dotenv';
 dotenv.config();
@@ -218,6 +219,26 @@ export async function wabaWebhookRoutes(fastify: FastifyInstance) {
           }
         }
       }
+      const quoted = await (async (): Promise<NormalizedQuotedMessage | undefined> => {
+        const contextId = (msg.rawPayload as any)?.context?.id;
+        if (!contextId) return undefined;
+        try {
+          const original = await messageService.getMessageById(contextId, tenantId);
+          if (!original?.content) return undefined; // fail-open
+          return {
+            id: original.id,
+            wa_message_id: original.wa_message_id || contextId,
+            direction: original.direction,
+            sender_type: original.sender_type,
+            sender_name: original.sender_name,
+            content: original.content,
+            media: (original as any).payload_raw?.media || undefined,
+          };
+        } catch {
+          return undefined; // DB lambat/offline: quote dilewati, pesan tetap masuk
+        }
+      })();
+
       const mergeWabaMedia = (raw: any) => {
         const res = { ...raw };
         if (msg.location) {
@@ -225,6 +246,9 @@ export async function wabaWebhookRoutes(fastify: FastifyInstance) {
         }
         if (msgMedia) {
           res.media = msgMedia;
+        }
+        if (quoted) {
+          res.quoted_message = quoted;
         }
         return res;
       };
@@ -467,6 +491,7 @@ export async function wabaWebhookRoutes(fastify: FastifyInstance) {
         _normalized: msg,
         _mediaUrl: mediaUrl,
         media: msgMedia,
+        quoted,
       };
 
       // BURST COALESCING: jika aktif (BURST_COALESCE_MS>0) dan pesan text di state

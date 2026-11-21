@@ -381,7 +381,7 @@ export async function webhookRoutes(fastify: FastifyInstance) {
 
           if (phone && /^\d+$/.test(phone) && !phone.startsWith('6289999')) {
             const pAny = payload as any;
-            const outCanonical = parseCanonicalInboundMessage(payload);
+            const outCanonical = parseCanonicalInboundMessage(payload, { customerPhone: phone });
             const isOutboundNonText = outCanonical.type !== 'text';
             const isOutboundImage = outCanonical.type === 'image';
             const isOutboundAudio = outCanonical.type === 'audio' || outCanonical.type === 'voice_note';
@@ -606,6 +606,14 @@ export async function webhookRoutes(fastify: FastifyInstance) {
                 }
               }
 
+              const outboundPayloadRaw: Record<string, any> = outboundMedia
+                ? { ...payload, media: outboundMedia }
+                : { ...payload };
+
+              if (outCanonical.quoted) {
+                outboundPayloadRaw.quoted_message = outCanonical.quoted;
+              }
+
               void logOutboundMessageWithRetry({
                 tenantId: resolvedTenantId,
                 conversationId: conversation.id,
@@ -615,7 +623,7 @@ export async function webhookRoutes(fastify: FastifyInstance) {
                 senderType: isBotAutoReply ? 'BOT' : 'ADMIN',
                 senderName: isBotAutoReply ? `Bot (${tenantName || 'Klinik'})` : 'Admin (WhatsApp HP)',
                 createdAt: msgDate,
-                payloadRaw: outboundMedia ? { ...payload, media: outboundMedia } : payload,
+                payloadRaw: outboundPayloadRaw,
               });
 
               const outTypeLabel = (outCanonical.type || (isOutboundImage ? 'GAMBAR' : 'TEKS')).toUpperCase();
@@ -813,7 +821,7 @@ export async function webhookRoutes(fastify: FastifyInstance) {
       const pAny = payload as any;
 
       // Normalisasi kanonis pesan (Tipe, Content, Lokasi, Media, Kontak)
-      const canonical = parseCanonicalInboundMessage(payload);
+      const canonical = parseCanonicalInboundMessage(payload, { customerPhone: phone });
 
       // Strict Real Location check (koordinat 0,0 dari EXIF/WA Web image DIBUANG).
       const {
@@ -919,6 +927,9 @@ export async function webhookRoutes(fastify: FastifyInstance) {
         }
         if (canonical.contact) {
           cleanedPayload.contact = canonical.contact;
+        }
+        if (canonical.quoted) {
+          cleanedPayload.quoted_message = canonical.quoted;
         }
         cleanedPayload.canonicalType = canonical.type;
         return cleanedPayload;
@@ -1293,6 +1304,7 @@ export async function webhookRoutes(fastify: FastifyInstance) {
         media: inboundMedia || canonical.media,
         contact: canonical.contact,
         canonicalType: canonical.type,
+        quoted: canonical.quoted,
       };
 
       // ING-10: pre-logging inbound non-balasan — seam bersama WABA.

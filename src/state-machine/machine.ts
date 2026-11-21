@@ -601,6 +601,7 @@ export class ConversationStateMachine {
       provider: contextStorage.getStore()?.provider,
       incomingText: effectiveInboundText,
       originalText: (incomingMessage as any).originalText || inboundContent,
+      quotedContext: (incomingMessage as any).quoted,
       history: historyFormatted,
       skipDbLogging: true,
       preExtractedIntents,

@@ -474,7 +474,10 @@ export function useLiveChatComposerHandler({
       if (text) body.text = text;
       if (isInternal) body.isInternalNote = true;
       if (currentReplyingTo) {
-        body.replyToMessageId = currentReplyingTo.wa_message_id || currentReplyingTo.id;
+        const candidate = currentReplyingTo.wa_message_id || currentReplyingTo.id;
+        if (candidate && !candidate.startsWith('temp_')) {
+          body.replyToMessageId = candidate;
+        }
       }
       if (image) {
         if (image.mediaUrl) {
@@ -514,7 +517,9 @@ export function useLiveChatComposerHandler({
       }
 
       const sendWarning = (res as any)?.data?.warning || (res as any)?.warning;
-      if (sendWarning === 'MESSAGE_SENT_NOT_PERSISTED') {
+      if (sendWarning === 'REPLY_TO_DROPPED') {
+        toast('Pesan terkirim, tetapi kutipan tidak terkirim karena ID pesan tidak valid.', 'info');
+      } else if (sendWarning === 'MESSAGE_SENT_NOT_PERSISTED') {
         toast(
           'Pesan SUDAH terkirim ke pasien, tetapi gagal disimpan ke riwayat dashboard. JANGAN kirim ulang — muat ulang halaman untuk rekonsiliasi.',
           'error'
