@@ -391,6 +391,9 @@ export class BurstCoalesceService {
     const { tenantId, customerId, phone, chatId, conversationId } = meta;
     const last = messages[messages.length - 1];
     const imageMessage = messages.find((m) => m.type === 'image' || m.media);
+    // Quote bisa berada di pesan mana pun dalam burst (biasanya pesan pertama).
+    // Tanpa ini, `incomingMessage.quoted` hilang dan AI grounding kehilangan konteks.
+    const quoted = messages.map((m) => m.quoted).find(Boolean);
     const mergedBody = messages.map((m) => (m.text?.body || '').trim()).filter(Boolean).join('\n');
     if (!mergedBody && !imageMessage) return;
 
@@ -402,6 +405,7 @@ export class BurstCoalesceService {
       type: imageMessage ? 'image' : 'text',
       text: mergedBody ? { body: mergedBody } : undefined,
       media: imageMessage?.media,
+      quoted,
       _preLogged: true,
       _mergedCount: messages.length,
       _data: last._data,

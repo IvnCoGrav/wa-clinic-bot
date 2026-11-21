@@ -124,7 +124,7 @@ describe('LiveChatService — monitor & balas admin', () => {
       conversationId: conversation.id,
       direction: Direction.INBOUND,
       content: 'Berapa harga paket imunisasi?',
-      waMessageId: 'false_628201_WA_MSG_123',
+      waMessageId: 'false_628201@c.us_WA_MSG_123',
     });
 
     const result = await liveChatService.sendAdminReply({
@@ -139,13 +139,123 @@ describe('LiveChatService — monitor & balas admin', () => {
     expect(fake.sendTextMessage).toHaveBeenCalledWith(
       phone,
       'Harga paket imunisasi mulai dari Rp 150.000 Bunda',
-      { replyToMessageId: 'false_628201_WA_MSG_123' }
+      { replyToMessageId: 'false_628201@c.us_WA_MSG_123' }
     );
 
     const messages = await liveChatService.getConversationMessages(conversation.id, DEFAULT_TENANT_ID);
     const replyMsg = messages.find((m) => m.content === 'Harga paket imunisasi mulai dari Rp 150.000 Bunda');
     expect(replyMsg).toBeDefined();
     expect(replyMsg?.payload_raw?.quoted_message?.content).toBe('Berapa harga paket imunisasi?');
+  });
+
+  it('sendAdminReply: pesan DB tanpa wa_message_id (misal internal) tidak mengirim replyTo ke gateway tapi quoted_message tetap tersimpan', async () => {
+    const fake = makeFakeGateway('WAHA');
+    createTestGateway(fake, DEFAULT_TENANT_ID);
+
+    const phone = `628202${Date.now().toString().slice(-7)}`;
+    const customer = await customerService.getOrCreateCustomer(phone, 'Bunda Null WA', DEFAULT_TENANT_ID);
+    const conversation = await conversationService.getOrCreateConversation(customer.id, DEFAULT_TENANT_ID);
+
+    const msgWithoutWaId = await messageService.logMessage({
+      tenantId: DEFAULT_TENANT_ID,
+      conversationId: conversation.id,
+      direction: Direction.INBOUND,
+      content: 'Catatan konsultasi awal',
+      // waMessageId sengaja tidak diisi (null)
+    });
+
+    const result = await liveChatService.sendAdminReply({
+      conversationId: conversation.id,
+      text: 'Baik kami catat ya Bunda',
+      tenantId: DEFAULT_TENANT_ID,
+      adminName: 'Bidan Susi',
+      replyToMessageId: msgWithoutWaId.id,
+    });
+
+    expect(result.success).toBe(true);
+    // Gateway dipanggil TANPA sendOptions replyToMessageId (hanya 2 argumen)
+    expect(fake.sendTextMessage).toHaveBeenCalledWith(
+      phone,
+      'Baik kami catat ya Bunda'
+    );
+
+    const messages = await liveChatService.getConversationMessages(conversation.id, DEFAULT_TENANT_ID);
+    const replyMsg = messages.find((m) => m.content === 'Baik kami catat ya Bunda');
+    expect(replyMsg).toBeDefined();
+    expect(replyMsg?.payload_raw?.reply_to).toBeUndefined();
+    expect(replyMsg?.payload_raw?.quoted_message?.content).toBe('Catatan konsultasi awal');
+    expect(replyMsg?.payload_raw?.reply_to_status).toBe('dropped_before_send');
+  });
+
+  it('sendAdminReply: ID optimistik temp_* ditolak keras dari gateway dan pengiriman teks tetap sukses', async () => {
+    const fake = makeFakeGateway('WAHA');
+    createTestGateway(fake, DEFAULT_TENANT_ID);
+
+    const phone = `628203${Date.now().toString().slice(-7)}`;
+    const customer = await customerService.getOrCreateCustomer(phone, 'Bunda Temp', DEFAULT_TENANT_ID);
+    const conversation = await conversationService.getOrCreateConversation(customer.id, DEFAULT_TENANT_ID);
+
+    const result = await liveChatService.sendAdminReply({
+      conversationId: conversation.id,
+      text: 'Pricelist kami kirimkan ya Bunda',
+      tenantId: DEFAULT_TENANT_ID,
+      adminName: 'Bidan Kala',
+      replyToMessageId: 'temp_1795220000994',
+    });
+
+    expect(result.success).toBe(true);
+    expect(fake.sendTextMessage).toHaveBeenCalledWith(
+      phone,
+      'Pricelist kami kirimkan ya Bunda'
+    );
+
+    const messages = await liveChatService.getConversationMessages(conversation.id, DEFAULT_TENANT_ID);
+    const replyMsg = messages.find((m) => m.content === 'Pricelist kami kirimkan ya Bunda');
+    expect(replyMsg).toBeDefined();
+    expect(replyMsg?.payload_raw?.reply_to).toBeUndefined();
+    expect(replyMsg?.payload_raw?.quoted_message).toBeUndefined();
+  });
+
+  it('sendAdminReply: menolak quote lintas percakapan (cross-conversation guard)', async () => {
+    const fake = makeFakeGateway('WAHA');
+    createTestGateway(fake, DEFAULT_TENANT_ID);
+
+    const phoneA = `628204${Date.now().toString().slice(-7)}`;
+    const phoneB = `628205${Date.now().toString().slice(-7)}`;
+    const customerA = await customerService.getOrCreateCustomer(phoneA, 'Bunda A', DEFAULT_TENANT_ID);
+    const customerB = await customerService.getOrCreateCustomer(phoneB, 'Bunda B', DEFAULT_TENANT_ID);
+    const convA = await conversationService.getOrCreateConversation(customerA.id, DEFAULT_TENANT_ID);
+    const convB = await conversationService.getOrCreateConversation(customerB.id, DEFAULT_TENANT_ID);
+
+    const msgConvB = await messageService.logMessage({
+      tenantId: DEFAULT_TENANT_ID,
+      conversationId: convB.id,
+      direction: Direction.INBOUND,
+      content: 'Pesan rahasia Bunda B',
+      waMessageId: 'false_628205@c.us_SECRET_B',
+    });
+
+    // Admin membalas di percakapan A tetapi menyertakan replyToMessageId milik percakapan B
+    const result = await liveChatService.sendAdminReply({
+      conversationId: convA.id,
+      text: 'Halo Bunda A',
+      tenantId: DEFAULT_TENANT_ID,
+      adminName: 'Bidan Susi',
+      replyToMessageId: msgConvB.id,
+    });
+
+    expect(result.success).toBe(true);
+    // Quote ditolak sehingga gateway tidak mengirim reply_to milik percakapan B
+    expect(fake.sendTextMessage).toHaveBeenCalledWith(
+      phoneA,
+      'Halo Bunda A'
+    );
+
+    const messagesA = await liveChatService.getConversationMessages(convA.id, DEFAULT_TENANT_ID);
+    const replyMsgA = messagesA.find((m) => m.content === 'Halo Bunda A');
+    expect(replyMsgA).toBeDefined();
+    expect(replyMsgA?.payload_raw?.reply_to).toBeUndefined();
+    expect(replyMsgA?.payload_raw?.quoted_message).toBeUndefined();
   });
 
   it('getConversationList: mode memisahkan sandbox/test vs WhatsApp asli', async () => {

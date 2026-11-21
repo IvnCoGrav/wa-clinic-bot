@@ -19,6 +19,8 @@ export interface SendResult {
   messageId?: string;
   provider: WhatsAppProvider;
   rawResponse?: unknown;
+  /** True bila quote dibatalkan karena provider menolak ID, tetapi pesan utama terkirim. */
+  replyToDropped?: boolean;
   error?: { code: string; message: string; isRateLimit?: boolean };
 }
 

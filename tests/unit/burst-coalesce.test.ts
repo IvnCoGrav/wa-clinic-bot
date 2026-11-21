@@ -253,4 +253,39 @@ describe('BurstCoalesceService', () => {
     expect(enqueueSpy).toHaveBeenCalledTimes(1); // batch "halo bunda" ter-flush
     expect(enqueueSpy.mock.calls[0][0].incomingMessage.text.body).toBe('halo bunda');
   });
+
+  it('8. quoted message pada pesan pertama tetap terbawa ke hasil merge', async () => {
+    const enqueueSpy = vi.spyOn(queueService, 'enqueueMessage').mockResolvedValue(undefined as any);
+    vi.spyOn(messageService, 'logMessage').mockResolvedValue(undefined as any);
+
+    const quoted = {
+      wa_message_id: 'true_6289900000000@c.us_BOT_QUOTE',
+      content: 'Paket Kenari Hemat 3 sesi',
+      direction: 'OUTBOUND',
+      sender_type: 'ADMIN',
+    };
+
+    const opts = {
+      tenantId: DEFAULT_TENANT_ID,
+      customerId: 'cust-1',
+      phone: '628123456789',
+      conversation: makeConv(ConversationState.INITIAL),
+    };
+
+    await burstCoalesceService.maybeCoalesce({
+      ...opts,
+      incomingMessage: makeMsg('m1', 'Mau yang ini kak', { quoted }),
+    });
+    await burstCoalesceService.maybeCoalesce({
+      ...opts,
+      incomingMessage: makeMsg('m2', 'yang paket 3 sesi'),
+    });
+
+    await settle(80);
+
+    expect(enqueueSpy).toHaveBeenCalledTimes(1);
+    const merged = enqueueSpy.mock.calls[0][0].incomingMessage;
+    expect(merged.text.body).toBe('Mau yang ini kak\nyang paket 3 sesi');
+    expect(merged.quoted).toEqual(quoted);
+  });
 });

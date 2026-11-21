@@ -51,14 +51,54 @@ export interface WahaQr {
 export const MOCK_QR_BASE64 =
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=';
 
+export interface WahaSendResult {
+  success: boolean;
+  messageId?: string;
+  error?: string;
+  status?: number;
+}
+
+/**
+ * Ekstraksi pesan error WAHA dari berbagai bentuk body.
+ *
+ * WAHA NOWEB membungkus error di `exception.message` (lihat Issue #365):
+ * `{ statusCode: 500, exception: { message: "Message id be in format ..." } }`.
+ * `axios` sendiri hanya memberi `error.message = "Request failed with status code 500"`,
+ * sehingga tanpa ekstraksi ini fallback reply-to tidak akan pernah terpicu.
+ */
+export function extractWahaErrorDetail(data: any, fallback?: string): string {
+  const exceptionMessage = data?.exception?.message;
+  if (typeof exceptionMessage === 'string' && exceptionMessage.trim()) {
+    return exceptionMessage.trim();
+  }
+
+  const nestedError = data?.error?.message;
+  if (typeof nestedError === 'string' && nestedError.trim()) {
+    return nestedError.trim();
+  }
+  if (typeof data?.error === 'string' && data.error.trim()) {
+    return data.error.trim();
+  }
+
+  if (typeof data?.message === 'string' && data.message.trim()) {
+    return data.message.trim();
+  }
+
+  if (typeof fallback === 'string' && fallback.trim()) {
+    return fallback.trim();
+  }
+
+  return 'Unknown WAHA error';
+}
+
 export interface IWahaClient {
   sendSeen(chatId: string, messageId?: string): Promise<boolean>;
   startTyping(chatId: string): Promise<boolean>;
   stopTyping(chatId: string): Promise<boolean>;
   sendText(chatId: string, text: string, replyTo?: string): Promise<boolean>;
-  sendTextDetailed?(chatId: string, text: string, replyTo?: string): Promise<{ success: boolean; messageId?: string }>;
+  sendTextDetailed?(chatId: string, text: string, replyTo?: string): Promise<WahaSendResult>;
   sendImage(chatId: string, url: string, caption?: string, replyTo?: string): Promise<boolean>;
-  sendImageDetailed?(chatId: string, url: string, caption?: string, replyTo?: string): Promise<{ success: boolean; messageId?: string }>;
+  sendImageDetailed?(chatId: string, url: string, caption?: string, replyTo?: string): Promise<WahaSendResult>;
   /** @deprecated MANDAT LARANGAN LABEL WAHA — gunakan DB internal */
   addLabel(chatId: string, labelName: string): Promise<boolean>;
   /** @deprecated MANDAT LARANGAN LABEL WAHA — gunakan DB internal */
@@ -532,7 +572,7 @@ export class WahaClient implements IWahaClient {
     return res.success;
   }
 
-  public async sendTextDetailed(chatId: string, text: string, replyTo?: string): Promise<{ success: boolean; messageId?: string }> {
+  public async sendTextDetailed(chatId: string, text: string, replyTo?: string): Promise<WahaSendResult> {
     const targetChatId = await this.resolveActiveJid(chatId);
     // Normalisasi markdown ganda (mis. **bold**) → formatting WhatsApp SATU tanda (*bold*)
     const normalizedText = normalizeWhatsAppFormat(text);
@@ -565,8 +605,10 @@ export class WahaClient implements IWahaClient {
       const messageId = response.data?.id || response.data?.key?.id || response.data?._data?.id?.id || undefined;
       return { success: ok, messageId };
     } catch (error: any) {
+      const status = error?.response?.status;
+      const detail = extractWahaErrorDetail(error?.response?.data, error?.message || 'sendText failed');
       console.error(`[WAHA API ERROR] sendText failed for ${targetChatId}:`, error?.response?.data || error.message);
-      return { success: false };
+      return { success: false, error: detail, status };
     }
   }
 
@@ -584,7 +626,7 @@ export class WahaClient implements IWahaClient {
     return res.success;
   }
 
-  public async sendImageDetailed(chatId: string, url: string, caption?: string, replyTo?: string): Promise<{ success: boolean; messageId?: string }> {
+  public async sendImageDetailed(chatId: string, url: string, caption?: string, replyTo?: string): Promise<WahaSendResult> {
     const targetChatId = await this.resolveActiveJid(chatId);
 
     if (this.shouldMock) {
@@ -654,8 +696,10 @@ export class WahaClient implements IWahaClient {
       const messageId = response.data?.id || response.data?.key?.id || response.data?._data?.id?.id || undefined;
       return { success: ok, messageId };
     } catch (error: any) {
+      const status = error?.response?.status;
+      const detail = extractWahaErrorDetail(error?.response?.data, error?.message || 'sendImage failed');
       console.error(`[WAHA API ERROR] sendImage failed for ${targetChatId}:`, error?.response?.data || error.message);
-      return { success: false };
+      return { success: false, error: detail, status };
     }
   }
 

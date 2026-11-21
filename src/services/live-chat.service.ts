@@ -9,6 +9,7 @@ import { alertService, AlertType, AlertSeverity } from './alert.service';
 import { staffOwnershipService } from './staff-ownership.service';
 import type { LiveChatConversationItem, AdminReplyResult } from './live-chat.types';
 import { serializeLiveChatConversation } from './live-chat.serializer';
+import { isValidReplyToForProvider } from '../utils/whatsapp-message-id';
 
 /**
  * Kontrak DTO LiveChat dipindah ke `live-chat.types.ts`; re-export menjaga
@@ -481,23 +482,34 @@ export class LiveChatService {
     if (replyToMessageId) {
       try {
         const quotedMsg = await messageService.getMessageById(replyToMessageId, tenantId);
-        if (quotedMsg) {
-          replyToWaMessageId = quotedMsg.wa_message_id || quotedMsg.id;
+        if (!quotedMsg) {
+          console.warn(`[Live Chat] Pesan kutipan tidak ditemukan: ${replyToMessageId} — quote dilewati.`);
+        } else if (quotedMsg.conversation_id && quotedMsg.conversation_id !== conversationId) {
+          console.warn(`[Live Chat] Tolak quote lintas percakapan: ${replyToMessageId} — quote dilewati.`);
+        } else {
           quotedMeta = {
             id: quotedMsg.id,
             wa_message_id: quotedMsg.wa_message_id,
             direction: quotedMsg.direction,
-            sender_name: quotedMsg.sender_name || (quotedMsg.direction === 'INBOUND' ? customer.name || 'Customer' : 'Admin'),
+            sender_name:
+              quotedMsg.sender_name ||
+              (quotedMsg.direction === 'INBOUND' ? customer.name || 'Customer' : 'Admin'),
             sender_type: quotedMsg.sender_type,
             content: quotedMsg.content,
             media: (quotedMsg as any).payload_raw?.media || undefined,
           };
-        } else {
-          replyToWaMessageId = replyToMessageId;
+          if (isValidReplyToForProvider(gateway.providerType, quotedMsg.wa_message_id)) {
+            replyToWaMessageId = quotedMsg.wa_message_id;
+          } else {
+            console.warn(
+              `[Live Chat] wa_message_id tidak valid untuk ${gateway.providerType}: ` +
+                `${quotedMsg.wa_message_id ?? '(null)'} — quote dilewati, teks tetap dikirim.`
+            );
+          }
         }
       } catch (err: any) {
-        console.warn(`[Live Chat] Gagal mengambil detail quoted message:`, err.message);
-        replyToWaMessageId = replyToMessageId;
+        console.warn('[Live Chat] Gagal mengambil detail quoted message:', err.message);
+        // JANGAN fallback ke replyToMessageId
       }
     }
 
@@ -664,7 +676,17 @@ export class LiveChatService {
     const payloadRaw: Record<string, any> = {};
     if (mediaMeta) payloadRaw.media = mediaMeta;
     if (quotedMeta) payloadRaw.quoted_message = quotedMeta;
-    if (replyToWaMessageId) payloadRaw.reply_to = replyToWaMessageId;
+    if (replyToWaMessageId && !sendResult.replyToDropped) {
+      payloadRaw.reply_to = replyToWaMessageId;
+    }
+    if (quotedMeta && !replyToWaMessageId) {
+      // Quote ditemukan di DB tetapi ID-nya tidak sah untuk provider ini:
+      // pesan tetap dikirim, quote dibatalkan sebelum menyentuh gateway.
+      payloadRaw.reply_to_status = 'dropped_before_send';
+    }
+    if (sendResult.replyToDropped) {
+      payloadRaw.reply_to_status = 'dropped_after_provider_reject';
+    }
     if (params.dispatchOrigin === true) payloadRaw.dispatchOrigin = true;
     if (params.forceEscalate === true) payloadRaw.forceEscalate = true;
 
@@ -830,6 +852,8 @@ export class LiveChatService {
       id: logged?.id,
     });
 
+    const replyToWarning = sendResult.replyToDropped ? 'REPLY_TO_DROPPED' : undefined;
+
     return {
       success: true,
       conversationId,
@@ -837,7 +861,7 @@ export class LiveChatService {
       id: logged?.id,
       provider: gateway.providerType,
       conversation: updated ? buildConversationUpdatedPayload(updated) : undefined,
-      warning: persistenceWarning || dispatchWarning,
+      warning: persistenceWarning || dispatchWarning || replyToWarning,
     };
   }
 

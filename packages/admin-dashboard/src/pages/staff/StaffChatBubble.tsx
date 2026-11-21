@@ -29,6 +29,7 @@ import {
   maskPhoneInTextClient,
   resolveMessageDisplayText,
 } from '../../utils/mediaExtractor';
+import { extractQuotedMessage } from '../../utils/quotedMessage';
 import {
   formatChatDateSeparatorWib,
   formatWib,
@@ -51,45 +52,6 @@ interface StaffChatBubbleProps {
   onScrollToBottom: () => void;
 }
 
-/**
- * Ekstraksi quoted_message dari berbagai bentuk payload_raw, dengan sanitasi
- * PII terapis (maskPhoneInTextClient) bila pengguna bukan supervisor.
- */
-function extractQuotedMessage(msg: ChatMessage, maskPhone = true): NonNullable<ChatMessage['quoted_message']> | null {
-  const mask = (s: string): string => (maskPhone ? maskPhoneInTextClient(s) : s);
-  const direct = (msg as any).quoted_message;
-  if (direct && (direct.content || direct.media)) {
-    const sanitized: any = { ...direct };
-    if (typeof sanitized.content === 'string' && sanitized.content) sanitized.content = mask(sanitized.content);
-    if (typeof sanitized.sender_name === 'string' && sanitized.sender_name) {
-      sanitized.sender_name = mask(sanitized.sender_name);
-    }
-    if (sanitized.media && typeof sanitized.media.caption === 'string') {
-      sanitized.media = { ...sanitized.media, caption: mask(sanitized.media.caption) };
-    }
-    return sanitized;
-  }
-  const pr = (msg as any).payload_raw;
-  if (!pr) return null;
-  const q = pr.quoted_message || pr.quotedMessage || pr.quoted || pr.reply_to_message || pr.quotedMsg;
-  if (q && (q.content || q.media || q.text)) {
-    return {
-      id: q.id || q.wa_message_id || q.waMessageId,
-      wa_message_id: q.wa_message_id || q.waMessageId || q.id,
-      sender_name: q.sender_name || q.senderName || q.sender
-        ? mask(String(q.sender_name || q.senderName || q.sender))
-        : null,
-      sender_type: q.sender_type || q.senderType || null,
-      direction: q.direction || q.dir || undefined,
-      content: mask(q.content || q.text || q.caption || ''),
-      media: q.media
-        ? { ...q.media, caption: q.media.caption ? mask(String(q.media.caption)) : undefined }
-        : undefined,
-    };
-  }
-  return null;
-}
-
 export const StaffChatBubble: React.FC<StaffChatBubbleProps> = ({
   msg,
   prevCreatedAt,
@@ -109,7 +71,17 @@ export const StaffChatBubble: React.FC<StaffChatBubbleProps> = ({
   const isBot = !isInbound && msg.sender_type === 'BOT';
   const isStaff = !isInbound && msg.sender_type === 'STAFF';
   const media = extractMedia(msg);
-  const quotedMsg = extractQuotedMessage(msg, !isSupervisor);
+  const rawQuoted = extractQuotedMessage(msg);
+  const quotedMsg = rawQuoted && !isSupervisor
+    ? {
+        ...rawQuoted,
+        content: maskPhoneInTextClient(rawQuoted.content || ''),
+        sender_name: rawQuoted.sender_name ? maskPhoneInTextClient(rawQuoted.sender_name) : rawQuoted.sender_name,
+        media: rawQuoted.media?.caption
+          ? { ...rawQuoted.media, caption: maskPhoneInTextClient(rawQuoted.media.caption) }
+          : rawQuoted.media,
+      }
+    : (rawQuoted || null);
   const locData = extractLocation(msg);
   const audioData = extractAudio(msg);
   const audioUrl = audioData?.url || null;

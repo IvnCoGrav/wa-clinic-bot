@@ -7,7 +7,7 @@
 
 ## 1. Daftar Kapabilitas Kanonis Aktif
 
-Total kapabilitas terdaftar: **32 modul**.
+Total kapabilitas terdaftar: **33 modul**.
 
 | ID Kapabilitas | Judul & Deskripsi | Modul Kanonis | Ekspor Resmi | Test File |
 |---|---|---|---|---|
@@ -43,6 +43,7 @@ Total kapabilitas terdaftar: **32 modul**.
 | `text.strip_edges` | **Pembersihan tepi token kata utuh**<br>Membuang karakter non-alfanumerik (a-z, 0-9) di awal dan akhir token hasil split spasi sebelum dicocokkan dengan himpunan kata. | [`src/utils/text-edge.ts`](../src/utils/text-edge.ts) | `stripNonAlnumEdges` | [`text-edge.test.ts`](../tests/unit/text-edge.test.ts) |
 | `time.wib` | **Waktu Indonesia Barat (WIB)**<br>Operasi waktu dan tanggal berbasis WIB (UTC+7), offset milidetik, konversi UTC, dan batasan hari WIB. | [`src/utils/wib-time.ts`](../src/utils/wib-time.ts) | `WIB_OFFSET_MS`, `getWibNow`, `wibDayBoundsUtc`, `formatWibTime`, `wibDayRangeToUtc`, `formatWibDateYYYYMMDD`, `getWibDayName` | [`wib-time-consolidation.test.ts`](../tests/unit/wib-time-consolidation.test.ts) |
 | `treatment.catalog_value` | **Resolusi nilai treatment dari katalog**<br>Mencari harga treatment (promo/original) dari katalog tenant dengan pencocokan alias, bundle, multi-item, dan fallback kategori — tanpa DB langsung. | [`src/services/treatment-value.service.ts`](../src/services/treatment-value.service.ts) | `resolveTreatmentValue` | [`capi-value-no-hardcode.test.ts`](../tests/unit/capi-value-no-hardcode.test.ts) |
+| `whatsapp.message_id` | **Validasi & klasifikasi format WhatsApp Message ID**<br>Leaf util murni tanpa I/O untuk validasi format message ID reply_to per provider (WAHA serialized vs WABA wamid) dan deteksi error format ID untuk fallback fail-open. | [`src/utils/whatsapp-message-id.ts`](../src/utils/whatsapp-message-id.ts) | `isValidReplyToForProvider`, `isReplyIdFormatError` | [`whatsapp-message-id.test.ts`](../tests/unit/whatsapp-message-id.test.ts) |
 
 ## 2. Rincian Modul & Aturan Guardrail
 
@@ -333,6 +334,15 @@ Total kapabilitas terdaftar: **32 modul**.
 - **Simbol Terlarang di Luar Kanonis:** `resolveTreatmentValue`
 - **File yang Diizinkan:** `src/services/treatment-value.service.ts`
 - **File Test:** [`tests/unit/capi-value-no-hardcode.test.ts`](../tests/unit/capi-value-no-hardcode.test.ts)
+
+### `whatsapp.message_id` — Validasi & klasifikasi format WhatsApp Message ID
+
+- **Deskripsi:** Leaf util murni tanpa I/O untuk validasi format message ID reply_to per provider (WAHA serialized vs WABA wamid) dan deteksi error format ID untuk fallback fail-open.
+- **File Kanonis:** [`src/utils/whatsapp-message-id.ts`](../src/utils/whatsapp-message-id.ts)
+- **Ekspor Kanonis:** `isValidReplyToForProvider`, `isReplyIdFormatError`
+- **Simbol Terlarang di Luar Kanonis:** `isValidReplyToForProvider`, `isReplyIdFormatError`
+- **File yang Diizinkan:** `src/utils/whatsapp-message-id.ts`
+- **File Test:** [`tests/unit/whatsapp-message-id.test.ts`](../tests/unit/whatsapp-message-id.test.ts)
 
 ---
 

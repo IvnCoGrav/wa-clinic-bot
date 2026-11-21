@@ -5,6 +5,7 @@ import {
   TemplateComponent,
   TemplateParam,
 } from './gateway.types';
+import { isReplyIdFormatError } from '../../utils/whatsapp-message-id';
 
 export class WahaGatewayDriver implements WhatsAppGateway {
   readonly providerType = 'WAHA' as const;
@@ -17,6 +18,28 @@ export class WahaGatewayDriver implements WhatsAppGateway {
   constructor(client?: IWahaClient, tenantId: string = 'default-tenant') {
     this.client = client || wahaClient;
     this.tenantId = tenantId;
+  }
+
+  /**
+   * Helper pengiriman aman dengan reply-to fallback.
+   * Bila WAHA menolak karena format reply_to message ID tidak valid,
+   * otomatis kirim ulang 1x tanpa reply_to agar pesan utama customer tetap terkirim.
+   */
+  private async sendWithReplyFallback<T extends { success: boolean; messageId?: string; error?: string }>(
+    send: (replyTo?: string) => Promise<T>,
+    replyTo?: string
+  ): Promise<T & { replyToDropped?: boolean }> {
+    if (!replyTo) return send();
+    const first = await send(replyTo);
+    if (first.success) return first;
+    if (!isReplyIdFormatError(first.error)) return first;
+
+    console.warn(
+      `[WAHA DRIVER] replyToMessageId=${replyTo} ditolak (${first.error}). ` +
+        'Fallback mengirim pesan tanpa quote agar pesan utama tetap terkirim.'
+    );
+    const fallback = await send();
+    return { ...fallback, replyToDropped: fallback.success };
   }
 
   async sendTextMessage(to: string, text: string, options?: { replyToMessageId?: string }): Promise<SendResult> {
@@ -34,10 +57,17 @@ export class WahaGatewayDriver implements WhatsAppGateway {
     const chatId = this.toChatId(to);
     try {
       if (typeof this.client.sendTextDetailed === 'function') {
-        const res = options?.replyToMessageId
-          ? await this.client.sendTextDetailed(chatId, text, options.replyToMessageId)
-          : await this.client.sendTextDetailed(chatId, text);
-        return { success: res.success, messageId: res.messageId, provider: 'WAHA' };
+        const res = await this.sendWithReplyFallback(
+          (replyTo) => this.client.sendTextDetailed!(chatId, text, replyTo),
+          options?.replyToMessageId
+        );
+        return {
+          success: res.success,
+          messageId: res.messageId,
+          provider: 'WAHA',
+          replyToDropped: res.replyToDropped,
+          error: res.success ? undefined : { code: 'WAHA_SEND_TEXT', message: res.error || 'sendText failed' },
+        };
       }
       const ok = options?.replyToMessageId
         ? await this.client.sendText(chatId, text, options.replyToMessageId)
@@ -143,10 +173,17 @@ export class WahaGatewayDriver implements WhatsAppGateway {
     const chatId = this.toChatId(to);
     try {
       if (typeof this.client.sendImageDetailed === 'function') {
-        const res = options?.replyToMessageId
-          ? await this.client.sendImageDetailed(chatId, imageUrl, caption, options.replyToMessageId)
-          : await this.client.sendImageDetailed(chatId, imageUrl, caption);
-        return { success: res.success, messageId: res.messageId, provider: 'WAHA' };
+        const res = await this.sendWithReplyFallback(
+          (replyTo) => this.client.sendImageDetailed!(chatId, imageUrl, caption, replyTo),
+          options?.replyToMessageId
+        );
+        return {
+          success: res.success,
+          messageId: res.messageId,
+          provider: 'WAHA',
+          replyToDropped: res.replyToDropped,
+          error: res.success ? undefined : { code: 'WAHA_SEND_IMAGE', message: res.error || 'sendImage failed' },
+        };
       }
       const ok = options?.replyToMessageId
         ? await this.client.sendImage(chatId, imageUrl, caption, options.replyToMessageId)
