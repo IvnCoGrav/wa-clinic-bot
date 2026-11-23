@@ -2272,18 +2272,24 @@
         {
           "type": "test",
           "path": "tests/unit/staff-dashboard-hardening.test.ts",
-          "contains": "warm-up hanya berjalan setelah consent eksplisit"
+          "contains": "warm-up hanya berjalan bila izin lokasi browser sudah granted"
         },
         {
           "type": "file",
           "path": "packages/admin-dashboard/src/pages/staff/StaffToday.tsx",
-          "line": 615,
-          "contains": "staff_gps_warmup_consent_v1"
+          "line": 696,
+          "contains": "isGeolocationPermissionGranted"
         },
         {
           "type": "file",
           "path": "packages/admin-dashboard/src/utils/geoUtils.ts",
-          "line": 470,
+          "line": 500,
+          "contains": "export async function isGeolocationPermissionGranted"
+        },
+        {
+          "type": "file",
+          "path": "packages/admin-dashboard/src/utils/geoUtils.ts",
+          "line": 549,
           "contains": "departCache = null;"
         }
       ],

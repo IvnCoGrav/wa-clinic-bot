@@ -35,11 +35,44 @@ describe('S-02 outbox PII', () => {
 });
 
 describe('S-06 GPS warm-up', () => {
-  it('warm-up hanya berjalan setelah consent eksplisit dan cache dibersihkan saat stop', () => {
-    expect(staffToday).toContain('staff_gps_warmup_consent_v1');
-    expect(staffToday).toContain('hasDepartWindowTask && gpsWarmupConsent === \'granted\'');
-    expect(staffToday).toContain('Izinkan aplikasi memakai lokasi di latar');
+  it('warm-up hanya berjalan bila izin lokasi browser sudah granted (tanpa banner consent)', () => {
+    // Revisi 2026-11-23: banner consent in-app dihapus atas keputusan pemilik.
+    // Consent tunggal = prompt native browser saat Bidan menekan "Navigasi".
+    expect(staffToday).toContain('isGeolocationPermissionGranted');
+    expect(staffToday).not.toContain('staff_gps_warmup_consent_v1');
+    expect(staffToday).not.toContain('Izinkan aplikasi memakai lokasi di latar');
+    expect(geoUtils).toContain('navigator.permissions');
     expect(geoUtils).toMatch(/export function stopDepartGpsWarmup[\s\S]*departCache = null/);
+  });
+});
+
+describe('Kartu tugas & QRIS (audit UX 2026-11-23)', () => {
+  const taskCard = read('packages/admin-dashboard/src/pages/staff/StaffTodayTaskCard.tsx');
+
+  it('baris biaya hanya ikon + nominal (tanpa label "Biaya:" / "ongkir")', () => {
+    expect(taskCard).not.toContain('(ongkir ');
+    expect(taskCard).not.toContain('<span>Biaya:</span>');
+    expect(taskCard).toContain('formatRupiah(task.pricing.totalFee)');
+  });
+
+  it('tombol bayar tidak mengulang nominal', () => {
+    expect(taskCard).not.toContain('Catat Bayar (');
+    expect(taskCard).toContain('<span>Bayar</span>');
+  });
+
+  it('QRIS lightbox di atas dialog (z-dialog-top) & tidak menumpuk modal pembayaran', () => {
+    expect(staffToday).toContain('z-dialog-top');
+    expect(staffToday).not.toContain('z-[150]');
+    const start = staffToday.indexOf('const handleOpenQrisFast');
+    const end = staffToday.indexOf('const handleRevokeMessage');
+    expect(start).toBeGreaterThan(-1);
+    expect(end).toBeGreaterThan(start);
+    expect(staffToday.slice(start, end)).not.toContain('setPaymentModalTask');
+  });
+
+  it('hanya baris filter status yang sticky di daftar tugas', () => {
+    expect(staffToday).toContain('sticky top-0 z-10 bg-surface/95 backdrop-blur');
+    expect(staffToday).not.toContain('p-3 bg-surface border-b border-divider dark:border-divider space-y-2.5 sticky');
   });
 });
 

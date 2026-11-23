@@ -4,6 +4,18 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### 2026-11-23 - GPS Staf: Banner Consent In-App Dihapus (S-06 Revisi)
+
+- **Konteks:** Bidan menerima dua permintaan izin beruntun: banner aplikasi "Izinkan aplikasi memakai lokasi di latar…", lalu prompt izin native browser. Pemilik menilai redundan dan meminta banner dihapus permanen.
+- **Frontend:** `StaffToday.tsx` tidak lagi merender banner/consent; state + `localStorage` `staff_gps_warmup_consent_v1` dihapus. Consent tunggal = prompt izin native saat Bidan menekan "Navigasi".
+- **Warm-up tetap aman:** `isGeolocationPermissionGranted()` (`geoUtils.ts`) mengecek `navigator.permissions.query({name:'geolocation'})`; warm-up hanya start bila `granted`. Status `prompt`/`denied`/API tidak tersedia → fail-closed, aplikasi tidak pernah memunculkan modal izin sendiri.
+- **Tes:** `gps-permission-gate.test.ts` (6 kasus adversarial: granted/prompt/denied/API throw/API absen/SSR) + guard `staff-dashboard-hardening.test.ts` S-06 diperbarui (memastikan banner & localStorage consent tidak kembali).
+- **Gerbang:** evidence `S-06` (`backlog-evidence.json`, `EVIDENCE_LEDGER`, register) diperbarui ke kontrak baru; typecheck + build dashboard + `verify:backlog` hijau.
+- **Kartu tugas staf (Departure Watchdog):** peringatan diringkas menjadi **satu baris** — "Potensi Terlambat ±N menit" (label "Dari …" dan baris "Estimasi tiba" dihapus). Tombol aksi diganti **"Infokan Keterlambatan!"** merah solid. Border kartu kini mengikuti keterlambatan: **amber** saat terlambat <60 menit, **merah solid + pulse** saat terlambat ≥60 menit.
+- **Kartu tugas — biaya & aksi bayar:** baris biaya kini hanya ikon + nominal (label "Biaya:" dan rincian "(ongkir …)" dihapus); tombol "Catat Bayar (Rp …)" diringkas menjadi **"Bayar"** (nominal sudah tampil di sebelah kiri).
+- **Sticky daftar tugas:** panel "Jadwal Kunjungan Hari Ini" + pencarian kini ikut ter-scroll; **hanya baris filter "Perlu Dikunjungi / Semua / Selesai"** yang sticky.
+- **QRIS lightbox (audit z-index):** tombol QRIS di kartu dulu membuka modal "Catat Pembayaran" **dan** lightbox sekaligus, sementara lightbox memakai `z-[150]` sedangkan `Modal` memakai `--z-dialog: 12000` → lightbox tertimbun modal sehingga "Perbesar Layar" tidak pernah terlihat. Perbaikan: tombol QRIS membuka lightbox **langsung tanpa** modal pembayaran; lightbox QRIS & zoom foto naik ke `z-dialog-top` (12500); ukuran QR diperbesar (maks 58–68dvh) agar benar-benar bisa dipindai pasien.
+
 #### 2026-11-20 - Fix: Gambar Live Chat Hilang (Operasi JSON Prisma Tidak Sah + Kuota Thumbnail)
 
 - **Konteks:** Insiden Bidan Thabita 2026-11-20 12:23 WIB — foto rumah terkirim ke pasien (WAHA `sendImage` 201), tetapi hilang dari Live Chat 3 menit kemudian.

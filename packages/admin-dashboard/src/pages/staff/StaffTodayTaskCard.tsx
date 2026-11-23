@@ -90,14 +90,38 @@ export const StaffTodayTaskCard: React.FC<StaffTodayTaskCardProps> = ({
   const isLunas = task.pricing.paymentStatus === 'LUNAS';
   const catInfo = getCategoryIcon(task.treatmentCategory);
 
+  /**
+   * Status keterlambatan untuk warna border kartu:
+   * - terlambat ≥ 60 menit → border merah solid + pulse (eskalasi kritis)
+   * - terlambat 1–59 menit / waktu berangkat terlewat → border amber
+   * - tidak terlambat → warna kategori seperti biasa
+   */
+  const delayMinutes = task.delay?.delayMinutes ?? 0;
+  const isDelayActive =
+    Boolean(task.delay) &&
+    (delayMinutes > 0 || Boolean(task.delay?.missedDeparture)) &&
+    !task.arrivedAt &&
+    task.status !== 'completed';
+  const isSevereDelay = isDelayActive && delayMinutes >= 60;
+  const delayBorderClass = isSevereDelay
+    ? 'border-red-600 border-l-red-600 ring-1 ring-red-500/40 animate-pulse'
+    : isDelayActive
+      ? 'border-amber-500 border-l-amber-500'
+      : '';
+  const selectionClass = isDelayActive
+    ? isSelected
+      ? 'ring-2 ring-red-500/30 shadow-md'
+      : 'hover:shadow-sm active:scale-[0.98]'
+    : isSelected
+      ? 'border-accent ring-2 ring-accent/30 shadow-md'
+      : 'border-divider hover:border-accent/40 hover:shadow-sm active:scale-[0.98]';
+
   return (
 
     <div
-      className={`p-3.5 rounded-2xl transition duration-200 text-left relative bg-surface shadow-xs border ${
-        isSelected
-          ? 'border-accent ring-2 ring-accent/30 shadow-md'
-          : 'border-divider hover:border-accent/40 hover:shadow-sm active:scale-[0.98]'
-      } ${catInfo.borderAccent} border-l-4`}
+      className={`p-3.5 rounded-2xl transition duration-200 text-left relative bg-surface shadow-xs border ${selectionClass} ${
+        isDelayActive ? delayBorderClass : catInfo.borderAccent
+      } border-l-4`}
     >
       {/* Header: Customer Icon & Name & Time (KLIK BARIS INI = DETAIL CUSTOMER) */}
       <div
@@ -177,38 +201,34 @@ export const StaffTodayTaskCard: React.FC<StaffTodayTaskCardProps> = ({
 
       {/* Area Bawah: Alamat, Foto Rumah, & Tombol Aksi */}
       <div>
-        {/* Departure Watchdog: Peringatan Keterlambatan Bidan */}
-        {task.delay && (task.delay.delayMinutes > 0 || task.delay.missedDeparture) && !task.arrivedAt && task.status !== 'completed' && (
-          <div className="mb-2 p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-700 dark:text-amber-400 text-xs flex flex-col gap-1.5 transition-all">
-            <div className="flex items-center justify-between">
-              <span className="font-semibold flex items-center gap-1.5">
-                <AlertCircle size={14} className="text-amber-500 shrink-0" />
-                {task.delay.delayMinutes > 0
-                  ? `Potensi keterlambatan ±${task.delay.delayMinutes} menit`
-                  : 'Waktu keberangkatan terlewat'}
+        {/* Departure Watchdog: peringatan satu baris + aksi cepat infokan keterlambatan */}
+        {isDelayActive && (
+          <div
+            className={`mb-2 px-2.5 py-1.5 rounded-xl border text-xs flex items-center justify-between gap-2 ${
+              isSevereDelay
+                ? 'border-red-500/50 bg-red-500/10 text-red-700 dark:text-red-300 animate-pulse'
+                : 'border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-400'
+            }`}
+          >
+            <span className="font-semibold flex items-center gap-1.5 min-w-0 truncate">
+              <AlertCircle size={13} className={`shrink-0 ${isSevereDelay ? 'text-red-500' : 'text-amber-500'}`} />
+              <span className="truncate">
+                {delayMinutes > 0 ? `Potensi Terlambat ±${delayMinutes} menit` : 'Waktu keberangkatan terlewat'}
               </span>
-              <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/20 font-medium">
-                Dari {task.delay.originName}
-              </span>
-            </div>
-            <div className="flex items-center justify-between gap-2 pt-1 border-t border-amber-500/20">
-              <span className="text-[11px] text-ink-2">
-                Estimasi tiba: <strong>{task.delay.estimatedArrivalWib} WIB</strong>
-              </span>
-              {onOpenDelayNotifyModal && (
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onOpenDelayNotifyModal(task);
-                  }}
-                  className="px-2.5 py-1 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-medium text-[11px] transition active:scale-95 flex items-center gap-1 cursor-pointer shadow-xs"
-                >
-                  <MessageSquare size={11} />
-                  <span>Infokan ke Admin</span>
-                </button>
-              )}
-            </div>
+            </span>
+            {onOpenDelayNotifyModal && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onOpenDelayNotifyModal(task);
+                }}
+                className="shrink-0 whitespace-nowrap px-2.5 py-1 rounded-lg bg-red-600 hover:bg-red-700 text-white font-semibold text-[11px] transition active:scale-95 flex items-center gap-1 cursor-pointer shadow-xs"
+              >
+                <MessageSquare size={11} />
+                <span>Infokan Keterlambatan!</span>
+              </button>
+            )}
           </div>
         )}
 
@@ -389,17 +409,11 @@ export const StaffTodayTaskCard: React.FC<StaffTodayTaskCardProps> = ({
 
       {/* Total Biaya & Status Bayar */}
       <div className="flex items-center justify-between text-xs pt-1 border-t border-divider">
-        <div className="flex items-center gap-1 text-ink-2">
+        <div className="flex items-center gap-1 text-ink-2" title="Total biaya kunjungan">
           <CreditCard size={12} className="text-accent" />
-          <span>Biaya:</span>
           <span className="text-ink font-bold">
             {formatRupiah(task.pricing.totalFee)}
           </span>
-          {task.pricing.deliveryFee > 0 && (
-            <span className="text-[10px] text-ink-2 font-medium ml-1">
-              (ongkir {formatRupiah(task.pricing.deliveryFee)})
-            </span>
-          )}
         </div>
 
         {isLunas ? (
@@ -441,7 +455,7 @@ export const StaffTodayTaskCard: React.FC<StaffTodayTaskCardProps> = ({
               title="Klik untuk mencatat pembayaran transaksi ini"
             >
               <CreditCard size={12} />
-              <span>Catat Bayar ({formatRupiah(task.pricing.totalFee)})</span>
+              <span>Bayar</span>
             </button>
           </div>
         )}
