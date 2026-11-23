@@ -488,6 +488,26 @@ let departCache: { lat: number; lng: number; accuracy: number; at: number } | nu
 let departWatchId: number | null = null;
 
 /**
+ * Cek izin lokasi browser TANPA memicu prompt native.
+ *
+ * S-06 revisi 2026-11-23: banner consent in-app dihapus dari `StaffToday`.
+ * Izin lokasi browser (yang diminta langsung oleh OS/browser saat Bidan menekan
+ * "Navigasi") menjadi satu-satunya consent. Warm-up latar hanya boleh berjalan
+ * bila status izin sudah `granted`; `prompt`/`denied`/API tidak tersedia →
+ * JANGAN mulai (fail-closed) agar aplikasi tidak pernah memunculkan modal izin
+ * sendiri tanpa aksi pengguna.
+ */
+export async function isGeolocationPermissionGranted(): Promise<boolean> {
+  try {
+    if (typeof navigator === 'undefined' || !navigator.permissions?.query) return false;
+    const status = await navigator.permissions.query({ name: 'geolocation' as PermissionName });
+    return status.state === 'granted';
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Mulai pemanasan cache GPS pasif (idempoten). Aman dipanggil berkali-kali;
  * hanya satu watch aktif. Browser tanpa `watchPosition` → diam (no-op).
  */

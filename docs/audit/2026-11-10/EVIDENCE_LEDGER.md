@@ -294,7 +294,7 @@ Lima item `OPEN` diperbaiki secara fondasional (gerbang kode + test), bukan tamb
 | ID | Perbaikan | Bukti test |
 |---|---|---|
 | **S-02** | Outbox gagal pindah ke `sessionStorage` (TTL 2 jam, tanpa gambar), dibersihkan saat logout | `tests/unit/staff-dashboard-hardening.test.ts` (9) |
-| **S-06** | Warm-up GPS hanya setelah consent eksplisit; cache dihapus saat stop | idem |
+| **S-06** | Banner consent in-app dihapus (revisi 2026-11-23). Consent tunggal = izin lokasi native browser; warm-up hanya jalan bila `navigator.permissions` = `granted`; cache dihapus saat stop | idem |
 | **S-08** | Ambang jarak & titik klinik dari tenant (`clinicLocation`); quick reply tetap DB-driven | idem |
 | **S-09** | Toast kedatangan jujur (`waResult`), input login 16px | idem |
 | **Cfg-015** | Brand dashboard dari API, watermark tanpa brand hardcode, `x-tenant-id` dari user, titik klinik dari tenant-settings | idem |

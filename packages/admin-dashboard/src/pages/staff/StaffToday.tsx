@@ -55,6 +55,7 @@ import {
   isWithinGpsWarmupWindow,
   formatWibClock,
   needsNavigationPreflight,
+  isGeolocationPermissionGranted,
   startDepartGpsWarmup,
   stopDepartGpsWarmup,
   getDepartPositionFast,
@@ -682,29 +683,26 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
     () => [...tasks, ...upcomingTasks].some((t) => isWithinGpsWarmupWindow(t.bookingDate)),
     [tasks, upcomingTasks]
   );
-  // S-06: warm-up GPS TIDAK boleh berjalan diam-diam. Wajib consent eksplisit
-  // per perangkat; tanpa izin, tombol Navigasi tetap memakai GPS sekali-tembak.
-  const [gpsWarmupConsent, setGpsWarmupConsent] = useState<'granted' | 'denied' | null>(() => {
-    try {
-      const v = localStorage.getItem('staff_gps_warmup_consent_v1');
-      return v === 'granted' || v === 'denied' ? v : null;
-    } catch {
-      return null;
-    }
-  });
-  const decideGpsWarmup = (decision: 'granted' | 'denied') => {
-    try {
-      localStorage.setItem('staff_gps_warmup_consent_v1', decision);
-    } catch {
-      /* storage diblokir: keputusan berlaku untuk sesi ini */
-    }
-    setGpsWarmupConsent(decision);
-  };
+  // S-06 revisi 2026-11-23 (keputusan pemilik): banner consent in-app dihapus.
+  // Consent lokasi cukup satu — prompt native browser saat Bidan menekan "Navigasi".
+  // Warm-up latar hanya berjalan bila izin browser SUDAH `granted`; aplikasi tidak
+  // pernah memunculkan modal izin sendiri (fail-closed, tanpa notifikasi tambahan).
   useEffect(() => {
-    if (hasDepartWindowTask && gpsWarmupConsent === 'granted') startDepartGpsWarmup();
-    else stopDepartGpsWarmup();
-    return () => stopDepartGpsWarmup();
-  }, [hasDepartWindowTask, gpsWarmupConsent]);
+    let cancelled = false;
+    if (!hasDepartWindowTask) {
+      stopDepartGpsWarmup();
+      return () => stopDepartGpsWarmup();
+    }
+    isGeolocationPermissionGranted().then((granted) => {
+      if (cancelled) return;
+      if (granted) startDepartGpsWarmup();
+      else stopDepartGpsWarmup();
+    });
+    return () => {
+      cancelled = true;
+      stopDepartGpsWarmup();
+    };
+  }, [hasDepartWindowTask]);
 
 
   // Fase 0.2: tandai percakapan dibaca saat dibuka (badge padam + sumber presence untuk
@@ -1745,12 +1743,13 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
     }
   };
 
-  // Tombol 1-tap QRIS: tampilkan barcode QRIS layar penuh langsung ke pasien.
+  // Tombol 1-tap QRIS: langsung tampilkan barcode layar penuh.
+  // JANGAN membuka modal "Catat Pembayaran" di belakangnya — dulu itu membuat dua
+  // modal bertumpuk dan lightbox QRIS (z lama 150) tertimbun modal (z-dialog 12000),
+  // sehingga tombol perbesar terasa "useless" (audit UX 2026-11-23).
   const handleOpenQrisFast = useCallback(
-    async (task: StaffTask, e?: React.MouseEvent) => {
+    async (_task: StaffTask, e?: React.MouseEvent) => {
       if (e) e.stopPropagation();
-      setPaymentModalTask(task);
-      setPaymentInitialMethod('QRIS');
       const info = await ensurePaymentInfo();
       if (!info || !info.qrisImageUrl) {
         toast('QRIS belum tersedia. Hubungi admin untuk mengunggah barcode QRIS.', 'error');
@@ -2244,35 +2243,6 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
         phase={pullToRefresh.phase}
         isDragging={pullToRefresh.isDragging}
       />
-      {/* S-06: consent eksplisit sebelum warm-up GPS latar berjalan. */}
-      {hasDepartWindowTask && gpsWarmupConsent === null && (
-        <div
-          role="dialog"
-          aria-label="Izin lokasi latar"
-          className="mx-3 mt-2 rounded-xl border border-divider bg-surface p-3 text-xs text-ink-2 shadow-xs"
-        >
-          <p className="mb-2 leading-relaxed">
-            Izinkan aplikasi memakai lokasi di latar <strong>hanya saat ada jadwal kunjungan</strong> agar tombol
-            Navigasi lebih cepat? Lokasi berhenti direkam saat tidak ada jadwal.
-          </p>
-          <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={() => decideGpsWarmup('granted')}
-              className="min-h-[44px] px-3 rounded-lg bg-accent hover:bg-accent-hover text-on-solid font-semibold"
-            >
-              Izinkan
-            </button>
-            <button
-              type="button"
-              onClick={() => decideGpsWarmup('denied')}
-              className="min-h-[44px] px-3 rounded-lg border border-divider text-ink-2"
-            >
-              Tidak
-            </button>
-          </div>
-        </div>
-      )}
       {/* WhatsApp Web Minimalist Clean Top Bar — hidden on mobile when chat active (fondasional gating) */}
       <header className={`${mobileView === 'chat' && activeTab === 'today' ? 'hidden md:block' : 'block'} bg-surface border-b border-divider dark:border-divider px-3 sm:px-4 py-2.5 sticky top-0 z-30 shadow-xs pt-[calc(0.625rem+env(safe-area-inset-top,0px))] md:pt-2.5 pl-[max(0.75rem,env(safe-area-inset-left,0px))] pr-[max(0.75rem,env(safe-area-inset-right,0px))] shrink-0`}>
         <div className="flex items-center justify-between gap-2 sm:gap-4 max-w-7xl mx-auto w-full">
@@ -2456,7 +2426,9 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                 mobileView === 'chat' ? 'hidden md:flex' : 'flex'
               } w-full md:w-[420px] flex-col border-r border-divider dark:border-divider bg-fill-1 overflow-hidden flex-shrink-0 min-h-0 h-full animate-fadeIn`}
             >
-              {/* Panel Search & Header */}
+              {/* Area gulir daftar tugas: judul + pencarian ikut ter-scroll,
+                  HANYA baris filter status yang sticky (permintaan UX 2026-11-23). */}
+              <div className="flex-1 overflow-y-auto bg-fill-1">
               <div className="p-3 bg-surface border-b border-divider dark:border-divider space-y-2.5">
                 <div className="flex items-center justify-between px-1">
                   <div className="flex items-center space-x-2">
@@ -2525,8 +2497,10 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                   </div>
                 )}
 
-                {/* Status Sub-filter Pills for Today (Operational vs Completed) */}
-                <div className="flex items-center gap-1.5 pt-1 overflow-x-auto no-scrollbar">
+              </div>
+
+                {/* Hanya baris filter status yang sticky saat daftar digulir */}
+                <div className="sticky top-0 z-10 bg-surface/95 backdrop-blur border-b border-divider dark:border-divider px-3 py-2 flex items-center gap-1.5 overflow-x-auto no-scrollbar">
                   <button
                     type="button"
                     onClick={() => setTodayFilter('all')}
@@ -2576,10 +2550,9 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                     </span>
                   </button>
                 </div>
-              </div>
 
-              {/* Task cards scroll area with proper background & space-y-3 spacing between cards */}
-              <div className="flex-1 overflow-y-auto p-3 pb-20 sm:pb-3 bg-fill-1 space-y-3">
+              {/* Task cards */}
+              <div className="p-3 pb-20 sm:pb-3 space-y-3">
                 {loading ? (
                   <div className="flex flex-col justify-center items-center h-48 space-y-3 text-ink-2">
                     <div className="h-6 w-6 animate-spin rounded-full border-2 border-accent border-t-transparent"></div>
@@ -2627,6 +2600,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                     />
                   ))
                 )}
+                </div>
               </div>
             </div>
 
@@ -3291,11 +3265,11 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
       {/* ========================================================================= */}
       {qrisZoomModal && (
         <div
-          className="modal-backdrop fixed inset-0 z-[150] flex flex-col items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fadeIn"
+          className="modal-backdrop fixed inset-0 z-dialog-top flex flex-col items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fadeIn"
           onClick={() => setQrisZoomModal(false)}
         >
           <div
-            className="bg-surface rounded-3xl p-6 max-w-sm w-full shadow-2xl flex flex-col items-center space-y-4 animate-modalScaleUp text-center relative"
+            className="bg-surface rounded-3xl p-4 sm:p-6 max-w-md w-full shadow-2xl flex flex-col items-center space-y-4 animate-modalScaleUp text-center relative"
             onClick={(e) => e.stopPropagation()}
           >
             <button
@@ -3314,11 +3288,11 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
               </p>
             </div>
 
-            <div className="p-4 bg-surface rounded-2xl border-2 border-divider shadow-inner">
+            <div className="p-2 sm:p-3 bg-surface rounded-2xl border-2 border-divider shadow-inner w-full flex items-center justify-center">
               <img
                 src={paymentInfo?.qrisImageUrl || ''}
                 alt="QRIS Fullscreen"
-                className="w-64 h-64 sm:w-72 sm:h-72 object-contain"
+                className="w-full max-h-[58dvh] sm:max-h-[68dvh] object-contain"
               />
             </div>
 
@@ -3367,7 +3341,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
       {/* ========================================================================= */}
       {zoomImageUrl && (
         <div
-          className="modal-backdrop fixed inset-0 z-[120] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fadeIn"
+          className="modal-backdrop fixed inset-0 z-dialog-top flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fadeIn"
           onClick={() => {
             setZoomImageUrl(null);
             setZoomImageKind(null);
