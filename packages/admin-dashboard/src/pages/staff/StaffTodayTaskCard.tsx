@@ -102,6 +102,16 @@ export const StaffTodayTaskCard: React.FC<StaffTodayTaskCardProps> = ({
     !task.arrivedAt &&
     task.status !== 'completed';
   const isSevereDelay = isDelayActive && task.delay?.level === 'critical';
+  /**
+   * Hinjauan preventif: tampilkan batas jam berangkat SELALU selama bidan belum
+   * OTW dan belum lewat batas — bukan hanya saat sudah terlambat.
+   */
+  const showPreventiveDepartureHint =
+    Boolean(task.delay?.departureDeadlineWib) &&
+    !task.otwSentAt &&
+    !task.arrivedAt &&
+    task.status !== 'completed' &&
+    !task.delay?.missedDeparture;
   const delayBorderClass = isSevereDelay
     ? 'border-red-600 border-l-red-600 ring-1 ring-red-500/40 animate-delay-pulse'
     : isDelayActive
@@ -227,6 +237,17 @@ export const StaffTodayTaskCard: React.FC<StaffTodayTaskCardProps> = ({
                   : `Berangkat sebelum ${task.delay.departureDeadlineWib}`}
               </span>
             )}
+          </div>
+        )}
+
+        {/* Langkah preventif: batas jam berangkat (selalu tampil sebelum OTW) */}
+        {showPreventiveDepartureHint && (
+          <div className="mb-2 flex items-center gap-1.5 px-2 py-1 rounded-lg bg-accent/5 border border-accent/20 text-[11px] text-ink-2">
+            <Clock size={12} className="text-accent shrink-0" />
+            <span>
+              Berangkat sebelum{' '}
+              <strong className="text-ink">{task.delay?.departureDeadlineWib} WIB</strong> agar tiba tepat waktu
+            </span>
           </div>
         )}
 
