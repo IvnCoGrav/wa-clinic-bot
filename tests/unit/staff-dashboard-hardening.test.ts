@@ -70,6 +70,11 @@ describe('Kartu tugas & QRIS (audit UX 2026-11-23)', () => {
     expect(staffToday.slice(start, end)).not.toContain('setPaymentModalTask');
   });
 
+  it('pulse eskalasi memakai animasi merah, bukan opacity yang memutihkan kartu', () => {
+    expect(taskCard).toContain('animate-delay-pulse');
+    expect(taskCard).not.toContain('animate-pulse');
+  });
+
   it('hanya baris filter status yang sticky di daftar tugas', () => {
     expect(staffToday).toContain('sticky top-0 z-10 bg-surface/95 backdrop-blur');
     expect(staffToday).not.toContain('p-3 bg-surface border-b border-divider dark:border-divider space-y-2.5 sticky');

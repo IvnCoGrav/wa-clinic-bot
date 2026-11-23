@@ -741,3 +741,27 @@ html.dark,
   }
 }
 
+
+/* Pulse merah untuk eskalasi keterlambatan (delay watchdog).
+   Sengaja TIDAK memakai `animate-pulse` opacity: efek opacity membuat kartu
+   tampak memutih. Animasi ini hanya memulsa cincin/border merah. */
+@keyframes delayPulse {
+  0%, 100% {
+    border-color: #dc2626;
+    box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.55);
+  }
+  50% {
+    border-color: #ef4444;
+    box-shadow: 0 0 0 7px rgba(220, 38, 38, 0);
+  }
+}
+
+.animate-delay-pulse {
+  animation: delayPulse 1.6s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-delay-pulse {
+    animation: none;
+  }
+}
