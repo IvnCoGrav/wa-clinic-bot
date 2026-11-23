@@ -648,6 +648,49 @@ export class CronService {
   }
 
   /**
+   * Departure Watchdog: peringatan dini keterlambatan keberangkatan bidan.
+   * Menghitung potensi keterlambatan seluruh bidan bertugas hari ini dan mempublikasikan
+   * SSE `staff.delay_alert` ke Live Chat hub dengan deduplikasi 30 menit di KV.
+   */
+  public async runDepartureWatchdogSweep(): Promise<void> {
+    try {
+      const { staffDepartureWatchdogService } = await import('./staff-departure-watchdog.service');
+      const { getLiveChatHub } = await import('./live-chat-hub.service');
+      const { distributedKv } = await import('../utils/distributed-kv');
+      const { getAllTenantIds } = await import('./media.service');
+
+      const tenants = await getAllTenantIds();
+      let alertCount = 0;
+
+      for (const tenantId of tenants) {
+        try {
+          const alerts = await staffDepartureWatchdogService.listTodayDelayAlerts(tenantId);
+          for (const alert of alerts) {
+            const dedupeKey = `delay:alert:${tenantId}:${alert.reservationId}:${alert.level}`;
+            const isFirst = await distributedKv.setNx(dedupeKey, '1', 30 * 60 * 1000);
+            if (isFirst) {
+              await getLiveChatHub().publish({
+                type: 'staff.delay_alert',
+                tenantId,
+                payload: alert,
+              });
+              alertCount++;
+            }
+          }
+        } catch (e: any) {
+          console.warn(`[Cron Service] Departure watchdog sweep skip tenant ${tenantId}:`, e?.message);
+        }
+      }
+
+      if (alertCount > 0) {
+        console.log(`[Cron Service] Departure watchdog broadcasted ${alertCount} alerts.`);
+      }
+    } catch (err: any) {
+      console.error('[Cron Service] Error running departure watchdog sweep:', err?.message);
+    }
+  }
+
+  /**
    * Buffer penugasan terapis: kirim notifikasi yang sudah melewati jendela 5 menit.
    * Persisten via kolom assignment_pending_at/assignment_notified_at.
    */

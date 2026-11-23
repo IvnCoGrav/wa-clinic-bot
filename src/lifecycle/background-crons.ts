@@ -308,6 +308,20 @@ export function registerCronWorkers(): void {
     }).catch(e => console.error('[SHARELOC REMINDER SWEEP START ERROR]', e));
   }
 
+  // Departure Watchdog cron (peringatan dini keterlambatan keberangkatan bidan).
+  // Default disabled (false) saat deploy pertama; diaktifkan via ENABLE_DELAY_WATCHDOG=true.
+  if (process.env.ENABLE_DELAY_WATCHDOG === 'true') {
+    const intervalMinutes = Math.max(1, Number(process.env.DELAY_WATCHDOG_INTERVAL_MINUTES || 5) || 5);
+    import('../services/cron.service').then(({ CronService }) => {
+      const cron = new CronService();
+      trackIntervalStaggered(
+        createExclusiveCronTask('delay-watchdog', () => cron.runDepartureWatchdogSweep()),
+        intervalMinutes * 60 * 1000
+      );
+      console.log(`⏱️ Departure watchdog sweep cron started (every ${intervalMinutes}m, staggered)`);
+    }).catch((e) => console.error('[DELAY WATCHDOG SWEEP START ERROR]', e));
+  }
+
   // Nightly Watchdog (Fase 2r): laporan pengawasan malam 21:00 WIB.
   import('../services/nightly-watchdog.service').then(({ nightlyWatchdogService }) => {
     import('../services/notification-delivery.service').then(({ notificationDeliveryService }) => {

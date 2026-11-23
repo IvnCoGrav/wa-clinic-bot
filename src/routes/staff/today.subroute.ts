@@ -12,7 +12,7 @@ import {
 } from '../../services/staff-trip-tracking.service';
 import { DEFAULT_TENANT_ID } from '../../config/tenant';
 import { prisma } from '../../db/client';
-import { isStaffSupervisorRole } from '../staff.route';
+import { isStaffSupervisorRole, canReceiveStaffAlert } from '../../domain/staff-role';
 import { sanitizeMessageForStaff, sanitizeStaffHubPayload } from '../../utils/pii-masker';
 import { sanitizeCustomerNameForGreeting } from '../../utils/name-sanitizer';
 import { ensureStaffSignature } from '../../utils/staff-signature';
@@ -21,6 +21,7 @@ import { reservationStatusService } from '../../services/reservation-status.serv
 import { createMonotonicSseSequencer } from '../../utils/sse-sequence';
 import { resolveSessionTenantId } from '../admin/route-helpers';
 import { logStaffRejection } from '../../utils/staff-rejection-log';
+import { loadAuthorizedReservation } from '../../services/staff-reservation-access.service';
 
 /**
  * Penomoran event SSE monotonik proses-wide (Fase 0.4). Menjamin id selalu naik
@@ -677,38 +678,6 @@ export async function staffTodayRoutes(fastify: FastifyInstance) {
   );
 
   /**
-   * Helper internal: muat reservasi + guard tenant/anti-IDOR untuk rute telemetry.
-   * Fail-closed untuk unassigned; supervisor boleh lintas-terapis.
-   */
-  const loadAuthorizedReservation = async (
-    reservationId: string,
-    staffId: string,
-    tenantId: string,
-    isSupervisor: boolean
-  ): Promise<{ ok: true; reservation: any } | { ok: false; status: number; error: string }> => {
-    if (!reservationId || typeof reservationId !== 'string') {
-      return { ok: false, status: 400, error: 'reservationId wajib disertakan.' };
-    }
-    const reservation = await prisma.reservation.findUnique({
-      where: { id: reservationId },
-      include: {
-        customer: { select: { id: true, lat: true, lng: true, name: true } },
-        assigned_staff: { select: { name: true } },
-      },
-    });
-    if (!reservation || (reservation as any).tenant_id !== tenantId) {
-      return { ok: false, status: 404, error: 'Reservasi tidak ditemukan.' };
-    }
-    if (!isSupervisor) {
-      const assigned = (reservation as any).assigned_staff_id;
-      if (!assigned || assigned !== staffId) {
-        return { ok: false, status: 403, error: 'Anda tidak memiliki hak akses untuk perjalanan jadwal terapis lain.' };
-      }
-    }
-    return { ok: true, reservation };
-  };
-
-  /**
    * POST /api/staff/telemetry
    * Menerima ping GPS berkala dari HP terapis saat OTW (transient, TTL 10 menit).
    * Wajib tenant-scoped + anti-IDOR. Payload < 1 KB.
@@ -1295,6 +1264,7 @@ export async function staffTodayRoutes(fastify: FastifyInstance) {
       'staff.task_completed',
       'staff.telemetry_updated',
       'staff.trip_closed',
+      'staff.delay_alert',
       'message.created',
       'message.updated',
       'message.status_updated',
@@ -1308,8 +1278,28 @@ export async function staffTodayRoutes(fastify: FastifyInstance) {
           return;
         }
 
-        // Event telemetry: hanya pemilik perjalanan (anti-leak posisi lintas-terapis).
-        if (event.type === 'staff.telemetry_updated' || event.type === 'staff.trip_closed') {
+        // Event delay alert: wajib pemilik. Alert tanpa pemilik (reservasi belum
+        // ditugaskan) TIDAK boleh disiarkan ke terapis non-supervisor.
+        if (event.type === 'staff.delay_alert') {
+          if (
+            !canReceiveStaffAlert({
+              isSupervisor,
+              staffId,
+              alertStaffId: event.payload?.staffId,
+            })
+          ) {
+            return;
+          }
+          const data = JSON.stringify(event.payload || {});
+          reply.raw.write(`event: ${event.type}\ndata: ${data}\n\n`);
+          return;
+        }
+
+        // Event telemetry & trip close: hanya pemilik perjalanan (anti-leak posisi).
+        if (
+          event.type === 'staff.telemetry_updated' ||
+          event.type === 'staff.trip_closed'
+        ) {
           if (!isSupervisor && event.payload?.staffId && event.payload.staffId !== staffId) {
             return;
           }

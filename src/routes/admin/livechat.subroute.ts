@@ -7,6 +7,7 @@ import { getLiveChatHub } from '../../services/live-chat-hub.service';
 import { conversationService, buildConversationUpdatedPayload } from '../../services/conversation.service';
 import { customerService } from '../../services/customer.service';
 import { messageService } from '../../services/message.service';
+import { staffDepartureWatchdogService } from '../../services/staff-departure-watchdog.service';
 import { responseCacheService } from '../../services/response-cache.service';
 import { ConversationState } from '@prisma/client';
 import { createMonotonicSseSequencer } from '../../utils/sse-sequence';
@@ -216,6 +217,24 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
         .send({ success: true, count });
     } catch (err: any) {
       return reply.status(500).send({ success: false, error: err.message || 'Gagal menghitung unread count' });
+    }
+  });
+
+  /**
+   * GET /api/admin/live-chat/delay-alerts
+   * Mengambil daftar peringatan dini keterlambatan seluruh bidan hari ini.
+   * Scoped untuk Admin / CS tanpa 403 (lolos RBAC).
+   */
+  fastify.get('/api/admin/live-chat/delay-alerts', async (request: FastifyRequest, reply: FastifyReply) => {
+    const tenantId = (request as any).adminSession?.tenant_id || resolveSessionTenantId(request);
+    try {
+      const alerts = await staffDepartureWatchdogService.listTodayDelayAlerts(tenantId);
+      return reply.status(200).send({ success: true, data: alerts });
+    } catch (err: any) {
+      return reply.status(500).send({
+        success: false,
+        error: `Gagal memuat delay alerts: ${err?.message || err}`,
+      });
     }
   });
 

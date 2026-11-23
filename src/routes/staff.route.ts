@@ -6,11 +6,13 @@ import { staffAuthRoutes } from './staff/auth.subroute';
 import { staffTodayRoutes } from './staff/today.subroute';
 import { staffQuickRepliesRoutes } from './staff/quick-replies.subroute';
 import { staffScorecardRoutes } from './staff/scorecard.subroute';
+import { staffDelayWatchdogRoutes } from './staff/delay-watchdog.subroute';
 
-export function isStaffSupervisorRole(role?: string | null): boolean {
-  const r = String(role || '').toLowerCase();
-  return r === 'spv_cs' || r === 'super_admin' || r === 'tenant_admin' || r === 'admin_cs' || r === 'admin';
-}
+/**
+ * Re-export kanonis: predikat peran tinggal di `src/domain/staff-role.ts` agar
+ * subroute tidak mengimpor route (anti siklus). Import lama tetap kompatibel.
+ */
+export { isStaffSupervisorRole } from '../domain/staff-role';
 
 export async function staffRoutes(fastify: FastifyInstance) {
   // Middleware otentikasi independen khusus rute staff
@@ -101,4 +103,5 @@ export async function staffRoutes(fastify: FastifyInstance) {
   fastify.register(staffTodayRoutes);
   fastify.register(staffQuickRepliesRoutes);
   fastify.register(staffScorecardRoutes);
+  fastify.register(staffDelayWatchdogRoutes);
 }

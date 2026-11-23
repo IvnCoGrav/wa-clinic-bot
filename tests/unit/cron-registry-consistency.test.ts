@@ -5,7 +5,7 @@ import path from 'node:path';
 /**
  * K-013: dokumentasi jumlah cron wajib selaras dengan registrasi runtime.
  * Definisi kanonis = `src/lifecycle/background-crons.ts` (createExclusiveCronTask).
- * Dokumentasi membedakan "interval cron" (25) dari "pekerja logis" (26) karena
+ * Dokumentasi membedakan "interval cron" (26) dari "pekerja logis" (27) karena
  * Morning Jobs & Weekly Backup berbagi satu interval.
  */
 describe('Konsistensi registri cron (K-013)', () => {
@@ -15,9 +15,9 @@ describe('Konsistensi registri cron (K-013)', () => {
 
   const registeredIds = [...source.matchAll(/createExclusiveCronTask\('([^']+)'/g)].map((m) => m[1]);
 
-  it('registrasi runtime tetap 25 interval cron dengan id unik', () => {
-    expect(registeredIds.length).toBe(25);
-    expect(new Set(registeredIds).size).toBe(25);
+  it('registrasi runtime tetap 26 interval cron dengan id unik', () => {
+    expect(registeredIds.length).toBe(26);
+    expect(new Set(registeredIds).size).toBe(26);
   });
 
   it('pekerja logis yang berbagi interval tetap terdaftar', () => {
@@ -34,9 +34,10 @@ describe('Konsistensi registri cron (K-013)', () => {
     expect(registeredIds).toContain('google-contacts-outbox');
   });
 
-  it('dokumentasi menyebut 25 interval dan 26 pekerja logis (bukan 26 interval)', () => {
-    expect(docs).toContain('25 interval cron');
-    expect(docs).toContain('26 pekerja logis');
+  it('dokumentasi menyebut 26 interval dan 27 pekerja logis (bukan 26 interval)', () => {
+    expect(docs).toContain('26 interval cron');
+    expect(docs).toContain('27 pekerja logis');
     expect(docs).not.toContain('26 background worker mandiri');
+    expect(docs).not.toContain('27 background worker mandiri');
   });
 });

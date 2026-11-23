@@ -345,6 +345,8 @@ model Reservation {
   assignment_pending_staff_id String?
   assignment_pending_at    DateTime?
   assignment_notified_at   DateTime?
+  /// Kapan bidan menginformasikan keterlambatan ke admin (idempoten, anti-spam).
+  delay_notified_at        DateTime?
   series_id                String?
   series                   ReservationSeries? @relation(fields: [series_id], references: [id], onDelete: SetNull)
   session_number           Int?
@@ -1055,6 +1057,9 @@ model Staff {
   employment_started_at  DateTime?
   retentionSnapshots     StaffRetentionSnapshot[]
   scorecardSnapshots     StaffScorecardSnapshot[]
+  base_lat               Float?
+  base_lng               Float?
+  base_address           String?
 
   @@index([tenant_id])
   @@unique([tenant_id, phone])

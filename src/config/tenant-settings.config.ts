@@ -4,6 +4,13 @@ import { getClinicLocationAsync, type ClinicLocation } from './clinic-location';
 import { getOperationalHours, type OperationalHours } from './operational-hours';
 import { getStaffNotificationConfig, type StaffNotificationConfig } from './staff-notification-config';
 import { getBrandIdentityAsync, type BrandIdentity } from './brand';
+import {
+  getDelayWatchdogSettings,
+  type DelayWatchdogSettings,
+} from './delay-watchdog-config';
+import { normalizePhoneID } from '../utils/phone-normalizer';
+
+export type { DelayWatchdogSettings };
 
 /**
  * tenant-settings.config.ts — kontrak tulis/baca setelan tenant yang sebelumnya
@@ -42,6 +49,7 @@ export interface TenantSettingsView {
   deliverySettings: DeliverySettings;
   copilot: CopilotSettings;
   brand: BrandIdentity;
+  delayWatchdog: DelayWatchdogSettings;
 }
 
 export interface ClinicLocationPatch {
@@ -59,6 +67,7 @@ export interface TenantSettingsPatch {
   /** `styleTone: null` menghapus override → prompt Copilot kembali ke default netral. */
   copilot?: { styleTone?: string | null };
   brand?: Partial<BrandIdentity>;
+  delayWatchdog?: Partial<DelayWatchdogSettings>;
 }
 
 export type ParseResult =
@@ -80,6 +89,7 @@ const TOP_LEVEL_KEYS = [
   'deliverySettings',
   'copilot',
   'brand',
+  'delayWatchdog',
 ] as const;
 const MAX_TEXT_LENGTH = 200;
 const MAX_LOGO_URL_LENGTH = 500;
@@ -268,6 +278,85 @@ export function parseTenantSettingsPatch(raw: unknown): ParseResult {
     }
   }
 
+  if (raw.delayWatchdog !== undefined) {
+    if (!isPlainObject(raw.delayWatchdog)) {
+      errors.push('delayWatchdog harus berupa objek.');
+    } else {
+      const allowedKeys = [
+        'toleranceMinutes',
+        'criticalExtraMinutes',
+        'maxPrevOriginGapHours',
+        'adminRecipients',
+      ] as const;
+      rejectUnknownKeys(raw.delayWatchdog, allowedKeys, 'delayWatchdog.', errors);
+      const src = raw.delayWatchdog;
+      const dst: Partial<DelayWatchdogSettings> = {};
+
+      if (src.toleranceMinutes !== undefined) {
+        if (
+          !isFiniteNumber(src.toleranceMinutes) ||
+          !Number.isInteger(src.toleranceMinutes) ||
+          src.toleranceMinutes < 1 ||
+          src.toleranceMinutes > 180
+        ) {
+          errors.push('delayWatchdog.toleranceMinutes harus bilangan bulat 1-180.');
+        } else {
+          dst.toleranceMinutes = src.toleranceMinutes;
+        }
+      }
+      if (src.criticalExtraMinutes !== undefined) {
+        if (
+          !isFiniteNumber(src.criticalExtraMinutes) ||
+          !Number.isInteger(src.criticalExtraMinutes) ||
+          src.criticalExtraMinutes < 0 ||
+          src.criticalExtraMinutes > 120
+        ) {
+          errors.push('delayWatchdog.criticalExtraMinutes harus bilangan bulat 0-120.');
+        } else {
+          dst.criticalExtraMinutes = src.criticalExtraMinutes;
+        }
+      }
+      if (src.maxPrevOriginGapHours !== undefined) {
+        if (
+          !isFiniteNumber(src.maxPrevOriginGapHours) ||
+          !Number.isInteger(src.maxPrevOriginGapHours) ||
+          src.maxPrevOriginGapHours < 1 ||
+          src.maxPrevOriginGapHours > 12
+        ) {
+          errors.push('delayWatchdog.maxPrevOriginGapHours harus bilangan bulat 1-12.');
+        } else {
+          dst.maxPrevOriginGapHours = src.maxPrevOriginGapHours;
+        }
+      }
+      if (src.adminRecipients !== undefined) {
+        if (!Array.isArray(src.adminRecipients)) {
+          errors.push('delayWatchdog.adminRecipients harus array.');
+        } else if (src.adminRecipients.length > 5) {
+          errors.push('delayWatchdog.adminRecipients maksimal 5 nomor.');
+        } else {
+          const validatedRecipients: string[] = [];
+          for (let i = 0; i < src.adminRecipients.length; i++) {
+            const rawPhone = src.adminRecipients[i];
+            if (typeof rawPhone !== 'string') {
+              errors.push(`delayWatchdog.adminRecipients[${i}] harus berupa teks.`);
+              continue;
+            }
+            const normalized = normalizePhoneID(rawPhone);
+            if (!normalized || !/^62\d{8,13}$/.test(normalized)) {
+              errors.push(`delayWatchdog.adminRecipients[${i}]: nomor '${rawPhone}' tidak valid.`);
+            } else {
+              validatedRecipients.push(normalized);
+            }
+          }
+          if (!errors.some((e) => e.startsWith('delayWatchdog.adminRecipients'))) {
+            dst.adminRecipients = validatedRecipients;
+          }
+        }
+      }
+      if (Object.keys(dst).length > 0) patch.delayWatchdog = dst;
+    }
+  }
+
   if (errors.length > 0) return { ok: false, errors };
   if (Object.keys(patch).length === 0) {
     return { ok: false, errors: ['Tidak ada setelan yang dikirim.'] };
@@ -319,6 +408,15 @@ export function applyTenantSettingsPatch(
   if (patch.brand) {
     next.brand = { ...(isPlainObject(current.brand) ? current.brand : {}), ...patch.brand };
   }
+  if (patch.delayWatchdog) {
+    next.delayWatchdog = {
+      ...(isPlainObject(current.delayWatchdog) ? current.delayWatchdog : {}),
+      ...patch.delayWatchdog,
+    };
+    if (patch.delayWatchdog.adminRecipients !== undefined) {
+      next.delayWatchdog.adminRecipients = patch.delayWatchdog.adminRecipients;
+    }
+  }
 
   return next;
 }
@@ -359,13 +457,15 @@ async function readDeliveryAndCopilot(
 export async function getTenantSettingsView(
   tenantId: string = DEFAULT_TENANT_ID
 ): Promise<TenantSettingsView> {
-  const [clinicLocation, operationalHours, staffNotification, brand, extra] = await Promise.all([
-    getClinicLocationAsync(tenantId),
-    getOperationalHours(tenantId),
-    getStaffNotificationConfig(tenantId),
-    getBrandIdentityAsync(tenantId),
-    readDeliveryAndCopilot(tenantId),
-  ]);
+  const [clinicLocation, operationalHours, staffNotification, brand, extra, delayWatchdog] =
+    await Promise.all([
+      getClinicLocationAsync(tenantId),
+      getOperationalHours(tenantId),
+      getStaffNotificationConfig(tenantId),
+      getBrandIdentityAsync(tenantId),
+      readDeliveryAndCopilot(tenantId),
+      getDelayWatchdogSettings(tenantId),
+    ]);
 
   return {
     clinicLocation: { ...clinicLocation },
@@ -374,5 +474,6 @@ export async function getTenantSettingsView(
     deliverySettings: extra.deliverySettings,
     copilot: extra.copilot,
     brand: { ...brand },
+    delayWatchdog: { ...delayWatchdog },
   };
 }
