@@ -79,7 +79,7 @@ describe('Kartu tugas & QRIS (audit UX 2026-11-23)', () => {
 
   it('tidak ada aksi manual "Infokan Keterlambatan" (notifikasi dikirim otomatis)', () => {
     expect(taskCard).not.toContain('Infokan Keterlambatan!');
-    expect(taskCard).toContain('Admin otomatis diberi tahu');
+    expect(taskCard).toContain('Notifikasi admin otomatis');
     expect(staffToday).not.toContain('DelayNotifyModal');
     expect(staffToday).not.toContain('handleOpenDelayNotify');
   });
