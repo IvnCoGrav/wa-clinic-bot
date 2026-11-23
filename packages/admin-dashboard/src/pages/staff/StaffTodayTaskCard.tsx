@@ -216,7 +216,7 @@ export const StaffTodayTaskCard: React.FC<StaffTodayTaskCardProps> = ({
               </span>
             </span>
             <span className="shrink-0 text-[10px] text-ink-2 whitespace-nowrap">
-              Admin otomatis diberi tahu
+              Notifikasi admin otomatis
             </span>
           </div>
         )}
