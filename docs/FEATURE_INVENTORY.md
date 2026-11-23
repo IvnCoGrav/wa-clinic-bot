@@ -221,12 +221,13 @@ Modul pelacakan efektivitas iklan berbayar (Click-to-WhatsApp) hingga ke titik t
 
 ## 8. Otomasi, Background Crons & Pekerja Mandiri
 
-Sistem menjalankan **25 interval cron** untuk **26 pekerja logis** mandiri (Morning Jobs & Weekly Backup berbagi satu interval 15 menit) guna memastikan integritas data dan kelancaran operasional klinik tanpa intervensi manual.
+Sistem menjalankan **26 interval cron** untuk **27 pekerja logis** mandiri (Morning Jobs & Weekly Backup berbagi satu interval 15 menit) guna memastikan integritas data dan kelancaran operasional klinik tanpa intervensi manual.
 
 | Background Worker / Cron | Frekuensi / Waktu | Deskripsi & Tanggung Jawab Operasional |
 | :--- | :--- | :--- |
 | **Google Sheets Outbox Sync** | Setiap 3 menit | Menguras antrean rekapan data reservasi dan keuangan ke spreadsheet Google Sheets klinik. |
 | **Frustration SLA Sweep** | Setiap 5 menit | Memeriksa percakapan yang terbengkalai melewati SLA waktu tunggu untuk memicu alarm peringatan CS. |
+| **Departure Watchdog Sweep** | Setiap 5 menit (flag `ENABLE_DELAY_WATCHDOG`) | Menghitung potensi keterlambatan keberangkatan bidan hari ini, menyiarkan `staff.delay_alert` ke Live Chat, dan mendeduplikasi alert 30 menit di KV. |
 | **Assignment Notification Sweep** | Setiap 2 menit | Mengirimkan notifikasi penugasan terapis yang terkumpul dalam buffer 5 menit ke perangkat bidan. |
 | **Trip Auto-Close Sweep** | Setiap 15 menit | Menutup otomatis sesi pelacakan GPS bidan yang perjalanannya telah melewati jadwal kunjungan. |
 | **Slot Overlap Sweep** | Setiap 15 menit | Mendeteksi potensi bentrok jadwal antar-kunjungan dan memberi tahu admin. |
@@ -298,7 +299,7 @@ Pusat administrasi sistem di Admin Dashboard (`packages/admin-dashboard`) untuk 
 
 - **Total Endpoint API**: **297 endpoint unik (348 pasangan method+path)** (tersebar di rute Admin, Staff, Webhook, Media, Tracking, Landing, dan Health).
 - **Total Model Database (Prisma Entities)**: **50 model Prisma** dan **16 enum** mencakup domain Customer, Percakapan, Reservasi, Staf, Insentif Retensi, Log Audit, Integrasi Google/Meta, dan Analitik.
-- **Total Background Crons & Workers**: **25 interval cron terdaftar** untuk **26 pekerja logis** (definisi kanonis: `src/lifecycle/background-crons.ts`; Morning Jobs & Weekly Backup berbagi satu interval 15 menit), dengan interval berkala mulai dari 2 menit hingga 1 minggu. Setiap kegagalan beruntun dilaporkan sebagai status `GET /api/admin/health` (`cronHealth`) dan memicu alert `CRON_JOB_FAILED` setelah ambang `CRON_FAILURE_ALERT_THRESHOLD` (default 3).
+- **Total Background Crons & Workers**: **26 interval cron terdaftar** untuk **27 pekerja logis** (definisi kanonis: `src/lifecycle/background-crons.ts`; Morning Jobs & Weekly Backup berbagi satu interval 15 menit), dengan interval berkala mulai dari 2 menit hingga 1 minggu. Setiap kegagalan beruntun dilaporkan sebagai status `GET /api/admin/health` (`cronHealth`) dan memicu alert `CRON_JOB_FAILED` setelah ambang `CRON_FAILURE_ALERT_THRESHOLD` (default 3).
 - **Penyedia Integrasi WhatsApp**: Dual-mode terintegrasi (**WAHA container** + **Meta Cloud API resmi**).
 - **Dasbor Manajemen**: 1 Single Page Application (React 18 + Vite + Tailwind CSS) yang memuat modul Kalender Jadwal, Live Chat CS, Peta Sebaran Pasien, Analitik Meta Ads, Evaluasi AI, Insentif Retensi Bidan, dan Konfigurasi Multi-Tenant.
 

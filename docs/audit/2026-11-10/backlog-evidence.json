@@ -534,12 +534,12 @@
           "type": "file",
           "path": "docs/FEATURE_INVENTORY.md",
           "line": 205,
-          "contains": "25 interval cron"
+          "contains": "26 interval cron"
         },
         {
           "type": "test",
           "path": "tests/unit/cron-registry-consistency.test.ts",
-          "contains": "registrasi runtime tetap 25 interval cron"
+          "contains": "registrasi runtime tetap 26 interval cron"
         }
       ],
       "verifiedBy": "AI Agent",

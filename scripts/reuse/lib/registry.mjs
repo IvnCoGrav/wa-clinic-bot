@@ -195,7 +195,18 @@ export function searchCapabilities(registry, query, limit = 5) {
   }
 
   const rawQuery = query.toLowerCase().trim();
-  const queryTokens = rawQuery.split(/[\s,._-]+/).filter(t => t.length > 1);
+  /**
+   * Kata sambung umum diabaikan saat pencocokan token. Tanpa ini, query acak
+   * seperti "tidak-ada-..." bisa cocok palsu ke nama ekspor (mis. "ada" di dalam
+   * "loadAuthorizedReservation") sehingga discovery kehilangan presisi.
+   */
+  const QUERY_STOPWORDS = new Set([
+    'ada', 'tidak', 'dan', 'yang', 'untuk', 'dengan', 'dari', 'ini', 'itu',
+    'atau', 'pada', 'agar', 'bila', 'jika', 'saat', 'the', 'and', 'for',
+  ]);
+  const queryTokens = rawQuery
+    .split(/[\s,._-]+/)
+    .filter((t) => t.length > 1 && !QUERY_STOPWORDS.has(t));
 
   const results = [];
 
