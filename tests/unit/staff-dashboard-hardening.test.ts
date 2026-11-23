@@ -79,9 +79,14 @@ describe('Kartu tugas & QRIS (audit UX 2026-11-23)', () => {
 
   it('tidak ada aksi manual "Infokan Keterlambatan" (notifikasi dikirim otomatis)', () => {
     expect(taskCard).not.toContain('Infokan Keterlambatan!');
-    expect(taskCard).toContain('Notifikasi admin otomatis');
     expect(staffToday).not.toContain('DelayNotifyModal');
     expect(staffToday).not.toContain('handleOpenDelayNotify');
+  });
+
+  it('menampilkan batas jam berangkat preventif (Berangkat sebelum HH:MM)', () => {
+    expect(taskCard).toContain('Berangkat sebelum ');
+    expect(taskCard).toContain('departureDeadlineWib');
+    expect(taskCard).not.toContain('Notifikasi admin otomatis');
   });
 
   it('hanya baris filter status yang sticky di daftar tugas', () => {

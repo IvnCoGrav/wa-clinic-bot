@@ -215,9 +215,18 @@ export const StaffTodayTaskCard: React.FC<StaffTodayTaskCardProps> = ({
                 {delayMinutes > 0 ? `Potensi Terlambat ±${delayMinutes} menit` : 'Waktu keberangkatan terlewat'}
               </span>
             </span>
-            <span className="shrink-0 text-[10px] text-ink-2 whitespace-nowrap">
-              Notifikasi admin otomatis
-            </span>
+            {!task.otwSentAt && task.delay?.departureDeadlineWib && (
+              <span
+                className={`shrink-0 text-[10px] font-semibold whitespace-nowrap ${
+                  isSevereDelay ? 'text-red-600 dark:text-red-300' : 'text-amber-700 dark:text-amber-300'
+                }`}
+                title="Jam berangkat paling lambat agar tiba tepat waktu"
+              >
+                {task.delay.missedDeparture
+                  ? `Target berangkat ${task.delay.departureDeadlineWib}`
+                  : `Berangkat sebelum ${task.delay.departureDeadlineWib}`}
+              </span>
+            )}
           </div>
         )}
 

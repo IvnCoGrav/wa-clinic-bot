@@ -100,6 +100,8 @@ export interface ItineraryDelaySnapshot {
   originSource: OriginSource;
   originName: string;
   etaMinutes: number | null;
+  /** Jam berangkat paling lambat (WIB) agar tiba tepat waktu; '' bila ETA tak tersedia. */
+  departureDeadlineWib: string;
 }
 
 export interface ComputeItineraryDelaysParams {
@@ -167,6 +169,7 @@ export function computeItineraryDelays(
         originSource: origin?.originSource ?? 'unknown',
         originName: origin?.originName ?? 'Lokasi tidak diketahui',
         etaMinutes: progress?.etaMinutes ?? null,
+        departureDeadlineWib: prediction.departureDeadlineWib,
       });
 
       previousTask = {
@@ -395,6 +398,8 @@ export interface AutoNotifyDelayInput {
   notifiedAt?: Date | string | null;
   /** Ambang notifikasi otomatis (menit), tenant-aware. */
   thresholdMinutes: number;
+  /** Bidan belum berangkat padahal sudah melewati batas jam berangkat. */
+  missedDeparture?: boolean;
 }
 
 /**
@@ -408,6 +413,9 @@ export function shouldAutoNotifyDelay(params: AutoNotifyDelayInput): boolean {
   const delayMinutes = Number(params.delayMinutes);
   const thresholdMinutes = Number(params.thresholdMinutes);
   if (params.notifiedAt) return false;
+  // Bidan belum berangkat padahal jam berangkat minimal sudah lewat → kirim
+  // peringatan preventif ke admin, walau prediksi tiba masih "tepat waktu".
+  if (params.missedDeparture === true) return true;
   if (!Number.isFinite(delayMinutes) || delayMinutes <= 0) return false;
   if (!Number.isFinite(thresholdMinutes) || thresholdMinutes <= 0) return false;
   return delayMinutes >= thresholdMinutes;

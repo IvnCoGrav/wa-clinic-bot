@@ -108,6 +108,8 @@ export interface StaffTaskItem {
     missedDeparture: boolean;
     originSource: 'staff_base' | 'clinic' | 'prev_patient' | 'unknown';
     originName: string;
+    /** Jam berangkat paling lambat (WIB) agar tiba tepat waktu; '' bila tak bisa dihitung. */
+    departureDeadlineWib: string;
   };
   /**
    * Status jendela akses chat (server-driven, sumber kebenaran tunggal).
