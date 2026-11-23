@@ -104,7 +104,7 @@ export const StaffTodayTaskCard: React.FC<StaffTodayTaskCardProps> = ({
     task.status !== 'completed';
   const isSevereDelay = isDelayActive && delayMinutes >= 60;
   const delayBorderClass = isSevereDelay
-    ? 'border-red-600 border-l-red-600 ring-1 ring-red-500/40 animate-pulse'
+    ? 'border-red-600 border-l-red-600 ring-1 ring-red-500/40 animate-delay-pulse'
     : isDelayActive
       ? 'border-amber-500 border-l-amber-500'
       : '';
@@ -206,7 +206,7 @@ export const StaffTodayTaskCard: React.FC<StaffTodayTaskCardProps> = ({
           <div
             className={`mb-2 px-2.5 py-1.5 rounded-xl border text-xs flex items-center justify-between gap-2 ${
               isSevereDelay
-                ? 'border-red-500/50 bg-red-500/10 text-red-700 dark:text-red-300 animate-pulse'
+                ? 'border-red-500/50 bg-red-500/10 text-red-700 dark:text-red-300 animate-delay-pulse'
                 : 'border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-400'
             }`}
           >
