@@ -658,6 +658,8 @@ export class CronService {
       const { getLiveChatHub } = await import('./live-chat-hub.service');
       const { distributedKv } = await import('../utils/distributed-kv');
       const { getAllTenantIds } = await import('./media.service');
+      const { getDelayWatchdogSettings } = await import('../config/delay-watchdog-config');
+      const { shouldAutoNotifyDelay } = await import('../domain/delay-watchdog');
 
       const tenants = await getAllTenantIds();
       let alertCount = 0;
@@ -665,7 +667,39 @@ export class CronService {
       for (const tenantId of tenants) {
         try {
           const alerts = await staffDepartureWatchdogService.listTodayDelayAlerts(tenantId);
+          const watchdogSettings = await getDelayWatchdogSettings(tenantId);
+          // Auto-notify hanya jika nomor admin sudah dikonfigurasi (hindari audit
+          // kegagalan berulang tiap sweep saat penerima belum diisi).
+          const autoNotifyReady = (watchdogSettings.adminRecipients?.length || 0) > 0;
+
           for (const alert of alerts) {
+            // Auto-kirim ke admin saat keterlambatan mencapai ambang toleransi
+            // (default 30 menit) — sekali per reservasi lewat `delay_notified_at`.
+            if (
+              autoNotifyReady &&
+              alert.staffId &&
+              shouldAutoNotifyDelay({
+                delayMinutes: alert.delayMinutes,
+                notifiedAt: alert.delayNotifiedAt,
+                thresholdMinutes: watchdogSettings.toleranceMinutes,
+              })
+            ) {
+              const notifyResult = await staffDepartureWatchdogService.notifyDelayToAdmin({
+                reservationId: alert.reservationId,
+                staffId: alert.staffId,
+                tenantId,
+                isSupervisor: true,
+              });
+              if (notifyResult.success) {
+                console.log(
+                  `[Cron Service] Auto-notify keterlambatan terkirim: ${alert.reservationId} (${alert.delayMinutes}m, ${notifyResult.recipientCount} admin).`
+                );
+              } else if (notifyResult.code !== 'ALREADY_NOTIFIED') {
+                console.warn(
+                  `[Cron Service] Auto-notify keterlambatan gagal: ${alert.reservationId} -> ${notifyResult.code}`
+                );
+              }
+            }
             const dedupeKey = `delay:alert:${tenantId}:${alert.reservationId}:${alert.level}`;
             const isFirst = await distributedKv.setNx(dedupeKey, '1', 30 * 60 * 1000);
             if (isFirst) {

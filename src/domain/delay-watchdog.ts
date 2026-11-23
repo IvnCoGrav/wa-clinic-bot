@@ -387,3 +387,28 @@ export function predictTaskDelay(params: PredictTaskDelayInput): TaskDelayPredic
     departureDeadlineWib: formattedDeadlineWib,
   };
 }
+
+export interface AutoNotifyDelayInput {
+  /** Prediksi keterlambatan (menit). Positif = diperkirakan lewat jadwal. */
+  delayMinutes: number;
+  /** Waktu notifikasi terakhir. Bila sudah ada ? jangan kirim lagi. */
+  notifiedAt?: Date | string | null;
+  /** Ambang notifikasi otomatis (menit), tenant-aware. */
+  thresholdMinutes: number;
+}
+
+/**
+ * Gerbang auto-notify admin: kirim SEKALI per reservasi saat keterlambatan
+ * mencapai ambang (default = toleransi tenant, 30 menit). Murni deterministik.
+ *
+ * Fail-closed: angka tidak valid / ambang tidak valid / sudah pernah diberi tahu
+ * ? `false` (lebih baik tidak mengirim daripada spam ke admin).
+ */
+export function shouldAutoNotifyDelay(params: AutoNotifyDelayInput): boolean {
+  const delayMinutes = Number(params.delayMinutes);
+  const thresholdMinutes = Number(params.thresholdMinutes);
+  if (params.notifiedAt) return false;
+  if (!Number.isFinite(delayMinutes) || delayMinutes <= 0) return false;
+  if (!Number.isFinite(thresholdMinutes) || thresholdMinutes <= 0) return false;
+  return delayMinutes >= thresholdMinutes;
+}
