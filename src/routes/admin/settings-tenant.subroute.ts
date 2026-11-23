@@ -11,6 +11,10 @@ import { clearClinicLocationCache } from '../../config/clinic-location';
 import { clearOperationalHoursCache } from '../../config/operational-hours';
 import { clearStaffNotificationConfigCache } from '../../config/staff-notification-config';
 import { clearBrandCache } from '../../config/brand';
+import {
+  clearDelayWatchdogCache,
+} from '../../config/delay-watchdog-config';
+import { staffDepartureWatchdogService } from '../../services/staff-departure-watchdog.service';
 
 /**
  * Cfg-011 — endpoint baca/tulis setelan tenant yang sebelumnya hanya punya
@@ -76,6 +80,7 @@ export async function settingsTenantRoutes(fastify: FastifyInstance) {
         clearOperationalHoursCache(tenantId);
         clearStaffNotificationConfigCache(tenantId);
         clearBrandCache(tenantId);
+        clearDelayWatchdogCache(tenantId);
 
         await auditService.logAdminAction({
           apiKey: (request as any).adminKeyUsed,
@@ -99,6 +104,35 @@ export async function settingsTenantRoutes(fastify: FastifyInstance) {
           success: false,
           error: err?.message || 'Gagal menyimpan setelan tenant.',
           code: err?.code,
+        });
+      }
+    }
+  );
+
+  /**
+   * POST /api/admin/tenant-settings/test-delay-notify
+   * Mengirimkan pesan uji coba ke seluruh nomor WhatsApp admin yang terdaftar di delay watchdog.
+   */
+  fastify.post(
+    '/api/admin/tenant-settings/test-delay-notify',
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      try {
+        const tenantId = requireTenantId(request);
+        const result = await staffDepartureWatchdogService.sendTestNotification(tenantId);
+
+        if (!result.success) {
+          const status = result.error?.startsWith('Belum ada nomor admin') ? 400 : 502;
+          return reply.status(status).send({
+            success: false,
+            error: result.error,
+          });
+        }
+
+        return reply.status(200).send({ success: true, recipientCount: result.recipientCount });
+      } catch (err: any) {
+        return reply.status(500).send({
+          success: false,
+          error: `Gagal menjalankan tes: ${err?.message || err}`,
         });
       }
     }

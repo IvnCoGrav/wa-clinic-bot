@@ -630,6 +630,124 @@
       "test": "tests/integration/staff-scorecard-policy.test.ts"
     },
     {
+      "id": "staff.delay_watchdog_domain",
+      "title": "Prediksi keterlambatan dan deadline keberangkatan staf",
+      "description": "Domain murni untuk menentukan origin leg (rumah vs tugas sebelumnya), deadline keberangkatan, dan prediksi keterlambatan (on_time, warning, critical) tanpa I/O.",
+      "canonical": "src/domain/delay-watchdog.ts",
+      "exports": [
+        "resolveLegOrigin",
+        "computeDepartureDeadline",
+        "etaMinutesTo",
+        "predictTaskDelay",
+        "computeItineraryDelays"
+      ],
+      "forbiddenDeclarations": [
+        "resolveLegOrigin",
+        "computeDepartureDeadline",
+        "etaMinutesTo",
+        "predictTaskDelay",
+        "computeItineraryDelays"
+      ],
+      "allowedFiles": [
+        "src/domain/delay-watchdog.ts"
+      ],
+      "test": "tests/unit/delay-watchdog-domain.test.ts"
+    },
+    {
+      "id": "staff.delay_watchdog_config",
+      "title": "Resolusi konfigurasi delay watchdog per-tenant",
+      "description": "Resolver konfigurasi delay watchdog tenant-aware dengan TTL cache 5 menit dan fallback deterministik ke StaffScorecardPolicy atau default 30 menit.",
+      "canonical": "src/config/delay-watchdog-config.ts",
+      "exports": [
+        "getDelayWatchdogSettings",
+        "clearDelayWatchdogCache",
+        "DEFAULT_DELAY_WATCHDOG_SETTINGS"
+      ],
+      "forbiddenDeclarations": [
+        "getDelayWatchdogSettings",
+        "clearDelayWatchdogCache"
+      ],
+      "allowedFiles": [
+        "src/config/delay-watchdog-config.ts"
+      ],
+      "test": "tests/unit/delay-watchdog-config.test.ts"
+    },
+    {
+      "id": "staff.departure_watchdog_service",
+      "title": "Service watchdog keterlambatan & notifikasi admin",
+      "description": "Evaluasi jadwal hari ini untuk deteksi keterlambatan staf serta pengiriman notifikasi WhatsApp ke nomor admin resmi dengan audit trail.",
+      "canonical": "src/services/staff-departure-watchdog.service.ts",
+      "exports": [
+        "StaffDepartureWatchdogService",
+        "staffDepartureWatchdogService"
+      ],
+      "forbiddenDeclarations": [
+        "StaffDepartureWatchdogService",
+        "staffDepartureWatchdogService"
+      ],
+      "allowedFiles": [
+        "src/services/staff-departure-watchdog.service.ts"
+      ],
+      "test": "tests/unit/staff-departure-watchdog.test.ts"
+    },
+    {
+      "id": "location.trip_progress",
+      "title": "Rumus jarak, ETA, dan prediksi keterlambatan perjalanan",
+      "description": "Fungsi murni (tanpa I/O) untuk Haversine + ETA motor dan level keterlambatan; dipakai domain delay watchdog dan service trip tracking.",
+      "canonical": "src/utils/trip-progress.ts",
+      "exports": [
+        "calculateTripProgress",
+        "calculateDelayStatus",
+        "isValidCoord",
+        "WIB_TIME_FORMATTER",
+        "DELAY_WARN_MIN",
+        "DELAY_CRITICAL_MIN"
+      ],
+      "forbiddenDeclarations": [
+        "calculateTripProgress",
+        "calculateDelayStatus",
+        "isValidCoord"
+      ],
+      "allowedFiles": [
+        "src/utils/trip-progress.ts"
+      ],
+      "test": "tests/unit/staff-trip-arrival-and-delay.test.ts"
+    },
+    {
+      "id": "staff.staff_role",
+      "title": "Predikat peran staf dan gerbang isolasi alert",
+      "description": "Predikat supervisor dan gerbang penerimaan alert staf (fail-closed untuk alert tanpa pemilik) tanpa I/O.",
+      "canonical": "src/domain/staff-role.ts",
+      "exports": [
+        "isStaffSupervisorRole",
+        "canReceiveStaffAlert"
+      ],
+      "forbiddenDeclarations": [
+        "isStaffSupervisorRole",
+        "canReceiveStaffAlert"
+      ],
+      "allowedFiles": [
+        "src/domain/staff-role.ts"
+      ],
+      "test": "tests/unit/staff-role-alert-delivery.test.ts"
+    },
+    {
+      "id": "staff.reservation_access",
+      "title": "Guard akses reservasi staf (tenant + anti-IDOR)",
+      "description": "Memuat reservasi dan menegakkan isolasi tenant serta kepemilikan bidan sebelum rute staf memproses perjalanan.",
+      "canonical": "src/services/staff-reservation-access.service.ts",
+      "exports": [
+        "loadAuthorizedReservation"
+      ],
+      "forbiddenDeclarations": [
+        "loadAuthorizedReservation"
+      ],
+      "allowedFiles": [
+        "src/services/staff-reservation-access.service.ts"
+      ],
+      "test": "tests/integration/staff-delay-notify.test.ts"
+    },
+    {
       "id": "whatsapp.message_id",
       "title": "Validasi & klasifikasi format WhatsApp Message ID",
       "description": "Leaf util murni tanpa I/O untuk validasi format message ID reply_to per provider (WAHA serialized vs WABA wamid) dan deteksi error format ID untuk fallback fail-open.",

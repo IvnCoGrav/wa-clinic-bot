@@ -69,6 +69,15 @@ export interface StaffTask {
   /** Catatan karakter pasien (sticky memory note) dari LiveChat. */
   adminNotes?: string | null;
   assignedStaff?: { id: string; name: string; role?: string } | null;
+  /** Peringatan dini keterlambatan (Departure Watchdog, server-computed). */
+  delay?: {
+    delayMinutes: number;
+    level: 'none' | 'warning' | 'critical';
+    estimatedArrivalWib: string;
+    missedDeparture: boolean;
+    originSource: 'staff_base' | 'clinic' | 'prev_patient' | 'unknown';
+    originName: string;
+  };
   /** Status jendela akses chat (server-driven, sumber kebenaran tunggal). */
   chatWindow?: {
     open: boolean;

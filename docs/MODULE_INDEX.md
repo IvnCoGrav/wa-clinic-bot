@@ -7,7 +7,7 @@
 
 ## 1. Daftar Kapabilitas Kanonis Aktif
 
-Total kapabilitas terdaftar: **33 modul**.
+Total kapabilitas terdaftar: **39 modul**.
 
 | ID Kapabilitas | Judul & Deskripsi | Modul Kanonis | Ekspor Resmi | Test File |
 |---|---|---|---|---|
@@ -23,6 +23,7 @@ Total kapabilitas terdaftar: **33 modul**.
 | `location.heal_provenance` | **Healing provenance kartu lokasi (data)**<br>Skrip idempoten (default dry-run, tenant-scoped) untuk memperbaiki provenance 1-kartu yang cocok dengan pin WA pelanggan; audit trail, tanpa tulis last_used_at. | [`src/scripts/heal-single-card-provenance.ts`](../src/scripts/heal-single-card-provenance.ts) | `runHeal`, `hasWaGpsEvidence` | [`heal-single-card-provenance.test.ts`](../tests/unit/heal-single-card-provenance.test.ts) |
 | `location.source_seam` | **Sumber & label lokasi kanonis (anti-siklus)**<br>Normalisasi sumber lokasi (gps_pin/manual_staff/estimated_area) dan label dinamis sebagai seam bersama domain/services untuk memutus siklus import (Plan Lokasi Kepercayaan v2.2). | [`src/domain/location-source.ts`](../src/domain/location-source.ts) | `resolveEffectiveLocationSource`, `resolveLocationSource`, `buildLocationSourceLabel`, `STAFF_VERIFIED_LOCATION_LABEL`, `FIELD_VERIFIED_LOCATION_LABEL` | [`staff-location-sync.test.ts`](../tests/unit/staff-location-sync.test.ts) |
 | `location.travel_duration` | **Estimasi durasi tempuh motor**<br>Estimasi durasi tempuh sepeda motor dari jarak km (kalibrasi + buffer) untuk kartu/itinerary staf. | [`src/utils/travel-duration.ts`](../src/utils/travel-duration.ts) | `estimateTravelDurationMinutes` | [`staff-location-sync.test.ts`](../tests/unit/staff-location-sync.test.ts) |
+| `location.trip_progress` | **Rumus jarak, ETA, dan prediksi keterlambatan perjalanan**<br>Fungsi murni (tanpa I/O) untuk Haversine + ETA motor dan level keterlambatan; dipakai domain delay watchdog dan service trip tracking. | [`src/utils/trip-progress.ts`](../src/utils/trip-progress.ts) | `calculateTripProgress`, `calculateDelayStatus`, `isValidCoord`, `WIB_TIME_FORMATTER`, `DELAY_WARN_MIN`, `DELAY_CRITICAL_MIN` | [`staff-trip-arrival-and-delay.test.ts`](../tests/unit/staff-trip-arrival-and-delay.test.ts) |
 | `location.trust_verification` | **Verifikasi lapangan lokasi (field_verified)**<br>Kontrak derivasi field_verified dari bukti GPS lapangan nyata (foto + GPS segar/valid + rumah sama) dan riwayat verifikasi. | [`src/domain/location-trust.ts`](../src/domain/location-trust.ts) | `deriveFieldVerification`, `hasFieldVerifiedGpsHistory` | [`staff-task-location-precedence.test.ts`](../tests/unit/staff-task-location-precedence.test.ts) |
 | `log.date_key` | **Kunci tanggal nama file log harian**<br>Menghasilkan tanggal YYYY-MM-DD dari komponen lokal server untuk penamaan file log harian (llm-*.jsonl, app-*.log). | [`src/utils/log-date.ts`](../src/utils/log-date.ts) | `getLogDateString` | [`log-date.test.ts`](../tests/unit/log-date.test.ts) |
 | `log.staff_rejection` | **Logging penolakan bisnis rute staf**<br>Logging terstruktur ke console.warn untuk penolakan bisnis (HTTP 400) rute staf agar otomatis diserap ke logs/app-YYYY-MM-DD.log. | [`src/utils/staff-rejection-log.ts`](../src/utils/staff-rejection-log.ts) | `logStaffRejection` | [`staff-rejection-log.test.ts`](../tests/unit/staff-rejection-log.test.ts) |
@@ -35,8 +36,13 @@ Total kapabilitas terdaftar: **33 modul**.
 | `reservation.payment_response` | **Response wrapper evaluasi pembayaran reservasi**<br>Menyematkan hasil kalkulasi paymentEvaluation ke dalam payload respons reservasi admin. | [`src/routes/admin/shared/reservation-response.ts`](../src/routes/admin/shared/reservation-response.ts) | `withPaymentEvaluation` | [`reservation-payment-response.test.ts`](../tests/unit/reservation-payment-response.test.ts) |
 | `reservation.payment_verification` | **Verifikasi bukti pembayaran reservasi**<br>Seam kanonis verifikasi pembayaran transfer/non-tunai: simpan bukti permanen, hitung tagihan kanonis (GROSS), catat pembayaran tanpa mengubah status kunjungan, audit tenant-aware — tanpa akses Prisma di route. | [`src/services/reservation-payment-verification.service.ts`](../src/services/reservation-payment-verification.service.ts) | `verifyReservationPayment` | [`admin-verify-payment.test.ts`](../tests/integration/admin-verify-payment.test.ts) |
 | `schedule.overlap` | **Deteksi tumpang tindih slot jadwal**<br>Menghitung durasi efektif dan memeriksa tumpang-tindih interval reservasi atau janji temu. | [`src/services/slot-overlap.service.ts`](../src/services/slot-overlap.service.ts) | `effectiveDuration`, `intervalsOverlap` | [`slot-overlap-parity.test.ts`](../tests/unit/slot-overlap-parity.test.ts) |
+| `staff.delay_watchdog_config` | **Resolusi konfigurasi delay watchdog per-tenant**<br>Resolver konfigurasi delay watchdog tenant-aware dengan TTL cache 5 menit dan fallback deterministik ke StaffScorecardPolicy atau default 30 menit. | [`src/config/delay-watchdog-config.ts`](../src/config/delay-watchdog-config.ts) | `getDelayWatchdogSettings`, `clearDelayWatchdogCache`, `DEFAULT_DELAY_WATCHDOG_SETTINGS` | [`delay-watchdog-config.test.ts`](../tests/unit/delay-watchdog-config.test.ts) |
+| `staff.delay_watchdog_domain` | **Prediksi keterlambatan dan deadline keberangkatan staf**<br>Domain murni untuk menentukan origin leg (rumah vs tugas sebelumnya), deadline keberangkatan, dan prediksi keterlambatan (on_time, warning, critical) tanpa I/O. | [`src/domain/delay-watchdog.ts`](../src/domain/delay-watchdog.ts) | `resolveLegOrigin`, `computeDepartureDeadline`, `etaMinutesTo`, `predictTaskDelay`, `computeItineraryDelays` | [`delay-watchdog-domain.test.ts`](../tests/unit/delay-watchdog-domain.test.ts) |
+| `staff.departure_watchdog_service` | **Service watchdog keterlambatan & notifikasi admin**<br>Evaluasi jadwal hari ini untuk deteksi keterlambatan staf serta pengiriman notifikasi WhatsApp ke nomor admin resmi dengan audit trail. | [`src/services/staff-departure-watchdog.service.ts`](../src/services/staff-departure-watchdog.service.ts) | `StaffDepartureWatchdogService`, `staffDepartureWatchdogService` | [`staff-departure-watchdog.test.ts`](../tests/unit/staff-departure-watchdog.test.ts) |
+| `staff.reservation_access` | **Guard akses reservasi staf (tenant + anti-IDOR)**<br>Memuat reservasi dan menegakkan isolasi tenant serta kepemilikan bidan sebelum rute staf memproses perjalanan. | [`src/services/staff-reservation-access.service.ts`](../src/services/staff-reservation-access.service.ts) | `loadAuthorizedReservation` | [`staff-delay-notify.test.ts`](../tests/integration/staff-delay-notify.test.ts) |
 | `staff.scorecard_domain` | **Domain penilaian bidan (bobot, komponen, grade)**<br>Perhitungan deterministik ketepatan waktu, volume kunjungan, kelayakan retensi, komposisi bobot, dan grade A-E. Tanpa I/O; komponen yang sampelnya kurang dikeluarkan dan bobotnya dinormalisasi. | [`src/domain/staff-scorecard.ts`](../src/domain/staff-scorecard.ts) | `computePunctuality`, `computeVolume`, `evaluateRetentionEligibility`, `composeScore`, `gradeFromScore`, `validateWeights`, `DEFAULT_SCORECARD_WEIGHTS`, `DEFAULT_GRADE_THRESHOLDS` | [`staff-scorecard-domain.test.ts`](../tests/unit/staff-scorecard-domain.test.ts) |
 | `staff.scorecard_policy` | **Policy penilaian bidan (versioned)**<br>Validasi dan penyimpanan policy bobot, ambang waktu, target kunjungan, dan grade. Fallback default saat basis data offline; setiap perubahan menjadi versi baru yang tercatat di audit. | [`src/services/staff-scorecard.service.ts`](../src/services/staff-scorecard.service.ts) | `validateStaffScorecardPolicy`, `StaffScorecardService` | [`staff-scorecard-policy.test.ts`](../tests/integration/staff-scorecard-policy.test.ts) |
+| `staff.staff_role` | **Predikat peran staf dan gerbang isolasi alert**<br>Predikat supervisor dan gerbang penerimaan alert staf (fail-closed untuk alert tanpa pemilik) tanpa I/O. | [`src/domain/staff-role.ts`](../src/domain/staff-role.ts) | `isStaffSupervisorRole`, `canReceiveStaffAlert` | [`staff-role-alert-delivery.test.ts`](../tests/unit/staff-role-alert-delivery.test.ts) |
 | `staff.visit_evidence` | **Kontrak bukti kedatangan kunjungan**<br>Jendela bukti deterministik (jadwal s.d. min(tiba, durasi+buffer)), penyusunan bukti TAP/OTW/PHOTO/CHAT, dan kandidat chat yang wajib direview. Tanpa menulis arrived_at. | [`src/domain/visit-evidence.ts`](../src/domain/visit-evidence.ts) | `resolveEvidenceWindow`, `buildVisitEvidence`, `hasVisitEvidence`, `DEFAULT_WINDOW_BUFFER_MINUTES` | [`visit-evidence.test.ts`](../tests/unit/visit-evidence.test.ts) |
 | `tenant.resolve` | **Resolusi ID tenant admin**<br>Mendapatkan tenant_id dari request Fastify admin secara aman dengan fallback DEFAULT_TENANT_ID. | [`src/routes/admin/settings-helpers.ts`](../src/routes/admin/settings-helpers.ts) | `resolveTenantId`, `requireTenantId` | *Belum ada (Fase lanjutan)* |
 | `tenant.scope` | **Isolasi tenant pembacaan baris**<br>Gerbang kanonis yang hanya mengembalikan baris milik tenant pemanggil (atau baris tanpa tenant_id/data lama), dan menolak baris milik tenant lain. | [`src/utils/tenant-scope.ts`](../src/utils/tenant-scope.ts) | `tenantScopedRow` | [`tenant-scope.test.ts`](../tests/unit/tenant-scope.test.ts) |
@@ -155,6 +161,15 @@ Total kapabilitas terdaftar: **33 modul**.
 - **File yang Diizinkan:** `src/utils/travel-duration.ts`
 - **File Test:** [`tests/unit/staff-location-sync.test.ts`](../tests/unit/staff-location-sync.test.ts)
 
+### `location.trip_progress` — Rumus jarak, ETA, dan prediksi keterlambatan perjalanan
+
+- **Deskripsi:** Fungsi murni (tanpa I/O) untuk Haversine + ETA motor dan level keterlambatan; dipakai domain delay watchdog dan service trip tracking.
+- **File Kanonis:** [`src/utils/trip-progress.ts`](../src/utils/trip-progress.ts)
+- **Ekspor Kanonis:** `calculateTripProgress`, `calculateDelayStatus`, `isValidCoord`, `WIB_TIME_FORMATTER`, `DELAY_WARN_MIN`, `DELAY_CRITICAL_MIN`
+- **Simbol Terlarang di Luar Kanonis:** `calculateTripProgress`, `calculateDelayStatus`, `isValidCoord`
+- **File yang Diizinkan:** `src/utils/trip-progress.ts`
+- **File Test:** [`tests/unit/staff-trip-arrival-and-delay.test.ts`](../tests/unit/staff-trip-arrival-and-delay.test.ts)
+
 ### `location.trust_verification` — Verifikasi lapangan lokasi (field_verified)
 
 - **Deskripsi:** Kontrak derivasi field_verified dari bukti GPS lapangan nyata (foto + GPS segar/valid + rumah sama) dan riwayat verifikasi.
@@ -263,6 +278,42 @@ Total kapabilitas terdaftar: **33 modul**.
 - **File yang Diizinkan:** `src/services/slot-overlap.service.ts`
 - **File Test:** [`tests/unit/slot-overlap-parity.test.ts`](../tests/unit/slot-overlap-parity.test.ts)
 
+### `staff.delay_watchdog_config` — Resolusi konfigurasi delay watchdog per-tenant
+
+- **Deskripsi:** Resolver konfigurasi delay watchdog tenant-aware dengan TTL cache 5 menit dan fallback deterministik ke StaffScorecardPolicy atau default 30 menit.
+- **File Kanonis:** [`src/config/delay-watchdog-config.ts`](../src/config/delay-watchdog-config.ts)
+- **Ekspor Kanonis:** `getDelayWatchdogSettings`, `clearDelayWatchdogCache`, `DEFAULT_DELAY_WATCHDOG_SETTINGS`
+- **Simbol Terlarang di Luar Kanonis:** `getDelayWatchdogSettings`, `clearDelayWatchdogCache`
+- **File yang Diizinkan:** `src/config/delay-watchdog-config.ts`
+- **File Test:** [`tests/unit/delay-watchdog-config.test.ts`](../tests/unit/delay-watchdog-config.test.ts)
+
+### `staff.delay_watchdog_domain` — Prediksi keterlambatan dan deadline keberangkatan staf
+
+- **Deskripsi:** Domain murni untuk menentukan origin leg (rumah vs tugas sebelumnya), deadline keberangkatan, dan prediksi keterlambatan (on_time, warning, critical) tanpa I/O.
+- **File Kanonis:** [`src/domain/delay-watchdog.ts`](../src/domain/delay-watchdog.ts)
+- **Ekspor Kanonis:** `resolveLegOrigin`, `computeDepartureDeadline`, `etaMinutesTo`, `predictTaskDelay`, `computeItineraryDelays`
+- **Simbol Terlarang di Luar Kanonis:** `resolveLegOrigin`, `computeDepartureDeadline`, `etaMinutesTo`, `predictTaskDelay`, `computeItineraryDelays`
+- **File yang Diizinkan:** `src/domain/delay-watchdog.ts`
+- **File Test:** [`tests/unit/delay-watchdog-domain.test.ts`](../tests/unit/delay-watchdog-domain.test.ts)
+
+### `staff.departure_watchdog_service` — Service watchdog keterlambatan & notifikasi admin
+
+- **Deskripsi:** Evaluasi jadwal hari ini untuk deteksi keterlambatan staf serta pengiriman notifikasi WhatsApp ke nomor admin resmi dengan audit trail.
+- **File Kanonis:** [`src/services/staff-departure-watchdog.service.ts`](../src/services/staff-departure-watchdog.service.ts)
+- **Ekspor Kanonis:** `StaffDepartureWatchdogService`, `staffDepartureWatchdogService`
+- **Simbol Terlarang di Luar Kanonis:** `StaffDepartureWatchdogService`, `staffDepartureWatchdogService`
+- **File yang Diizinkan:** `src/services/staff-departure-watchdog.service.ts`
+- **File Test:** [`tests/unit/staff-departure-watchdog.test.ts`](../tests/unit/staff-departure-watchdog.test.ts)
+
+### `staff.reservation_access` — Guard akses reservasi staf (tenant + anti-IDOR)
+
+- **Deskripsi:** Memuat reservasi dan menegakkan isolasi tenant serta kepemilikan bidan sebelum rute staf memproses perjalanan.
+- **File Kanonis:** [`src/services/staff-reservation-access.service.ts`](../src/services/staff-reservation-access.service.ts)
+- **Ekspor Kanonis:** `loadAuthorizedReservation`
+- **Simbol Terlarang di Luar Kanonis:** `loadAuthorizedReservation`
+- **File yang Diizinkan:** `src/services/staff-reservation-access.service.ts`
+- **File Test:** [`tests/integration/staff-delay-notify.test.ts`](../tests/integration/staff-delay-notify.test.ts)
+
 ### `staff.scorecard_domain` — Domain penilaian bidan (bobot, komponen, grade)
 
 - **Deskripsi:** Perhitungan deterministik ketepatan waktu, volume kunjungan, kelayakan retensi, komposisi bobot, dan grade A-E. Tanpa I/O; komponen yang sampelnya kurang dikeluarkan dan bobotnya dinormalisasi.
@@ -280,6 +331,15 @@ Total kapabilitas terdaftar: **33 modul**.
 - **Simbol Terlarang di Luar Kanonis:** `validateStaffScorecardPolicy`
 - **File yang Diizinkan:** `src/services/staff-scorecard.service.ts`, `src/routes/admin/staff-scorecard.subroute.ts`
 - **File Test:** [`tests/integration/staff-scorecard-policy.test.ts`](../tests/integration/staff-scorecard-policy.test.ts)
+
+### `staff.staff_role` — Predikat peran staf dan gerbang isolasi alert
+
+- **Deskripsi:** Predikat supervisor dan gerbang penerimaan alert staf (fail-closed untuk alert tanpa pemilik) tanpa I/O.
+- **File Kanonis:** [`src/domain/staff-role.ts`](../src/domain/staff-role.ts)
+- **Ekspor Kanonis:** `isStaffSupervisorRole`, `canReceiveStaffAlert`
+- **Simbol Terlarang di Luar Kanonis:** `isStaffSupervisorRole`, `canReceiveStaffAlert`
+- **File yang Diizinkan:** `src/domain/staff-role.ts`
+- **File Test:** [`tests/unit/staff-role-alert-delivery.test.ts`](../tests/unit/staff-role-alert-delivery.test.ts)
 
 ### `staff.visit_evidence` — Kontrak bukti kedatangan kunjungan
 

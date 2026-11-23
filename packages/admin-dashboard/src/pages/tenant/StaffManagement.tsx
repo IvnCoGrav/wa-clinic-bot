@@ -28,6 +28,9 @@ import {
   Info,
   CheckCircle2,
   Bell,
+  MapPin,
+  Navigation,
+  ExternalLink,
 } from 'lucide-react';
 import {
   ROLE_LABELS,
@@ -46,6 +49,9 @@ interface StaffItem {
   phone: string;
   role: string;
   active: boolean;
+  base_lat?: number | null;
+  base_lng?: number | null;
+  base_address?: string | null;
   telegram_chat_id?: string | null;
   created_at: string;
   updated_at: string;
@@ -75,6 +81,9 @@ export const StaffManagement: React.FC = () => {
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
   const [role, setRole] = useState<string>('THERAPIST');
+  const [baseAddress, setBaseAddress] = useState('');
+  const [baseLat, setBaseLat] = useState('');
+  const [baseLng, setBaseLng] = useState('');
   const [creating, setCreating] = useState(false);
   const [formIssues, setFormIssues] = useState<FieldIssue[]>([]);
 
@@ -85,6 +94,9 @@ export const StaffManagement: React.FC = () => {
   const [editRole, setEditRole] = useState<string>('THERAPIST');
   const [editPassword, setEditPassword] = useState('');
   const [editActive, setEditActive] = useState(true);
+  const [editBaseAddress, setEditBaseAddress] = useState('');
+  const [editBaseLat, setEditBaseLat] = useState('');
+  const [editBaseLng, setEditBaseLng] = useState('');
   const [savingEdit, setSavingEdit] = useState(false);
 
   // Modal Create / Edit Role State
@@ -214,6 +226,9 @@ export const StaffManagement: React.FC = () => {
           phone: phone.trim(),
           password: password.trim(),
           role: role.toUpperCase(),
+          base_address: baseAddress.trim() || null,
+          base_lat: baseLat.trim() ? parseFloat(baseLat.trim()) : null,
+          base_lng: baseLng.trim() ? parseFloat(baseLng.trim()) : null,
         }),
       });
 
@@ -224,6 +239,9 @@ export const StaffManagement: React.FC = () => {
         setPhone('');
         setPassword('');
         setRole('THERAPIST');
+        setBaseAddress('');
+        setBaseLat('');
+        setBaseLng('');
         fetchStaff();
       }
     } catch (err: any) {
@@ -241,6 +259,9 @@ export const StaffManagement: React.FC = () => {
     setEditRole(staff.role);
     setEditPassword('');
     setEditActive(staff.active);
+    setEditBaseAddress(staff.base_address || '');
+    setEditBaseLat(staff.base_lat != null ? String(staff.base_lat) : '');
+    setEditBaseLng(staff.base_lng != null ? String(staff.base_lng) : '');
   };
 
   const handleSaveEditStaff = async (e: React.FormEvent) => {
@@ -262,6 +283,9 @@ export const StaffManagement: React.FC = () => {
         phone: editPhone.trim(),
         role: editRole.toUpperCase(),
         active: editActive,
+        base_address: editBaseAddress.trim() || null,
+        base_lat: editBaseLat.trim() ? parseFloat(editBaseLat.trim()) : null,
+        base_lng: editBaseLng.trim() ? parseFloat(editBaseLng.trim()) : null,
       };
       if (editPassword && editPassword.trim()) {
         payload.password = editPassword.trim();
@@ -697,7 +721,15 @@ export const StaffManagement: React.FC = () => {
                               }`}
                               title={staff.active ? 'Akun aktif' : 'Akun nonaktif'}
                             />
-                            <span>{staff.name}</span>
+                            <div>
+                              <span>{staff.name}</span>
+                              {(staff.base_address || (staff.base_lat != null && staff.base_lng != null)) && (
+                                <span className="flex items-center gap-1 text-[11px] text-ink-3 font-normal mt-0.5">
+                                  <MapPin size={11} className="text-accent shrink-0" />
+                                  <span>{staff.base_address || `${staff.base_lat?.toFixed(4)}, ${staff.base_lng?.toFixed(4)}`}</span>
+                                </span>
+                              )}
+                            </div>
                           </div>
                         </td>
 
@@ -805,6 +837,12 @@ export const StaffManagement: React.FC = () => {
                           />
                           <div className="min-w-0">
                             <p className="font-bold text-ink text-sm truncate">{staff.name}</p>
+                            {(staff.base_address || (staff.base_lat != null && staff.base_lng != null)) && (
+                              <p className="flex items-center gap-1 text-[11px] text-ink-3 font-normal truncate mt-0.5">
+                                <MapPin size={11} className="text-accent shrink-0" />
+                                <span>{staff.base_address || `${staff.base_lat?.toFixed(4)}, ${staff.base_lng?.toFixed(4)}`}</span>
+                              </p>
+                            )}
                             <a
                               href={`https://wa.me/${staff.phone?.replace(/[^0-9]/g, '')}`}
                               target="_blank"
@@ -1237,6 +1275,65 @@ export const StaffManagement: React.FC = () => {
                 </div>
               </div>
 
+              {/* Titik Awal / Base Staf (Departure Watchdog) */}
+              <div className="p-3.5 rounded-xl bg-surface-2 border border-divider space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5 text-xs font-bold text-ink">
+                    <MapPin size={14} className="text-accent" />
+                    <span>Titik Awal Keberangkatan (Base / Rumah)</span>
+                  </div>
+                  <span className="text-[10px] text-ink-3">Opsional</span>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[11px] font-medium text-ink-2">Alamat / Patokan Base</label>
+                  <input
+                    type="text"
+                    value={baseAddress}
+                    onChange={(e) => setBaseAddress(e.target.value)}
+                    placeholder="Contoh: Demak Jaya, Surabaya / Candi, Sidoarjo"
+                    className="w-full px-3 py-1.5 rounded-xl bg-surface border border-divider text-ink text-xs focus:outline-none focus:border-accent shadow-xs"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-medium text-ink-2">Latitude</label>
+                    <input
+                      type="number"
+                      step="any"
+                      value={baseLat}
+                      onChange={(e) => setBaseLat(e.target.value)}
+                      placeholder="-7.2496988"
+                      className="w-full px-3 py-1.5 rounded-xl bg-surface border border-divider text-ink text-xs focus:outline-none focus:border-accent shadow-xs"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-medium text-ink-2">Longitude</label>
+                    <input
+                      type="number"
+                      step="any"
+                      value={baseLng}
+                      onChange={(e) => setBaseLng(e.target.value)}
+                      placeholder="112.7201362"
+                      className="w-full px-3 py-1.5 rounded-xl bg-surface border border-divider text-ink text-xs focus:outline-none focus:border-accent shadow-xs"
+                    />
+                  </div>
+                </div>
+                {baseLat && baseLng && !isNaN(parseFloat(baseLat)) && !isNaN(parseFloat(baseLng)) && (
+                  <div className="flex items-center justify-between pt-1 text-[11px]">
+                    <span className="text-ink-3">Koordinat valid</span>
+                    <a
+                      href={`https://www.google.com/maps?q=${baseLat},${baseLng}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-accent hover:underline flex items-center gap-1 font-semibold"
+                    >
+                      <ExternalLink size={12} />
+                      <span>Cek di Google Maps</span>
+                    </a>
+                  </div>
+                )}
+              </div>
+
               <div className="pt-2 border-t border-divider flex items-center justify-end space-x-2">
                 <button
                   type="button"
@@ -1333,6 +1430,65 @@ export const StaffManagement: React.FC = () => {
                     className="w-full pl-9 pr-3.5 py-2 rounded-xl bg-surface border border-divider text-ink text-xs focus:outline-none focus:border-accent shadow-xs"
                   />
                 </div>
+              </div>
+
+              {/* Titik Awal / Base Staf (Departure Watchdog) */}
+              <div className="p-3.5 rounded-xl bg-surface-2 border border-divider space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5 text-xs font-bold text-ink">
+                    <MapPin size={14} className="text-accent" />
+                    <span>Titik Awal Keberangkatan (Base / Rumah)</span>
+                  </div>
+                  <span className="text-[10px] text-ink-3">Departure Watchdog</span>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[11px] font-medium text-ink-2">Alamat / Patokan Base</label>
+                  <input
+                    type="text"
+                    value={editBaseAddress}
+                    onChange={(e) => setEditBaseAddress(e.target.value)}
+                    placeholder="Contoh: Demak Jaya, Surabaya / Candi, Sidoarjo"
+                    className="w-full px-3 py-1.5 rounded-xl bg-surface border border-divider text-ink text-xs focus:outline-none focus:border-accent shadow-xs"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-medium text-ink-2">Latitude</label>
+                    <input
+                      type="number"
+                      step="any"
+                      value={editBaseLat}
+                      onChange={(e) => setEditBaseLat(e.target.value)}
+                      placeholder="-7.2496988"
+                      className="w-full px-3 py-1.5 rounded-xl bg-surface border border-divider text-ink text-xs focus:outline-none focus:border-accent shadow-xs"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-medium text-ink-2">Longitude</label>
+                    <input
+                      type="number"
+                      step="any"
+                      value={editBaseLng}
+                      onChange={(e) => setEditBaseLng(e.target.value)}
+                      placeholder="112.7201362"
+                      className="w-full px-3 py-1.5 rounded-xl bg-surface border border-divider text-ink text-xs focus:outline-none focus:border-accent shadow-xs"
+                    />
+                  </div>
+                </div>
+                {editBaseLat && editBaseLng && !isNaN(parseFloat(editBaseLat)) && !isNaN(parseFloat(editBaseLng)) && (
+                  <div className="flex items-center justify-between pt-1 text-[11px]">
+                    <span className="text-ink-3">Koordinat valid</span>
+                    <a
+                      href={`https://www.google.com/maps?q=${editBaseLat},${editBaseLng}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-accent hover:underline flex items-center gap-1 font-semibold"
+                    >
+                      <ExternalLink size={12} />
+                      <span>Cek di Google Maps</span>
+                    </a>
+                  </div>
+                )}
               </div>
 
               <div className="flex items-center justify-between p-3.5 rounded-xl bg-surface-2 border border-divider">

@@ -56,11 +56,14 @@ describe('Staff task data minimization (S-05)', () => {
     const select = (findMany.mock.calls[0]?.[0] as any)?.select?.customer?.select || {};
     expect(select.admin_notes).toBeUndefined();
     expect(select.ltv_cache).toBeUndefined();
+    expect(select.phone).toBeUndefined();
 
-    // 2) Payload ke staf tidak memuat adminNotes / LTV.
+    // 2) Payload ke staf tidak memuat adminNotes / LTV / nomor HP (SOP no-HP).
     expect(rows.length).toBe(1);
     expect(rows[0]).not.toHaveProperty('adminNotes');
     expect(rows[0].customerStats).toBeDefined();
     expect(rows[0].customerStats as any).not.toHaveProperty('ltv');
+    expect((rows[0] as any).phone).toBeUndefined();
+    expect(JSON.stringify(rows[0])).not.toMatch(/628\d{8,12}|08\d{8,12}/);
   });
 });

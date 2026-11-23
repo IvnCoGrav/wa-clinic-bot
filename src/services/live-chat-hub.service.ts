@@ -18,6 +18,7 @@ export type LiveChatHubEventType =
   | 'staff.telemetry_updated'
   | 'staff.trip_closed'
   | 'staff.trip_delay_warning'
+  | 'staff.delay_alert'
   | 'staff.trip_arrived';
 
 /**

@@ -21,6 +21,30 @@
 import { haversineKm, findNearestSubdistrict } from '../utils/gazetteer';
 import { POPULAR_LANDMARKS } from '../config/landmarks';
 import { distributedKv, type DistributedKv } from '../utils/distributed-kv';
+import {
+  DELAY_CRITICAL_MIN,
+  DELAY_WARN_MIN,
+  WIB_TIME_FORMATTER,
+  calculateDelayStatus,
+  calculateTripProgress,
+  isValidCoord,
+  type DelayLevel,
+  type DelayStatusResult,
+  type TripProgress,
+} from '../utils/trip-progress';
+
+/**
+ * Re-export kanonis: rumus murni tinggal di `src/utils/trip-progress.ts` agar
+ * layer domain tidak perlu mengimpor service. Kontrak import lama tetap utuh.
+ */
+export {
+  DELAY_CRITICAL_MIN,
+  DELAY_WARN_MIN,
+  WIB_TIME_FORMATTER,
+  calculateDelayStatus,
+  calculateTripProgress,
+};
+export type { DelayLevel, DelayStatusResult, TripProgress };
 
 /**
  * TTL sesi trip (detik). 2 jam (plan 2026-10-02 — sebelumnya 10 menit).
@@ -80,12 +104,6 @@ export const ARRIVAL_CONSECUTIVE_PING = 2;
 export const GPS_ACCURACY_MAX_M = 100;
 /** Jendela auto-start telemetry sebelum jadwal (menit). */
 export const PRE_TRIP_WINDOW_MIN = 30;
-/** Ambang keterlambatan: warning (menit). */
-export const DELAY_WARN_MIN = 20;
-/** Ambang keterlambatan: critical (menit). */
-export const DELAY_CRITICAL_MIN = 30;
-
-export type DelayLevel = 'none' | 'warning' | 'critical';
 
 export interface ArrivalGeofenceResult {
   isArrived: boolean;
@@ -100,23 +118,6 @@ export interface ArrivalGeofenceResult {
     | 'NO_CUSTOMER_COORDS'
     | 'INVALID_COORDS';
 }
-
-export interface DelayStatusResult {
-  isDelayed: boolean;
-  level: DelayLevel;
-  /** Estimasi tiba (menit) relatif terhadap jadwal. Positif = terlambat. */
-  delayMinutes: number;
-  estimatedArrivalIso: string;
-  formattedArrivalWib: string;
-  reason: 'OK' | 'NO_SCHEDULE' | 'NO_ETA';
-}
-
-const WIB_TIME_FORMATTER = new Intl.DateTimeFormat('id-ID', {
-  timeZone: 'Asia/Jakarta',
-  hour: '2-digit',
-  minute: '2-digit',
-  hourCycle: 'h23',
-});
 
 /**
  * Deteksi kedatangan terapis dalam radius pasien. Murni deterministik (tanpa I/O).
@@ -167,56 +168,6 @@ export function evaluateArrivalGeofence(
 }
 
 /**
- * Prediksi keterlambatan terapis vs jadwal reservasi. Murni deterministik (tanpa I/O).
- *
- * `delayMinutes` = estimasiTiba − jadwal (BUKAN minus toleransi). `level`:
- * `none` (< warn), `warning` (>= warn), `critical` (>= critical).
- * Fail-open: jadwal/ETA tidak diketahui → `none` (jangan menuduh telat tanpa dasar).
- */
-export function calculateDelayStatus(
-  bookingDate: Date | null | undefined,
-  etaMinutes: number | null | undefined,
-  now: Date = new Date(),
-  opts?: { warnMin?: number; criticalMin?: number }
-): DelayStatusResult {
-  const empty = (reason: DelayStatusResult['reason']): DelayStatusResult => ({
-    isDelayed: false,
-    level: 'none',
-    delayMinutes: 0,
-    estimatedArrivalIso: '',
-    formattedArrivalWib: '',
-    reason,
-  });
-
-  const bookingMs = bookingDate instanceof Date ? bookingDate.getTime() : NaN;
-  if (!Number.isFinite(bookingMs)) return empty('NO_SCHEDULE');
-  if (etaMinutes == null || !Number.isFinite(Number(etaMinutes))) return empty('NO_ETA');
-
-  const eta = Math.max(0, Number(etaMinutes));
-  const nowMs = now instanceof Date && Number.isFinite(now.getTime()) ? now.getTime() : Date.now();
-  const arrivalMs = nowMs + eta * 60 * 1000;
-  const delayMinutes = Math.round((arrivalMs - bookingMs) / 60000);
-
-  const warnMin = opts?.warnMin != null && Number.isFinite(opts.warnMin) ? opts.warnMin : DELAY_WARN_MIN;
-  const criticalMin =
-    opts?.criticalMin != null && Number.isFinite(opts.criticalMin) ? opts.criticalMin : DELAY_CRITICAL_MIN;
-
-  let level: DelayLevel = 'none';
-  if (delayMinutes >= criticalMin) level = 'critical';
-  else if (delayMinutes >= warnMin) level = 'warning';
-
-  const arrivalDate = new Date(arrivalMs);
-  return {
-    isDelayed: level !== 'none',
-    level,
-    delayMinutes,
-    estimatedArrivalIso: arrivalDate.toISOString(),
-    formattedArrivalWib: WIB_TIME_FORMATTER.format(arrivalDate),
-    reason: 'OK',
-  };
-}
-
-/**
  * Apakah jadwal berada di dalam jendela auto-start telemetry (default H-30 menit).
  * Fail-closed: jadwal null/invalid → false.
  */
@@ -260,12 +211,7 @@ export interface TripRecord extends TripPing {
    * `unknown` = tak ada dasar. Dipakai CS agar tidak salah anggap estimasi
    * sebagai posisi presisi.
    */
-  originSource: 'gps' | 'prev_patient' | 'clinic' | 'unknown';
-}
-
-export interface TripProgress {
-  remainingKm: number;
-  etaMinutes: number;
+  originSource: 'gps' | 'prev_patient' | 'clinic' | 'staff_base' | 'unknown';
 }
 
 export interface GeofenceResult {
@@ -291,17 +237,6 @@ function assertIds(reservationId: string, staffId: string): void {
   if (!staffId || typeof staffId !== 'string' || !staffId.trim()) {
     throw new Error('TRIP_STAFF_REQUIRED: staffId wajib diisi.');
   }
-}
-
-function isValidCoord(lat: number, lng: number): boolean {
-  return (
-    Number.isFinite(lat) &&
-    Number.isFinite(lng) &&
-    lat >= -90 &&
-    lat <= 90 &&
-    lng >= -180 &&
-    lng <= 180
-  );
 }
 
 function toFiniteOrNull(v: unknown): number | null {
@@ -342,29 +277,6 @@ export function resolveHumanAreaName(lat: number, lng: number): string {
     return 'Area perjalanan';
   } catch {
     return 'Area perjalanan';
-  }
-}
-
-/**
- * Sisa jarak + ETA motor. Faktor 1.25x untuk rute jalan vs garis lurus,
- * kecepatan rerata 25 km/jam urban. Clamp 1–120 menit.
- */
-export function calculateTripProgress(
-  therapistLat: number,
-  therapistLng: number,
-  customerLat: number,
-  customerLng: number
-): TripProgress | null {
-  if (!isValidCoord(therapistLat, therapistLng)) return null;
-  if (!isValidCoord(customerLat, customerLng)) return null;
-  try {
-    const raw = haversineKm(therapistLat, therapistLng, customerLat, customerLng);
-    if (!Number.isFinite(raw) || raw < 0) return null;
-    const remainingKm = Math.round(raw * 1.25 * 10) / 10;
-    const etaMinutes = Math.min(120, Math.max(1, Math.round((remainingKm / 25) * 60)));
-    return { remainingKm, etaMinutes };
-  } catch {
-    return null;
   }
 }
 

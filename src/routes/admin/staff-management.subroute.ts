@@ -25,6 +25,9 @@ export async function staffManagementAdminRoutes(fastify: FastifyInstance) {
           role: true,
           active: true,
           telegram_chat_id: true,
+          base_lat: true,
+          base_lng: true,
+          base_address: true,
           created_at: true,
           updated_at: true,
           _count: {
@@ -61,11 +64,14 @@ export async function staffManagementAdminRoutes(fastify: FastifyInstance) {
           phone?: string;
           password?: string;
           role?: string;
+          base_lat?: number | null;
+          base_lng?: number | null;
+          base_address?: string | null;
         };
       }>,
       reply: FastifyReply
     ) => {
-      const { name, phone, password, role = 'THERAPIST' } = request.body || {};
+      const { name, phone, password, role = 'THERAPIST', base_lat, base_lng, base_address } = request.body || {};
       const tenantId = resolveSessionTenantId(request);
 
       if (!name || !phone || !password) {
@@ -122,6 +128,9 @@ export async function staffManagementAdminRoutes(fastify: FastifyInstance) {
             password_hash,
             role: finalRole,
             active: true,
+            base_lat: base_lat !== undefined ? (base_lat === null || isNaN(Number(base_lat)) ? null : Number(base_lat)) : null,
+            base_lng: base_lng !== undefined ? (base_lng === null || isNaN(Number(base_lng)) ? null : Number(base_lng)) : null,
+            base_address: base_address !== undefined ? (base_address?.trim() || null) : null,
           },
           select: {
             id: true,
@@ -130,6 +139,9 @@ export async function staffManagementAdminRoutes(fastify: FastifyInstance) {
             phone: true,
             role: true,
             active: true,
+            base_lat: true,
+            base_lng: true,
+            base_address: true,
             created_at: true,
             updated_at: true,
           },
@@ -182,12 +194,15 @@ export async function staffManagementAdminRoutes(fastify: FastifyInstance) {
           password?: string;
           role?: string;
           active?: boolean;
+          base_lat?: number | null;
+          base_lng?: number | null;
+          base_address?: string | null;
         };
       }>,
       reply: FastifyReply
     ) => {
       const { id } = request.params;
-      const { name, phone, password, role, active } = request.body || {};
+      const { name, phone, password, role, active, base_lat, base_lng, base_address } = request.body || {};
       const tenantId = resolveSessionTenantId(request);
 
       try {
@@ -217,6 +232,15 @@ export async function staffManagementAdminRoutes(fastify: FastifyInstance) {
           }
         }
         if (active !== undefined) updateData.active = active;
+        if (base_lat !== undefined) {
+          updateData.base_lat = base_lat === null || (typeof base_lat === 'string' && !(base_lat as string).trim()) || isNaN(Number(base_lat)) ? null : Number(base_lat);
+        }
+        if (base_lng !== undefined) {
+          updateData.base_lng = base_lng === null || (typeof base_lng === 'string' && !(base_lng as string).trim()) || isNaN(Number(base_lng)) ? null : Number(base_lng);
+        }
+        if (base_address !== undefined) {
+          updateData.base_address = base_address === null || !base_address.trim() ? null : base_address.trim();
+        }
         if (password && password.trim()) {
           // S-012: reset password juga wajib memenuhi kebijakan.
           const passwordCheck = validateStaffPassword(password);
@@ -236,6 +260,9 @@ export async function staffManagementAdminRoutes(fastify: FastifyInstance) {
             phone: true,
             role: true,
             active: true,
+            base_lat: true,
+            base_lng: true,
+            base_address: true,
             created_at: true,
             updated_at: true,
           },

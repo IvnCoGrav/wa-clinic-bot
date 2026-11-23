@@ -30,6 +30,8 @@ import {
   resolveEffectiveLocationSource,
 } from '../domain/location-source';
 import { estimateTravelDurationMinutes } from '../utils/travel-duration';
+import { computeItineraryDelays } from '../domain/delay-watchdog';
+import { getDelayWatchdogSettings } from '../config/delay-watchdog-config';
 
 export interface StaffTaskChild {
   name: string;
@@ -94,6 +96,18 @@ export interface StaffTaskItem {
   customerStats?: {
     totalTreatments: number;
     /** S-05: LTV TIDAK dikirim ke data tugas staf (data bisnis sensitif). */
+  };
+  /**
+   * Peringatan keterlambatan (server-computed, murni).
+   * Menampilkan potensi keterlambatan dan status keberangkatan tanpa nomor HP.
+   */
+  delay?: {
+    delayMinutes: number;
+    level: 'none' | 'warning' | 'critical';
+    estimatedArrivalWib: string;
+    missedDeparture: boolean;
+    originSource: 'staff_base' | 'clinic' | 'prev_patient' | 'unknown';
+    originName: string;
   };
   /**
    * Status jendela akses chat (server-driven, sumber kebenaran tunggal).
@@ -553,6 +567,7 @@ export class StaffReservationService {
     const { startOfDay, endOfDay } = this.getWibDateRange(targetDateParam);
     const now = new Date();
     const chatWindowConfig = await getStaffChatWindowConfig(tenantId);
+    const watchdogSettings = await getDelayWatchdogSettings(tenantId);
 
     try {
       const whereCondition: any = {
@@ -573,6 +588,7 @@ export class StaffReservationService {
           treatment_detail: true,
           treatment_category: true,
           booking_date: true,
+          duration_minutes: true,
           status: true,
           purchase_value: true,
           discount_amount: true,
@@ -590,6 +606,9 @@ export class StaffReservationService {
               id: true,
               name: true,
               role: true,
+              base_lat: true,
+              base_lng: true,
+              base_address: true,
             },
           },
           customer: {
@@ -719,6 +738,37 @@ export class StaffReservationService {
         }
       }
 
+      // Perhitungan keterlambatan departure watchdog — satu seam domain yang
+      // sama dengan service watchdog (anti-divergensi angka HP bidan vs admin).
+      const delayByReservationId = computeItineraryDelays({
+        tasks: rows.map((r) => ({
+          id: r.id,
+          staffId: (r as any).assigned_staff?.id || null,
+          staffBase: (r as any).assigned_staff
+            ? {
+                lat: (r as any).assigned_staff.base_lat,
+                lng: (r as any).assigned_staff.base_lng,
+                address: (r as any).assigned_staff.base_address,
+              }
+            : null,
+          customerLat: (r as any).customer_address?.lat ?? r.customer?.lat ?? null,
+          customerLng: (r as any).customer_address?.lng ?? r.customer?.lng ?? null,
+          address: (r as any).customer_address?.address || null,
+          patientName: r.customer?.name || null,
+          bookingDate: r.booking_date,
+          durationMinutes: (r as any).duration_minutes,
+          status: r.status,
+          arrivedAt: (r as any).arrived_at,
+          hasDeparted: Boolean((r as any).otw_sent_at),
+          hasArrived: Boolean((r as any).arrived_at),
+        })),
+        clinicLocation: clinicLoc,
+        now,
+        toleranceMinutes: watchdogSettings.toleranceMinutes,
+        criticalExtraMinutes: watchdogSettings.criticalExtraMinutes,
+        maxPrevOriginGapHours: watchdogSettings.maxPrevOriginGapHours,
+      });
+
       return Promise.all(
         rows.map(async (r) => {
         const cust = r.customer;
@@ -810,6 +860,7 @@ export class StaffReservationService {
           customerStats: {
             totalTreatments: 1,
           },
+          delay: delayByReservationId.get(r.id),
           chatWindow: this.buildChatWindowForTask(
             r.booking_date,
             r.status,
@@ -1115,6 +1166,7 @@ export class StaffReservationService {
     const minDate = new Date(startOfDay.getTime() - daysPast * 24 * 60 * 60 * 1000);
     const now = new Date();
     const chatWindowConfig = await getStaffChatWindowConfig(tenantId);
+    const watchdogSettings = await getDelayWatchdogSettings(tenantId);
 
     try {
       const rows = await prisma.reservation.findMany({

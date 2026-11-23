@@ -370,7 +370,26 @@ export const LiveChatMonitor: React.FC = () => {
   mobileViewRef.current = mobileView;
   const isDesktopRef = useRef(isDesktop);
   isDesktopRef.current = isDesktop;
-  const [delayAlert, setDelayAlert] = useState<any>(null);
+  const [delayAlerts, setDelayAlerts] = useState<Map<string, any>>(new Map());
+  const [delayCycleIndex, setDelayCycleIndex] = useState(0);
+
+  // Ambil data awal delay alerts saat mount (mencegah blind-spot untuk CS yang baru membuka tab)
+  useEffect(() => {
+    apiRequest<{ success: boolean; data?: any[] }>('/api/admin/live-chat/delay-alerts')
+      .then((res) => {
+        if (res?.success && Array.isArray(res.data) && res.data.length > 0) {
+          setDelayAlerts((prev) => {
+            const next = new Map(prev);
+            for (const item of res.data!) {
+              next.set(item.reservationId, item);
+            }
+            return next;
+          });
+        }
+      })
+      .catch((err) => console.warn('[LIVE_CHAT] Gagal memuat delay alerts awal:', err));
+  }, []);
+
   const delayAlertedRef = useRef<Set<string>>(new Set());
 
   // SSE real-time hook
@@ -403,7 +422,7 @@ export const LiveChatMonitor: React.FC = () => {
     setPinnedBubble,
     setBgSyncProgress,
     setSelectedReservation,
-    setDelayAlert,
+    setDelayAlerts,
     dispatchReservationIdRef,
   });
 
@@ -814,24 +833,42 @@ export const LiveChatMonitor: React.FC = () => {
             />
             <span>{sseConnected ? 'Live' : 'Reconnecting'}</span>
           </div>
-          {delayAlert && (
-            <button
-              type="button"
-              onClick={() => {
-                const conv = chats.find((c) => c.conversationId && (c as any).activeConfirmedReservation?.id === delayAlert.reservationId);
-                if (conv?.conversationId) setSelectedId(conv.conversationId);
-              }}
-              className={`flex items-center space-x-1 px-2 py-0.5 rounded-full text-[10px] font-bold border ${
-                delayAlert.level === 'critical'
-                  ? 'bg-danger-soft border-danger-line text-danger'
-                  : 'bg-warning-soft border-warning-line text-warning'
-              }`}
-              title={`Bidan${delayAlert.staffName ? ' ' + delayAlert.staffName : ''} diprediksi terlambat ${delayAlert.delayMinutes} menit${delayAlert.formattedArrivalWib ? ' (tiba ±' + delayAlert.formattedArrivalWib + ' WIB)' : ''}`}
-            >
-              <AlertTriangle size={12} />
-              <span>Telat {delayAlert.delayMinutes}m</span>
-            </button>
-          )}
+          {delayAlerts.size > 0 && (() => {
+            const alertList = Array.from(delayAlerts.values());
+            const currentAlert = alertList[delayCycleIndex % alertList.length];
+            const hasCritical = alertList.some((a) => a.level === 'critical');
+            return (
+              <button
+                type="button"
+                onClick={() => {
+                  const conv = chats.find(
+                    (c) =>
+                      c.conversationId &&
+                      (c as any).activeConfirmedReservation?.id === currentAlert.reservationId
+                  );
+                  if (conv?.conversationId) setSelectedId(conv.conversationId);
+                  setDelayCycleIndex((prev) => (prev + 1) % alertList.length);
+                }}
+                className={`flex items-center space-x-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold border transition cursor-pointer active:scale-95 ${
+                  hasCritical
+                    ? 'bg-danger-soft border-danger-line text-danger animate-pulse motion-reduce:animate-none'
+                    : 'bg-warning-soft border-warning-line text-warning'
+                }`}
+                title={
+                  alertList.length > 1
+                    ? `Ada ${alertList.length} bidan terlambat. Klik untuk melihat percakapan berikutnya (Bidan: ${currentAlert.staffName || 'Bidan'}, terlambat ${currentAlert.delayMinutes}m).`
+                    : `Bidan${currentAlert.staffName ? ' ' + currentAlert.staffName : ''} diprediksi terlambat ${currentAlert.delayMinutes} menit${currentAlert.formattedArrivalWib ? ' (tiba ±' + currentAlert.formattedArrivalWib + ' WIB)' : ''}`
+                }
+              >
+                <AlertTriangle size={12} />
+                <span>
+                  {alertList.length > 1
+                    ? `${alertList.length} Bidan Telat`
+                    : `Telat ${currentAlert.delayMinutes}m`}
+                </span>
+              </button>
+            );
+          })()}
         </div>
 
         <div className="flex items-center space-x-2">
@@ -950,7 +987,11 @@ export const LiveChatMonitor: React.FC = () => {
             chats={chats}
             selectedId={selectedId}
             sseConnected={sseConnected}
-            delayAlert={delayAlert}
+            delayAlert={
+              delayAlerts.size > 0
+                ? Array.from(delayAlerts.values())[delayCycleIndex % delayAlerts.size]
+                : null
+            }
             copilotOpen={copilotOpen}
             setCopilotOpen={setCopilotOpen}
             user={user}

@@ -376,6 +376,33 @@
         "error"
       ],
       "reviewed": false
+    },
+    {
+      "name": "DelayNotifyModal",
+      "layer": "domain",
+      "path": "src/components/staff/DelayNotifyModal.tsx",
+      "whenToUse": "Modal konfirmasi bidan untuk mengirim notifikasi keterlambatan ke nomor admin (via bot) dengan draf pesan siap kirim. Dipakai dari kartu tugas di Staff Today.",
+      "states": [
+        "default",
+        "sending",
+        "error",
+        "copied"
+      ],
+      "reviewed": false
+    },
+    {
+      "name": "DelayWatchdogSettingsPanel",
+      "layer": "domain",
+      "path": "src/components/settings/DelayWatchdogSettingsPanel.tsx",
+      "whenToUse": "Panel setelan tenant Departure Watchdog: ambang toleransi, eskalasi kritis, jeda origin, dan daftar nomor admin penerima notifikasi. Dipakai di tab Operasional & App pada Settings.",
+      "states": [
+        "loading",
+        "default",
+        "saving",
+        "testing",
+        "error"
+      ],
+      "reviewed": false
     }
   ],
   "pages": [

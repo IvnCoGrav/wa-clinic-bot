@@ -25,8 +25,8 @@ export interface DispatchTripData {
     areaName: string;
     updatedAt: number;
     lastUpdateSec: number;
-    /** Provenance titik awal: 'gps' presisi vs estimasi (prev_patient/clinic/unknown). */
-    originSource?: 'gps' | 'prev_patient' | 'clinic' | 'unknown' | null;
+    /** Provenance titik awal: 'gps' presisi vs estimasi (prev_patient/clinic/staff_base/unknown). */
+    originSource?: 'gps' | 'prev_patient' | 'clinic' | 'staff_base' | 'unknown' | null;
   } | null;
   customerCoords?: { lat: number | null; lng: number | null };
   remainingKm?: number | null;
@@ -42,6 +42,9 @@ export interface DispatchTripData {
     estimatedArrivalIso: string;
     formattedArrivalWib: string;
     reason: 'OK' | 'NO_SCHEDULE' | 'NO_ETA';
+    missedDeparture?: boolean;
+    originSource?: 'gps' | 'prev_patient' | 'clinic' | 'staff_base' | 'unknown' | null;
+    originName?: string | null;
   } | null;
   readyText?: string;
   /** Draf pesan pemberitahuan keterlambatan (DB-driven, siap salin). */
@@ -79,6 +82,20 @@ function formatStale(sec: number | null | undefined): string {
   if (m < 60) return `${m} menit lalu`;
   const h = Math.floor(m / 60);
   return `${h} jam lalu`;
+}
+
+/** Label provenance titik awal (jangan menyamakan base bidan dengan pasien sebelumnya). */
+function formatOriginSource(source: string | null | undefined): string {
+  switch (source) {
+    case 'staff_base':
+      return 'Titik awal: base/rumah bidan';
+    case 'clinic':
+      return 'Titik awal: klinik';
+    case 'prev_patient':
+      return 'Titik awal estimasi: kunjungan sebelumnya';
+    default:
+      return 'Titik awal tidak diketahui';
+  }
 }
 
 export const LiveChatDispatchWidget: React.FC<LiveChatDispatchWidgetProps> = ({
@@ -162,7 +179,7 @@ export const LiveChatDispatchWidget: React.FC<LiveChatDispatchWidgetProps> = ({
 
   return (
     <div className="rounded-xl border border-divider bg-surface shadow-xs p-3 space-y-3">
-      {isDelayed && (
+      {(isDelayed || delay?.missedDeparture) && (
         <div
           className={`rounded-lg border px-2.5 py-2 text-[11px] space-y-1.5 ${
             delay?.level === 'critical'
@@ -172,15 +189,24 @@ export const LiveChatDispatchWidget: React.FC<LiveChatDispatchWidgetProps> = ({
         >
           <div className="flex items-start gap-1.5 font-semibold">
             <AlertTriangle size={13} className="mt-0.5 flex-shrink-0" />
-            <span>
-              Bidan{staffName ? ` ${staffName}` : ''} diprediksi terlambat {delay?.delayMinutes} menit
-              {delay?.formattedArrivalWib ? ` (estimasi tiba ±${delay.formattedArrivalWib} WIB)` : ''}.
-            </span>
+            <div>
+              <span>
+                {delay?.missedDeparture && !isDelayed
+                  ? `Bidan${staffName ? ` ${staffName}` : ''} belum terdeteksi berangkat (waktu keberangkatan terlewat)`
+                  : `Bidan${staffName ? ` ${staffName}` : ''} diprediksi terlambat ${delay?.delayMinutes} menit`}
+                {delay?.formattedArrivalWib ? ` (estimasi tiba ±${delay.formattedArrivalWib} WIB)` : ''}.
+              </span>
+              {(trip?.originSource || delay?.originName) && (
+                <span className="block font-normal text-[10px] opacity-80 mt-0.5">
+                  Rute dari: {delay?.originName || (trip?.originSource === 'prev_patient' ? 'Pasien sebelumnya' : trip?.originSource === 'staff_base' ? 'Base bidan' : 'Klinik')}
+                </span>
+              )}
+            </div>
           </div>
           <button
             type="button"
             onClick={copyDelayText}
-            className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-accent bg-bubble-out hover:bg-accent-soft border border-accent/30 rounded-md px-2 py-1"
+            className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-accent bg-bubble-out hover:bg-accent-soft border border-accent/30 rounded-md px-2 py-1 cursor-pointer transition active:scale-95"
           >
             <Copy size={12} /> Salin Pesan Keterlambatan Pasien
           </button>
@@ -277,7 +303,7 @@ export const LiveChatDispatchWidget: React.FC<LiveChatDispatchWidgetProps> = ({
           <p className="text-[10px] text-ink-2">Update {formatStale(trip.lastUpdateSec)}</p>
           {trip.originSource && trip.originSource !== 'gps' && (
             <p className="text-[10px] text-warning bg-warning-soft border border-warning-line rounded-md px-1.5 py-0.5 inline-block">
-              Titik awal estimasi (dari kunjungan sebelumnya): bukan GPS presisi
+              {formatOriginSource(trip.originSource)} — bukan GPS presisi
             </p>
           )}
           <div className="grid grid-cols-3 gap-2 pt-1">

@@ -61,6 +61,7 @@ interface StaffTodayTaskCardProps {
   onRecordArrival: (task: StaffTask, e?: React.MouseEvent) => void;
   onNavigate: (task: StaffTask, e?: React.MouseEvent) => void;
   onToast: (message: string, type?: 'success' | 'error' | 'info') => void;
+  onOpenDelayNotifyModal?: (task: StaffTask) => void;
   index: number;
 }
 
@@ -83,6 +84,7 @@ export const StaffTodayTaskCard: React.FC<StaffTodayTaskCardProps> = ({
   onRecordArrival,
   onNavigate,
   onToast,
+  onOpenDelayNotifyModal,
   index,
 }) => {
   const isLunas = task.pricing.paymentStatus === 'LUNAS';
@@ -175,6 +177,41 @@ export const StaffTodayTaskCard: React.FC<StaffTodayTaskCardProps> = ({
 
       {/* Area Bawah: Alamat, Foto Rumah, & Tombol Aksi */}
       <div>
+        {/* Departure Watchdog: Peringatan Keterlambatan Bidan */}
+        {task.delay && (task.delay.delayMinutes > 0 || task.delay.missedDeparture) && !task.arrivedAt && task.status !== 'completed' && (
+          <div className="mb-2 p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-700 dark:text-amber-400 text-xs flex flex-col gap-1.5 transition-all">
+            <div className="flex items-center justify-between">
+              <span className="font-semibold flex items-center gap-1.5">
+                <AlertCircle size={14} className="text-amber-500 shrink-0" />
+                {task.delay.delayMinutes > 0
+                  ? `Potensi keterlambatan ±${task.delay.delayMinutes} menit`
+                  : 'Waktu keberangkatan terlewat'}
+              </span>
+              <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/20 font-medium">
+                Dari {task.delay.originName}
+              </span>
+            </div>
+            <div className="flex items-center justify-between gap-2 pt-1 border-t border-amber-500/20">
+              <span className="text-[11px] text-ink-2">
+                Estimasi tiba: <strong>{task.delay.estimatedArrivalWib} WIB</strong>
+              </span>
+              {onOpenDelayNotifyModal && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onOpenDelayNotifyModal(task);
+                  }}
+                  className="px-2.5 py-1 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-medium text-[11px] transition active:scale-95 flex items-center gap-1 cursor-pointer shadow-xs"
+                >
+                  <MessageSquare size={11} />
+                  <span>Infokan ke Admin</span>
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* Alamat & Jarak dari Klinik */}
         <div className="text-xs text-ink-2 mb-2 mt-2 bg-fill-1 p-2.5 rounded-xl border border-divider space-y-2">
           <div className="flex items-start gap-1.5">
