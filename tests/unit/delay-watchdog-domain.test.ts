@@ -359,6 +359,26 @@ describe('shouldAutoNotifyDelay - auto kirim ke admin', () => {
     expect(shouldAutoNotifyDelay({ delayMinutes: 1, thresholdMinutes: 30 })).toBe(false);
   });
 
+  it('mengirim saat bidan melewati jam berangkat minimal (belum OTW)', () => {
+    expect(
+      shouldAutoNotifyDelay({ delayMinutes: 0, thresholdMinutes: 30, missedDeparture: true })
+    ).toBe(true);
+    expect(
+      shouldAutoNotifyDelay({ delayMinutes: -5, thresholdMinutes: 30, missedDeparture: true })
+    ).toBe(true);
+  });
+
+  it('missedDeparture tetap tidak dikirim ulang bila sudah pernah diberi tahu', () => {
+    expect(
+      shouldAutoNotifyDelay({
+        delayMinutes: 0,
+        thresholdMinutes: 30,
+        missedDeparture: true,
+        notifiedAt: new Date('2026-11-20T05:00:00.000Z'),
+      })
+    ).toBe(false);
+  });
+
   it('tidak mengirim dua kali bila reservasi sudah pernah diberi tahu', () => {
     expect(
       shouldAutoNotifyDelay({

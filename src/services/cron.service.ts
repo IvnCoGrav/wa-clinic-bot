@@ -682,6 +682,7 @@ export class CronService {
                 delayMinutes: alert.delayMinutes,
                 notifiedAt: alert.delayNotifiedAt,
                 thresholdMinutes: watchdogSettings.toleranceMinutes,
+                missedDeparture: alert.missedDeparture,
               })
             ) {
               const notifyResult = await staffDepartureWatchdogService.notifyDelayToAdmin({
