@@ -40,7 +40,7 @@ export interface UseLiveChatSseParams {
   setPinnedBubble: React.Dispatch<React.SetStateAction<any>>;
   setBgSyncProgress: React.Dispatch<React.SetStateAction<any>>;
   setSelectedReservation: (res: any) => void;
-  setDelayAlert: React.Dispatch<React.SetStateAction<any>>;
+  setDelayAlerts: React.Dispatch<React.SetStateAction<Map<string, any>>>;
   dispatchReservationIdRef: React.MutableRefObject<string | null>;
 }
 
@@ -73,7 +73,7 @@ export function useLiveChatSse({
   setPinnedBubble,
   setBgSyncProgress,
   setSelectedReservation,
-  setDelayAlert,
+  setDelayAlerts,
   dispatchReservationIdRef,
 }: UseLiveChatSseParams) {
   const { toast } = useUiFeedback();
@@ -540,19 +540,27 @@ export function useLiveChatSse({
           if (reservationId && dispatchReservationIdRef.current === reservationId) {
             loadDispatchTripRef.current?.(reservationId);
           }
-        } else if (type === 'staff.trip_delay_warning') {
+        } else if (type === 'staff.trip_delay_warning' || type === 'staff.delay_alert') {
           const reservationId = payload?.reservationId;
           if (!reservationId) return;
           const level = payload?.level === 'critical' ? 'critical' : 'warning';
-          setDelayAlert({
+          const alertItem = {
             reservationId,
             staffName: payload?.staffName,
             patientName: payload?.patientName,
             level,
             delayMinutes: Number(payload?.delayMinutes) || 0,
             formattedArrivalWib: payload?.formattedArrivalWib,
+            missedDeparture: Boolean(payload?.missedDeparture),
+            originSource: payload?.originSource,
+            originName: payload?.originName,
+          };
+          setDelayAlerts((prev: Map<string, any>) => {
+            const next = new Map(prev);
+            next.set(reservationId, alertItem);
+            return next;
           });
-          // Toast SEKALI per reservasi (dedupe) — ikon pulse di header tetap tampil.
+          // Toast SEKALI per reservasi (dedupe) — badge di header tetap menampilkan status.
           if (!delayAlertedRef.current.has(reservationId)) {
             delayAlertedRef.current.add(reservationId);
             const who = payload?.staffName ? `Bidan ${payload.staffName}` : 'Bidan';
@@ -568,7 +576,12 @@ export function useLiveChatSse({
         } else if (type === 'staff.trip_arrived') {
           const reservationId = payload?.reservationId;
           if (reservationId) {
-            setDelayAlert((prev: any) => (prev && prev.reservationId === reservationId ? null : prev));
+            setDelayAlerts((prev: Map<string, any>) => {
+              if (!prev.has(reservationId)) return prev;
+              const next = new Map(prev);
+              next.delete(reservationId);
+              return next;
+            });
           }
           const staffName = payload?.staffName ? `Bidan ${payload.staffName}` : 'Bidan';
           const patientName = payload?.patientName ? `Bunda ${payload.patientName}` : 'pasien';

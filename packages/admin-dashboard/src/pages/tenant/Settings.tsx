@@ -19,6 +19,7 @@ import { DailyReportPanel } from '../../components/settings/DailyReportPanel';
 import { GoogleIntegrationPanel } from '../../components/settings/GoogleIntegrationPanel';
 import { PaymentInfoPanel } from '../../components/settings/PaymentInfoPanel';
 import { PricelistPromoPanel } from '../../components/settings/PricelistPromoPanel';
+import { DelayWatchdogSettingsPanel } from '../../components/settings/DelayWatchdogSettingsPanel';
 import { ToggleSwitch } from '../../components/common/ToggleSwitch';
 
 // Mask penanda token CAPI sudah ter-input (token asli tidak pernah disimpan di UI/state)
@@ -1120,6 +1121,9 @@ export const Settings: React.FC = () => {
         <div className="space-y-6">
           {/* Panel Pembayaran & QRIS Klinik */}
           <PaymentInfoPanel />
+
+          {/* Panel Delay Watchdog & Peringatan Keberangkatan */}
+          <DelayWatchdogSettingsPanel />
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* Left column: Install App, Appearance, & Media Retention */}
