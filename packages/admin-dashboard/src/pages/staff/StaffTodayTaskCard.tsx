@@ -61,7 +61,6 @@ interface StaffTodayTaskCardProps {
   onRecordArrival: (task: StaffTask, e?: React.MouseEvent) => void;
   onNavigate: (task: StaffTask, e?: React.MouseEvent) => void;
   onToast: (message: string, type?: 'success' | 'error' | 'info') => void;
-  onOpenDelayNotifyModal?: (task: StaffTask) => void;
   index: number;
 }
 
@@ -84,17 +83,17 @@ export const StaffTodayTaskCard: React.FC<StaffTodayTaskCardProps> = ({
   onRecordArrival,
   onNavigate,
   onToast,
-  onOpenDelayNotifyModal,
   index,
 }) => {
   const isLunas = task.pricing.paymentStatus === 'LUNAS';
   const catInfo = getCategoryIcon(task.treatmentCategory);
 
   /**
-   * Status keterlambatan untuk warna border kartu:
-   * - terlambat ≥ 60 menit → border merah solid + pulse (eskalasi kritis)
-   * - terlambat 1–59 menit / waktu berangkat terlewat → border amber
+   * Status keterlambatan untuk warna border kartu (tenant-aware):
+   * - level `critical` (default toleransi 30 + extra 15 = 45 menit) → border merah + pulse
+   * - level `warning` / waktu berangkat terlewat → border amber
    * - tidak terlambat → warna kategori seperti biasa
+   * Ambang tidak di-hardcode di UI; server menghitung dari setelan Delay Watchdog.
    */
   const delayMinutes = task.delay?.delayMinutes ?? 0;
   const isDelayActive =
@@ -102,7 +101,7 @@ export const StaffTodayTaskCard: React.FC<StaffTodayTaskCardProps> = ({
     (delayMinutes > 0 || Boolean(task.delay?.missedDeparture)) &&
     !task.arrivedAt &&
     task.status !== 'completed';
-  const isSevereDelay = isDelayActive && delayMinutes >= 60;
+  const isSevereDelay = isDelayActive && task.delay?.level === 'critical';
   const delayBorderClass = isSevereDelay
     ? 'border-red-600 border-l-red-600 ring-1 ring-red-500/40 animate-delay-pulse'
     : isDelayActive
@@ -216,19 +215,9 @@ export const StaffTodayTaskCard: React.FC<StaffTodayTaskCardProps> = ({
                 {delayMinutes > 0 ? `Potensi Terlambat ±${delayMinutes} menit` : 'Waktu keberangkatan terlewat'}
               </span>
             </span>
-            {onOpenDelayNotifyModal && (
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onOpenDelayNotifyModal(task);
-                }}
-                className="shrink-0 whitespace-nowrap px-2.5 py-1 rounded-lg bg-red-600 hover:bg-red-700 text-white font-semibold text-[11px] transition active:scale-95 flex items-center gap-1 cursor-pointer shadow-xs"
-              >
-                <MessageSquare size={11} />
-                <span>Infokan Keterlambatan!</span>
-              </button>
-            )}
+            <span className="shrink-0 text-[10px] text-ink-2 whitespace-nowrap">
+              Admin otomatis diberi tahu
+            </span>
           </div>
         )}
 

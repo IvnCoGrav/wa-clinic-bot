@@ -5,6 +5,7 @@ import {
   predictTaskDelay,
   etaMinutesTo,
   computeItineraryDelays,
+  shouldAutoNotifyDelay,
 } from '../../src/domain/delay-watchdog';
 
 describe('Delay Watchdog Domain Logic', () => {
@@ -344,5 +345,39 @@ describe('Delay Watchdog Domain Logic', () => {
       expect(out.get('a2')?.originSource).toBe('staff_base');
       expect(out.get('a2')?.missedDeparture).toBe(true);
     });
+  });
+});
+
+describe('shouldAutoNotifyDelay - auto kirim ke admin', () => {
+  it('mengirim saat keterlambatan mencapai ambang 30 menit', () => {
+    expect(shouldAutoNotifyDelay({ delayMinutes: 30, thresholdMinutes: 30 })).toBe(true);
+    expect(shouldAutoNotifyDelay({ delayMinutes: 45, thresholdMinutes: 30 })).toBe(true);
+  });
+
+  it('tidak mengirim di bawah ambang', () => {
+    expect(shouldAutoNotifyDelay({ delayMinutes: 29, thresholdMinutes: 30 })).toBe(false);
+    expect(shouldAutoNotifyDelay({ delayMinutes: 1, thresholdMinutes: 30 })).toBe(false);
+  });
+
+  it('tidak mengirim dua kali bila reservasi sudah pernah diberi tahu', () => {
+    expect(
+      shouldAutoNotifyDelay({
+        delayMinutes: 90,
+        notifiedAt: new Date('2026-11-20T05:00:00.000Z'),
+        thresholdMinutes: 30,
+      })
+    ).toBe(false);
+  });
+
+  it('fail-closed untuk angka/ambang tidak valid atau nol', () => {
+    expect(shouldAutoNotifyDelay({ delayMinutes: NaN, thresholdMinutes: 30 })).toBe(false);
+    expect(shouldAutoNotifyDelay({ delayMinutes: 60, thresholdMinutes: 0 })).toBe(false);
+    expect(shouldAutoNotifyDelay({ delayMinutes: 0, thresholdMinutes: 30 })).toBe(false);
+    expect(shouldAutoNotifyDelay({ delayMinutes: -15, thresholdMinutes: 30 })).toBe(false);
+  });
+
+  it('ambang mengikuti setelan tenant (bukan hardcode 30)', () => {
+    expect(shouldAutoNotifyDelay({ delayMinutes: 20, thresholdMinutes: 15 })).toBe(true);
+    expect(shouldAutoNotifyDelay({ delayMinutes: 20, thresholdMinutes: 25 })).toBe(false);
   });
 });

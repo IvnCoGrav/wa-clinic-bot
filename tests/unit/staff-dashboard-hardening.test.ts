@@ -73,6 +73,15 @@ describe('Kartu tugas & QRIS (audit UX 2026-11-23)', () => {
   it('pulse eskalasi memakai animasi merah, bukan opacity yang memutihkan kartu', () => {
     expect(taskCard).toContain('animate-delay-pulse');
     expect(taskCard).not.toContain('animate-pulse');
+    // Ambang eskalasi mengikuti level server (tenant-aware), bukan hardcode 60 menit.
+    expect(taskCard).toContain("task.delay?.level === 'critical'");
+  });
+
+  it('tidak ada aksi manual "Infokan Keterlambatan" (notifikasi dikirim otomatis)', () => {
+    expect(taskCard).not.toContain('Infokan Keterlambatan!');
+    expect(taskCard).toContain('Admin otomatis diberi tahu');
+    expect(staffToday).not.toContain('DelayNotifyModal');
+    expect(staffToday).not.toContain('handleOpenDelayNotify');
   });
 
   it('hanya baris filter status yang sticky di daftar tugas', () => {

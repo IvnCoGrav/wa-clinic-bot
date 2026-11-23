@@ -54,6 +54,8 @@ export interface DelayAlertItem {
   originSource: OriginSource;
   originName: string;
   delayText: string;
+  /** Kapan admin terakhir otomatis/manual diberi tahu (anti-spam auto-send). */
+  delayNotifiedAt: Date | null;
 }
 
 export interface NotifyDelayToAdminParams {
@@ -207,6 +209,7 @@ export class StaffDepartureWatchdogService {
         originSource: snapshot.originSource,
         originName: snapshot.originName,
         delayText,
+        delayNotifiedAt: (r as any).delay_notified_at ?? null,
       });
     }
 

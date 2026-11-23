@@ -62,7 +62,6 @@ import {
 } from '../../utils/geoUtils';
 import { NavigationPreflightModal } from '../../components/staff/NavigationPreflightModal';
 import { OtwConfirmModal } from '../../components/staff/OtwConfirmModal';
-import { DelayNotifyModal } from '../../components/staff/DelayNotifyModal';
 import { needsHousePhoto, resolveLocModalMode } from './housePhotoGuard';
 import { StaffTask } from './staffTaskTypes';
 import { DetailImageKind, StaffTaskDetailModal } from './StaffTaskDetailModal';
@@ -219,75 +218,6 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
   } | null>(null);
   const [preflightTask, setPreflightTask] = useState<StaffTask | null>(null);
 
-  // Departure Watchdog Delay Notify Modal State
-  const [delayNotifyTask, setDelayNotifyTask] = useState<StaffTask | null>(null);
-  const [delayDraft, setDelayDraft] = useState<string>('');
-  const [loadingDelayDraft, setLoadingDelayDraft] = useState(false);
-  const [sendingDelayNotify, setSendingDelayNotify] = useState(false);
-  const [copiedDelayDraft, setCopiedDelayDraft] = useState(false);
-  const [delayNotifyError, setDelayNotifyError] = useState<{ code: string; message: string } | null>(null);
-
-  const handleOpenDelayNotify = async (task: StaffTask) => {
-    setDelayNotifyTask(task);
-    setDelayDraft('');
-    setLoadingDelayDraft(true);
-    setCopiedDelayDraft(false);
-    setDelayNotifyError(null);
-    try {
-      const etaParam = task.delay?.estimatedArrivalWib ? encodeURIComponent(task.delay.estimatedArrivalWib) : '';
-      const res = await apiRequest<{ success: boolean; text?: string }>(
-        `/api/staff/delay-template?reservationId=${task.reservationId}&delayMinutes=${task.delay?.delayMinutes || ''}&arrivalTime=${etaParam}`
-      );
-      if (res?.success && res.text) {
-        setDelayDraft(res.text);
-      } else {
-        setDelayDraft('Halo Bunda, kami ingin menginformasikan bahwa Bidan kami sedang dalam perjalanan dan mengalami sedikit keterlambatan.');
-      }
-    } catch {
-      setDelayDraft('Halo Bunda, kami ingin menginformasikan bahwa Bidan kami sedang dalam perjalanan dan mengalami sedikit keterlambatan.');
-    } finally {
-      setLoadingDelayDraft(false);
-    }
-  };
-
-  const handleConfirmDelayNotify = async () => {
-    if (!delayNotifyTask) return;
-    setSendingDelayNotify(true);
-    setDelayNotifyError(null);
-    try {
-      const res = await apiRequest<{ success: boolean; code?: string; error?: string; recipientCount?: number }>(
-        `/api/staff/reservations/${delayNotifyTask.reservationId}/notify-delay`,
-        { method: 'POST', body: JSON.stringify({}) }
-      );
-      if (res?.success) {
-        toast(`Notifikasi keterlambatan berhasil dikirimkan ke ${res.recipientCount || 0} admin.`, 'success');
-        setDelayNotifyTask(null);
-      } else {
-        const code = res?.code || 'SEND_FAILED';
-        const msg = res?.error || 'Gagal mengirim notifikasi ke admin.';
-        setDelayNotifyError({ code, message: msg });
-        toast(msg, 'error');
-      }
-    } catch (err: any) {
-      const msg = err?.message || 'Terjadi kesalahan saat mengirim notifikasi.';
-      setDelayNotifyError({ code: 'ERROR', message: msg });
-      toast(msg, 'error');
-    } finally {
-      setSendingDelayNotify(false);
-    }
-  };
-
-  const handleCopyDelayDraft = async () => {
-    if (!delayDraft) return;
-    try {
-      await navigator.clipboard.writeText(delayDraft);
-      setCopiedDelayDraft(true);
-      toast('Draf pesan berhasil disalin ke clipboard!', 'success');
-      setTimeout(() => setCopiedDelayDraft(false), 2000);
-    } catch {
-      toast('Gagal menyalin draf pesan.', 'error');
-    }
-  };
   const [locProcessingPhoto, setLocProcessingPhoto] = useState(false);
 
   // Gateway capability (WAHA supportsRevoke=true, supportsEdit=true vs WABA supportsRevoke=false)
@@ -2595,7 +2525,6 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                       onEditLocation={handleOpenUpdateLocationModal}
                       onRecordArrival={handleRecordArrival}
                       onNavigate={requestNavigation}
-                      onOpenDelayNotifyModal={handleOpenDelayNotify}
                       onToast={toast}
                     />
                   ))
@@ -3646,23 +3575,6 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
         }}
       />
 
-      {/* Departure Watchdog: Modal Infokan Keterlambatan ke Admin */}
-      <DelayNotifyModal
-        open={!!delayNotifyTask}
-        task={delayNotifyTask}
-        draft={delayDraft}
-        loadingDraft={loadingDelayDraft}
-        sending={sendingDelayNotify}
-        onConfirm={handleConfirmDelayNotify}
-        onClose={() => {
-          if (sendingDelayNotify) return;
-          setDelayNotifyTask(null);
-          setDelayNotifyError(null);
-        }}
-        onCopyDraft={handleCopyDelayDraft}
-        copied={copiedDelayDraft}
-        errorInfo={delayNotifyError}
-      />
     </div>
   );
 };
