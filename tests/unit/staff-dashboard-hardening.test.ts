@@ -86,6 +86,7 @@ describe('Kartu tugas & QRIS (audit UX 2026-11-23)', () => {
   it('menampilkan batas jam berangkat preventif (Berangkat sebelum HH:MM)', () => {
     expect(taskCard).toContain('Berangkat sebelum ');
     expect(taskCard).toContain('departureDeadlineWib');
+    expect(taskCard).toContain('showPreventiveDepartureHint');
     expect(taskCard).not.toContain('Notifikasi admin otomatis');
   });
 
