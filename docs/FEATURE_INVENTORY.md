@@ -144,7 +144,7 @@ Antarmuka web responsif berbasis mobile untuk bidan saat bertugas di lapangan.
 
 | Fitur Mikro | Endpoint / Komponen | Deskripsi & Fungsi Teknis |
 | :--- | :--- | :--- |
-| **Autentikasi Terpisah Staf** | `POST /api/staff/auth/login`, `/restore`, `/logout`, `GET /me` | Sesi mandiri berbasis HttpOnly cookie `staff_session` dengan isolasi peran (Therapist/Bidan vs Admin). |
+| **Autentikasi Terpisah Staf** | `POST /api/staff/auth/login`, `/restore`, `/logout`, `GET /me` | Sesi mandiri berbasis HttpOnly cookie `staff_session` dengan isolasi peran (Therapist/Bidan vs Admin). Logout memakai satu handler kanonis yang membersihkan `admin_session` + `staff_session` paralel serta hard redirect `window.location.replace` ke login. |
 | **Dashboard Tugas Hari Ini** | `GET /api/staff/today-tasks`, `/upcoming-schedule`, `/completed-tasks` | Daftar tugas kunjungan hari ini, jadwal mendatang, dan rekap kunjungan yang telah selesai. |
 | **Operasional Tim & Pengalihan Tugas** | `GET /api/staff/team-members`, `POST /reservations/:id/reassign` | Melihat rekan tim yang bertugas dan mengalihkan pasien jika terjadi kendala darurat. |
 | **Live Chat Lapangan Bidan** | `GET /api/staff/conversations/:id/messages`, `POST /reply`, `PATCH /read` | Chat langsung antara bidan dan customer via WhatsApp tanpa perlu membuka nomor WhatsApp pribadi. |

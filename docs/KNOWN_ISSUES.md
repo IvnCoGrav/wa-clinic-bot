@@ -3,6 +3,26 @@
 Catatan temuan yang sengaja dipisah dari fitur aktif, supaya tidak hilang dan
 tidak disalahartikan sebagai bug dari perubahan terbaru.
 
+## 368. [Test Hygiene] Flaky `reuse-gate` (perf) & `media-watermark-autoprune` (mtime) (2026-11-24, OPEN)
+
+- **Status:** OPEN — test-only; bukan bug produk, tidak menghalangi deploy logout.
+- **Gejala 1 (`reuse-gate.test.ts` #10):** pada suite penuh paralel, gate `src/` memakan **82,9 dtk** (batas 60 dtk) → 1 failure. Rerun isolasi: **14/14 PASS**, gate **35,9 dtk**. Jadi flaky performa di bawah beban paralel, bukan regresi kode.
+- **Gejala 2 (`media-watermark-autoprune.test.ts`):** dijalankan sendirian di Windows → **4/15 gagal** (4.2, 4.3, 4.4, 4.11). File baru ditulis lalu langsung dipangkas; mtime NTFS bisa sedikit **di depan** `Date.now()` (terukur 33/50), sehingga `Date.now() - mtime < 0` tetap dianggap "file baru" walau `MEDIA_HD_MIN_AGE_HOURS=0`. Di suite penuh test ini lulus (flaky).
+- **Usulan perbaikan (belum dieksekusi):** guard `media.service.ts:947` menjadi `if (minAgeMs > 0 && Date.now() - candidate.mtimeMs < minAgeMs)` agar env `0` benar-benar menonaktifkan guard; atau test men-set mtime ke masa lalu seperti test 4.5. Untuk `reuse-gate`, naikkan ambang waktu khusus CI paralel atau tandai flaky.
+
+## 367. [Auth / Staf] Dual-Source Auth Context & Residu Sesi Logout Offline (2026-11-23)
+
+- **Status:** PARTIALLY RESOLVED / BACKLOG ARCHITECTURAL TRACKING (2026-11-23).
+- **Gejala (Terselesaikan di UI):** Bidan/Terapis mengeklik "Keluar" di Portal Staf (`/admin/staff/today`), modal konfirmasi baru muncul pada klik kedua, dan setelah dikonfirmasi akun tetap tidak keluar (pengguna tertahan di halaman, harus mengulangi siklus 2x atau menutup peramban).
+- **Akar Masalah UI:**
+  1. Login staf via form terpadu (`/admin/login`) mengaktifkan `AuthContext.user` dan `StaffAuthContext.staff`. Tombol keluar lama hanya mengeksekusi `staffLogout()` (`staff = null`), sedangkan `AuthContext.user` tetap aktif sehingga `StaffProtectedRoute` menolak navigasi.
+  2. Ketiadaan redirect eksplisit (`logout()` tidak di-`await` dan tanpa `window.location.replace`).
+  3. Drawer menutup prematur (`setShowMenuDrawer(false)` dipanggil sebelum konfirmasi pengguna).
+- **Mitigasi yang Diimplementasikan:** Satu handler kanonis `handleLogout` di `StaffToday.tsx` yang membersihkan `StaffAuthContext` dan `AuthContext` secara paralel dengan hard redirect `window.location.replace('/admin/login')`, serta hardening elevasi dialog konfirmasi ke `z-dialog-top` (12500) agar selalu di atas modal bertumpuk.
+- **Catatan Arsitektural Terbuka (OPEN/BACKLOG):**
+  1. **Dual-source auth:** Endpoint `/api/admin/auth/me` mengembalikan identitas staf sebagai `user` admin (`auth.subroute.ts:460-490`). Refaktor pemisahan kontrak auth global memerlukan penyesuaian guard RBAC di seluruh rute dan dijadwalkan sebagai tiket terpisah.
+  2. **Residu sesi saat offline:** Jika `POST /api/admin/auth/logout` gagal total akibat ketiadaan koneksi internet (offline murni), cookie sesi di sisi server dapat bertahan sampai login berikutnya karena pembersihan hanya terjadi di memori/storage lokal peramban.
+
 ## 366. [Test Hygiene] Fixture tanggal tetap membuat `reservation-series-core-gates` gagal setelah 2026-11-20 (2026-11-21, RESOLVED)
 
 - **Gejala:** `npm test` penuh 2026-11-21 menghasilkan 1 failure: `tests/unit/reservation-series-core-gates.test.ts` → `PAST_SESSION_DATE` (expected `DUPLICATE_BOOKING`). Fixture memakai `new Date('2026-11-20T10:00:00Z')` (baris 22), sehingga setelah tanggal tersebut service menolak sebagai sesi lampau sebelum mencapai gate duplikasi.

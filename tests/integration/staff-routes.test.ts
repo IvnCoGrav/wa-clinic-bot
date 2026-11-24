@@ -277,6 +277,25 @@ describe('Staff Routes Integration Tests (/api/staff/*)', () => {
       expect(res.headers['set-cookie']).toContain('staff_session=;');
       expect(StaffAuthService.logout).toHaveBeenCalledWith('token_to_logout');
     });
+
+    it('POST /api/admin/auth/logout with staff_session destroys staff session and clears both cookies', async () => {
+      vi.spyOn(StaffAuthService, 'logout').mockResolvedValue(true);
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/admin/auth/logout',
+        headers: {
+          cookie: 'staff_session=token_staf_123',
+        },
+      });
+
+      expect(res.statusCode).toBe(200);
+      const setCookie = res.headers['set-cookie'];
+      const cookieStr = Array.isArray(setCookie) ? setCookie.join('; ') : String(setCookie);
+      expect(cookieStr).toContain('staff_session=;');
+      expect(cookieStr).toContain('admin_session=;');
+      expect(StaffAuthService.logout).toHaveBeenCalledWith('token_staf_123');
+    });
   });
 
   describe('Staff Today & Live Chat Endpoints', () => {

@@ -16,7 +16,7 @@ interface AuthContextType {
   user: User | null;
   loading: boolean;
   login: (identifier: string, password: string) => Promise<LoginResult>;
-  logout: () => Promise<void>;
+  logout: (options?: { awaitServer?: boolean }) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -267,28 +267,37 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const logout = async () => {
+  const logout = async (options: { awaitServer?: boolean } = {}) => {
     setLoading(true);
     localStorage.removeItem(TOKEN_STORAGE_KEY);
     localStorage.removeItem(LAST_USER_KEY);
-    // Disosiasi perangkat SEBELUM sesi dimusnahkan: batalkan langganan push browser
-    // + hapus baris di DB. Mencegah ghost subscription (perangkat tetap menerima
-    // notifikasi role lama setelah user berganti akun/portal).
+
     try {
       const { unsubscribeFromPushNotifications } = await import('../services/pushNotification');
-      // Disosiasi push best-effort: logout tidak boleh gagal karenanya.
       fireAndForget(unsubscribeFromPushNotifications(), 'lepas langganan push');
     } catch {
       // Modul push tidak tersedia (browser lama/diblokir): logout tetap jalan.
     }
+
     try {
-      // Logout server best-effort: klien tetap keluar walau jaringan bermasalah.
-      const serverLogout = apiRequest('/api/admin/auth/logout', { method: 'POST' });
+      const awaitServer = options.awaitServer === true;
+      const serverLogout = apiRequest('/api/admin/auth/logout', {
+        method: 'POST',
+        // keepalive: request tetap dikirim walau halaman segera di-reload.
+        keepalive: awaitServer,
+        timeoutMs: awaitServer ? 4000 : 15000,
+      });
       fireAndForget(serverLogout, 'logout server');
-      await Promise.race([
-        serverLogout.catch(() => null),
-        new Promise((resolve) => setTimeout(resolve, 1500)),
-      ]);
+
+      if (awaitServer) {
+        // Tunggu kontrak logout-all selesai (max 4 dtk) sebelum hard redirect.
+        await serverLogout.catch(() => null);
+      } else {
+        await Promise.race([
+          serverLogout.catch(() => null),
+          new Promise((resolve) => setTimeout(resolve, 1500)),
+        ]);
+      }
     } catch (err) {
       console.error('Logout error:', err);
     } finally {
