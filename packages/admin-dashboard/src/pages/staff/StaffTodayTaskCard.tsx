@@ -46,6 +46,8 @@ interface StaffTodayTaskCardProps {
   task: StaffTask;
   isSelected: boolean;
   isSendingOtw: boolean;
+  /** Fase 5 (plan 2026-11-24): pesan OTW sudah diantrekan tapi belum dikonfirmasi server. */
+  otwPending?: boolean;
   isCompleting: boolean;
   isSendingArrival: boolean;
   isSupervisor: boolean;
@@ -68,6 +70,7 @@ export const StaffTodayTaskCard: React.FC<StaffTodayTaskCardProps> = ({
   task,
   isSelected,
   isSendingOtw,
+  otwPending = false,
   isCompleting,
   isSendingArrival,
   isSupervisor,
@@ -210,6 +213,13 @@ export const StaffTodayTaskCard: React.FC<StaffTodayTaskCardProps> = ({
 
       {/* Area Bawah: Alamat, Foto Rumah, & Tombol Aksi */}
       <div>
+        {/* Fase 5: status jujur saat pesan OTW belum terkonfirmasi server. */}
+        {otwPending && !task.otwSentAt && (
+          <div className="mb-2 px-2.5 py-1.5 rounded-xl border border-warning-line bg-warning-soft text-[11px] font-semibold text-warning flex items-center gap-1.5">
+            <Clock size={12} className="shrink-0" />
+            <span>Pesan OTW belum terkonfirmasi — dikirim ulang otomatis</span>
+          </div>
+        )}
         {/* Departure Watchdog: peringatan satu baris + aksi cepat infokan keterlambatan */}
         {isDelayActive && (
           <div

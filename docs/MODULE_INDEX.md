@@ -7,7 +7,7 @@
 
 ## 1. Daftar Kapabilitas Kanonis Aktif
 
-Total kapabilitas terdaftar: **41 modul**.
+Total kapabilitas terdaftar: **42 modul**.
 
 | ID Kapabilitas | Judul & Deskripsi | Modul Kanonis | Ekspor Resmi | Test File |
 |---|---|---|---|---|
@@ -41,6 +41,7 @@ Total kapabilitas terdaftar: **41 modul**.
 | `staff.delay_watchdog_config` | **Resolusi konfigurasi delay watchdog per-tenant**<br>Resolver konfigurasi delay watchdog tenant-aware dengan TTL cache 5 menit dan fallback deterministik ke StaffScorecardPolicy atau default 30 menit. | [`src/config/delay-watchdog-config.ts`](../src/config/delay-watchdog-config.ts) | `getDelayWatchdogSettings`, `clearDelayWatchdogCache`, `DEFAULT_DELAY_WATCHDOG_SETTINGS` | [`delay-watchdog-config.test.ts`](../tests/unit/delay-watchdog-config.test.ts) |
 | `staff.delay_watchdog_domain` | **Prediksi keterlambatan dan deadline keberangkatan staf**<br>Domain murni untuk menentukan origin leg (rumah vs tugas sebelumnya), deadline keberangkatan, dan prediksi keterlambatan (on_time, warning, critical) tanpa I/O. | [`src/domain/delay-watchdog.ts`](../src/domain/delay-watchdog.ts) | `resolveLegOrigin`, `computeDepartureDeadline`, `etaMinutesTo`, `predictTaskDelay`, `computeItineraryDelays` | [`delay-watchdog-domain.test.ts`](../tests/unit/delay-watchdog-domain.test.ts) |
 | `staff.departure_watchdog_service` | **Service watchdog keterlambatan & notifikasi admin**<br>Evaluasi jadwal hari ini untuk deteksi keterlambatan staf serta pengiriman notifikasi WhatsApp ke nomor admin resmi dengan audit trail. | [`src/services/staff-departure-watchdog.service.ts`](../src/services/staff-departure-watchdog.service.ts) | `StaffDepartureWatchdogService`, `staffDepartureWatchdogService` | [`staff-departure-watchdog.test.ts`](../tests/unit/staff-departure-watchdog.test.ts) |
+| `staff.otw_departure` | **Kontrak keberangkatan OTW: kirim dulu, peta kemudian**<br>Urutan pengiriman OTW dengan batas tunggu 10 detik (bukan fire-and-forget), penyusunan payload ETA/GPS, keputusan kirim-ulang antrean pending berbasis jendela waktu server, dan kunci idempotensi per percobaan keberangkatan. Murni tanpa DOM/jaringan. | [`packages/admin-dashboard/src/pages/staff/otwDeparture.ts`](../packages/admin-dashboard/src/pages/staff/otwDeparture.ts) | `OTW_SEND_DEADLINE_MS`, `buildOtwPayload`, `sendOtwWithDeadline`, `resolveFlushDecision`, `createOtwRequestId`, `describeOtwError` | [`otw-departure.test.ts`](../tests/unit/otw-departure.test.ts) |
 | `staff.reservation_access` | **Guard akses reservasi staf (tenant + anti-IDOR)**<br>Memuat reservasi dan menegakkan isolasi tenant serta kepemilikan bidan sebelum rute staf memproses perjalanan. | [`src/services/staff-reservation-access.service.ts`](../src/services/staff-reservation-access.service.ts) | `loadAuthorizedReservation` | [`staff-delay-notify.test.ts`](../tests/integration/staff-delay-notify.test.ts) |
 | `staff.scorecard_domain` | **Domain penilaian bidan (bobot, komponen, grade)**<br>Perhitungan deterministik ketepatan waktu, volume kunjungan, kelayakan retensi, komposisi bobot, dan grade A-E. Tanpa I/O; komponen yang sampelnya kurang dikeluarkan dan bobotnya dinormalisasi. | [`src/domain/staff-scorecard.ts`](../src/domain/staff-scorecard.ts) | `computePunctuality`, `computeVolume`, `evaluateRetentionEligibility`, `composeScore`, `gradeFromScore`, `validateWeights`, `DEFAULT_SCORECARD_WEIGHTS`, `DEFAULT_GRADE_THRESHOLDS` | [`staff-scorecard-domain.test.ts`](../tests/unit/staff-scorecard-domain.test.ts) |
 | `staff.scorecard_policy` | **Policy penilaian bidan (versioned)**<br>Validasi dan penyimpanan policy bobot, ambang waktu, target kunjungan, dan grade. Fallback default saat basis data offline; setiap perubahan menjadi versi baru yang tercatat di audit. | [`src/services/staff-scorecard.service.ts`](../src/services/staff-scorecard.service.ts) | `validateStaffScorecardPolicy`, `StaffScorecardService` | [`staff-scorecard-policy.test.ts`](../tests/integration/staff-scorecard-policy.test.ts) |
@@ -324,6 +325,15 @@ Total kapabilitas terdaftar: **41 modul**.
 - **Simbol Terlarang di Luar Kanonis:** `StaffDepartureWatchdogService`, `staffDepartureWatchdogService`
 - **File yang Diizinkan:** `src/services/staff-departure-watchdog.service.ts`
 - **File Test:** [`tests/unit/staff-departure-watchdog.test.ts`](../tests/unit/staff-departure-watchdog.test.ts)
+
+### `staff.otw_departure` — Kontrak keberangkatan OTW: kirim dulu, peta kemudian
+
+- **Deskripsi:** Urutan pengiriman OTW dengan batas tunggu 10 detik (bukan fire-and-forget), penyusunan payload ETA/GPS, keputusan kirim-ulang antrean pending berbasis jendela waktu server, dan kunci idempotensi per percobaan keberangkatan. Murni tanpa DOM/jaringan.
+- **File Kanonis:** [`packages/admin-dashboard/src/pages/staff/otwDeparture.ts`](../packages/admin-dashboard/src/pages/staff/otwDeparture.ts)
+- **Ekspor Kanonis:** `OTW_SEND_DEADLINE_MS`, `buildOtwPayload`, `sendOtwWithDeadline`, `resolveFlushDecision`, `createOtwRequestId`, `describeOtwError`
+- **Simbol Terlarang di Luar Kanonis:** 
+- **File yang Diizinkan:** `packages/admin-dashboard/src/pages/staff/otwDeparture.ts`, `packages/admin-dashboard/src/pages/staff/otwPendingStore.ts`, `packages/admin-dashboard/src/pages/staff/otwFlush.ts`
+- **File Test:** [`tests/unit/otw-departure.test.ts`](../tests/unit/otw-departure.test.ts)
 
 ### `staff.reservation_access` — Guard akses reservasi staf (tenant + anti-IDOR)
 

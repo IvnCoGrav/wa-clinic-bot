@@ -166,3 +166,45 @@ describe('Logout portal staf — dual-context & lapisan dialog', () => {
     expect(uiFeedback).not.toMatch(/modal-backdrop fixed inset-0 z-dialog flex/);
   });
 });
+
+describe('S-10 keberangkatan OTW (anti race & status jujur)', () => {
+  // Guard statis TIPIS: kebenaran perilaku diuji di tests/unit/otw-departure.test.ts
+  // (modul kanonik otwDeparture.ts). Di sini hanya penjaga anti-regresi struktur.
+  const otwModule = read('packages/admin-dashboard/src/pages/staff/otwDeparture.ts');
+  const otwStore = read('packages/admin-dashboard/src/pages/staff/otwPendingStore.ts');
+  const start = staffToday.indexOf('const confirmOtwDepart = async () => {');
+  const end = staffToday.indexOf('const departWithoutWaiting = () => {');
+  const pendingStart = staffToday.indexOf('const rememberPendingOtw =');
+  const handler = start > -1 && end > start ? staffToday.slice(start, end) : '';
+  const pendingSaver = pendingStart > -1 && start > pendingStart ? staffToday.slice(pendingStart, start) : '';
+
+  it('handler OTW memakai seam kanonik dan bukan fire-and-forget', () => {
+    expect(start).toBeGreaterThan(-1);
+    expect(end).toBeGreaterThan(start);
+    expect(handler).toContain('sendOtwWithDeadline');
+    expect(handler).not.toContain('(async () => {');
+    expect(handler).toContain('await sendOtwWithDeadline');
+  });
+
+  it('peta dibuka SETELAH pengiriman, bukan sebelum (akar insiden 2026-11-24)', () => {
+    const sendIndex = handler.indexOf('await sendOtwWithDeadline');
+    // Cabang "sudah OTW / status terminal" memang boleh membuka peta tanpa kirim;
+    // yang dilarang adalah jalur kirim membuka peta SEBELUM menunggu server.
+    const lastMapsIndex = handler.lastIndexOf('openMapsIfAny(navUrl)');
+    expect(sendIndex).toBeGreaterThan(-1);
+    expect(lastMapsIndex).toBeGreaterThan(sendIndex);
+  });
+
+  it('pending disimpan ke antrean sesi + dibersihkan saat logout', () => {
+    expect(otwModule).toContain('OTW_SEND_DEADLINE_MS = 10_000');
+    expect(otwStore).toContain('sessionStorage');
+    expect(pendingSaver).toContain('enqueuePendingOtw');
+    expect(handler).toContain('rememberPendingOtw');
+    expect(staffAuth).toContain('OTW_PENDING_KEY');
+  });
+
+  it('modal memakai state pengiriman OTW (bukan state persiapan GPS)', () => {
+    expect(staffToday).toContain('sending={!!otwSendingId}');
+    expect(staffToday).toContain('onOpenMaps={departWithoutWaiting}');
+  });
+});

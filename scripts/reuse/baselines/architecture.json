@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generatedFromCommit": "00441337",
+  "generatedFromCommit": "dcc4c8b0",
   "layerViolations": [
     {
       "rule": "LAYER_SERVICES",
@@ -158,7 +158,7 @@
     ]
   ],
   "prismaBudget": {
-    "totalCalls": 236,
+    "totalCalls": 235,
     "files": {
       "src/routes/admin/auth.subroute.ts": 2,
       "src/routes/admin/ctwa-catchers.subroute.ts": 6,
@@ -188,7 +188,7 @@
       "src/routes/landing.route.ts": 5,
       "src/routes/media.route.ts": 2,
       "src/routes/staff/auth.subroute.ts": 1,
-      "src/routes/staff/today.subroute.ts": 4,
+      "src/routes/staff/today.subroute.ts": 3,
       "src/routes/telegram-webhook.route.ts": 8,
       "src/routes/tracking.route.ts": 2,
       "src/routes/waba-webhook.route.ts": 1,

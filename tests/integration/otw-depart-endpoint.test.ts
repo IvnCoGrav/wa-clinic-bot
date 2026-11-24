@@ -76,13 +76,25 @@ describe('POST /otw — kontrol keberangkatan (en_route + ETA)', () => {
     staffTripTrackingService.clearAll();
     vi.spyOn(StaffAuthService, 'validateSession').mockResolvedValue(staffSession as any);
     vi.spyOn(liveChatService, 'sendAdminReply').mockResolvedValue({ success: true } as any);
+    // Fase 1 (plan 2026-11-24): OTW kini mengklaim reservasi di dalam transaksi
+    // ber-kunci advisory. Double DB di sini meniru perilaku Prisma asli agar
+    // route benar-benar menjalankan cabang klaimnya.
+    const prismaAny = prisma as any;
+    prismaAny.reservation.findUnique.mockReset();
+    prismaAny.reservation.update.mockReset();
+    prismaAny.$queryRaw.mockReset();
+    prismaAny.$transaction.mockReset();
+    prismaAny.$queryRaw.mockResolvedValue([{ pg_advisory_xact_lock: null }]);
+    prismaAny.$transaction.mockImplementation(async (arg: any) =>
+      typeof arg === 'function' ? arg(prisma) : Promise.all(arg)
+    );
     vi.mocked(prisma.reservation.update).mockResolvedValue({ id: RES_ID, status: 'en_route' } as any);
   });
 
   const staffHeaders = { cookie: 'staff_session=valid_token' };
 
   it('markEnRoute + ETA → update status en_route & otw_sent_at dalam satu update', async () => {
-    vi.mocked(prisma.reservation.findUnique).mockResolvedValueOnce(reservationRow as any);
+    vi.mocked(prisma.reservation.findUnique).mockResolvedValue(reservationRow as any);
     const res = await app.inject({
       method: 'POST',
       url: `/api/staff/reservations/${RES_ID}/otw`,
@@ -98,7 +110,7 @@ describe('POST /otw — kontrol keberangkatan (en_route + ETA)', () => {
   });
 
   it('TANPA markEnRoute → perilaku lama (hanya otw_sent_at, status tak diubah)', async () => {
-    vi.mocked(prisma.reservation.findUnique).mockResolvedValueOnce(reservationRow as any);
+    vi.mocked(prisma.reservation.findUnique).mockResolvedValue(reservationRow as any);
     const res = await app.inject({
       method: 'POST',
       url: `/api/staff/reservations/${RES_ID}/otw`,
@@ -112,7 +124,7 @@ describe('POST /otw — kontrol keberangkatan (en_route + ETA)', () => {
   });
 
   it('status terminal (completed) → 400, DILARANG update', async () => {
-    vi.mocked(prisma.reservation.findUnique).mockResolvedValueOnce({
+    vi.mocked(prisma.reservation.findUnique).mockResolvedValue({
       ...reservationRow,
       status: 'completed',
     } as any);
@@ -127,7 +139,7 @@ describe('POST /otw — kontrol keberangkatan (en_route + ETA)', () => {
   });
 
   it('terapis bukan pemilik jadwal → 403 (anti-IDOR)', async () => {
-    vi.mocked(prisma.reservation.findUnique).mockResolvedValueOnce({
+    vi.mocked(prisma.reservation.findUnique).mockResolvedValue({
       ...reservationRow,
       assigned_staff_id: 'staff-lain',
     } as any);
@@ -151,7 +163,7 @@ describe('POST /otw — kontrol keberangkatan (en_route + ETA)', () => {
 
   it('FASE 1: OTW dengan koordinat → trip memory CS terisi (bukan blind spot)', async () => {
     staffTripTrackingService.clearAll();
-    vi.mocked(prisma.reservation.findUnique).mockResolvedValueOnce(reservationRow as any);
+    vi.mocked(prisma.reservation.findUnique).mockResolvedValue(reservationRow as any);
     const res = await app.inject({
       method: 'POST',
       url: `/api/staff/reservations/${RES_ID}/otw`,
@@ -167,7 +179,7 @@ describe('POST /otw — kontrol keberangkatan (en_route + ETA)', () => {
 
   it('FASE 1: OTW tanpa koordinat → trip memory tetap kosong (kompatibel mundur)', async () => {
     staffTripTrackingService.clearAll();
-    vi.mocked(prisma.reservation.findUnique).mockResolvedValueOnce(reservationRow as any);
+    vi.mocked(prisma.reservation.findUnique).mockResolvedValue(reservationRow as any);
     const res = await app.inject({
       method: 'POST',
       url: `/api/staff/reservations/${RES_ID}/otw`,
@@ -181,7 +193,7 @@ describe('POST /otw — kontrol keberangkatan (en_route + ETA)', () => {
   describe('Idempotensi & Validasi Jendela OTW (Plan 2026-10-20)', () => {
     it('POST kedua (alreadySent: true) → tidak kirim ulang WA & tidak update database', async () => {
       const alreadySentDate = new Date(Date.now() - 5 * 60 * 1000);
-      vi.mocked(prisma.reservation.findUnique).mockResolvedValueOnce({
+      vi.mocked(prisma.reservation.findUnique).mockResolvedValue({
         ...reservationRow,
         otw_sent_at: alreadySentDate,
         status: 'en_route',
@@ -214,7 +226,7 @@ describe('POST /otw — kontrol keberangkatan (en_route + ETA)', () => {
         },
       };
       vi.spyOn(StaffAuthService, 'validateSession').mockResolvedValue(supervisorSession as any);
-      vi.mocked(prisma.reservation.findUnique).mockResolvedValueOnce({
+      vi.mocked(prisma.reservation.findUnique).mockResolvedValue({
         ...reservationRow,
         otw_sent_at: alreadySentDate,
         status: 'en_route',
@@ -237,7 +249,7 @@ describe('POST /otw — kontrol keberangkatan (en_route + ETA)', () => {
 
     it('forceResend: true oleh THERAPIST biasa → diabaikan, tetap return alreadySent: true', async () => {
       const alreadySentDate = new Date(Date.now() - 5 * 60 * 1000);
-      vi.mocked(prisma.reservation.findUnique).mockResolvedValueOnce({
+      vi.mocked(prisma.reservation.findUnique).mockResolvedValue({
         ...reservationRow,
         otw_sent_at: alreadySentDate,
         status: 'en_route',
@@ -259,7 +271,7 @@ describe('POST /otw — kontrol keberangkatan (en_route + ETA)', () => {
     });
 
     it('H-121 menit (lebih dari 2 jam sebelum jadwal) → 400', async () => {
-      vi.mocked(prisma.reservation.findUnique).mockResolvedValueOnce({
+      vi.mocked(prisma.reservation.findUnique).mockResolvedValue({
         ...reservationRow,
         booking_date: new Date(Date.now() + 121 * 60 * 1000), // 121 menit ke depan
       } as any);
@@ -278,7 +290,7 @@ describe('POST /otw — kontrol keberangkatan (en_route + ETA)', () => {
     });
 
     it('H+16 menit (lewat toleransi 15 menit setelah jadwal) → 400', async () => {
-      vi.mocked(prisma.reservation.findUnique).mockResolvedValueOnce({
+      vi.mocked(prisma.reservation.findUnique).mockResolvedValue({
         ...reservationRow,
         booking_date: new Date(Date.now() - 16 * 60 * 1000), // 16 menit lewat
       } as any);
@@ -294,6 +306,102 @@ describe('POST /otw — kontrol keberangkatan (en_route + ETA)', () => {
       const body = JSON.parse(res.body);
       expect(body.success).toBe(false);
       expect(body.error).toContain('Silakan gunakan tombol Catat Kedatangan / Sudah Sampai');
+    });
+  });
+
+  describe('Fase 1 (plan 2026-11-24) — klaim atomik & idempotensi retry', () => {
+    it('mengambil kunci advisory per-reservasi di dalam satu transaksi', async () => {
+      vi.mocked(prisma.reservation.findUnique).mockResolvedValue(reservationRow as any);
+
+      const res = await app.inject({
+        method: 'POST',
+        url: `/api/staff/reservations/${RES_ID}/otw`,
+        headers: staffHeaders,
+        payload: { customText: '', markEnRoute: true },
+      });
+
+      expect(res.statusCode).toBe(200);
+      expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+      const txOptions = vi.mocked(prisma.$transaction).mock.calls.at(-1)![1] as any;
+      expect(txOptions).toEqual({ maxWait: 5000, timeout: 20000 });
+      const sql = String((vi.mocked(prisma.$queryRaw).mock.calls.at(-1)![0] as any)?.join('?'));
+      expect(sql).toContain('pg_advisory_xact_lock');
+      expect(sql).toContain('hashtext');
+    });
+
+    it('requestId dari klien diteruskan sebagai clientTempId (idempotensi retry)', async () => {
+      vi.mocked(prisma.reservation.findUnique).mockResolvedValue(reservationRow as any);
+
+      const res = await app.inject({
+        method: 'POST',
+        url: `/api/staff/reservations/${RES_ID}/otw`,
+        headers: staffHeaders,
+        payload: { customText: '', markEnRoute: true, requestId: 'otw-abc-123' },
+      });
+
+      expect(res.statusCode).toBe(200);
+      expect(liveChatService.sendAdminReply).toHaveBeenCalledWith(
+        expect.objectContaining({ clientTempId: 'otw-abc-123' })
+      );
+    });
+
+    it('request paralel: pembacaan di dalam kunci melihat otw_sent_at → TIDAK kirim WA lagi', async () => {
+      vi.mocked(prisma.reservation.findUnique)
+        .mockResolvedValueOnce(reservationRow as any)
+        .mockResolvedValueOnce({
+          otw_sent_at: new Date(Date.now() - 1000),
+          status: 'en_route',
+        } as any);
+
+      const res = await app.inject({
+        method: 'POST',
+        url: `/api/staff/reservations/${RES_ID}/otw`,
+        headers: staffHeaders,
+        payload: { customText: '', markEnRoute: true },
+      });
+
+      expect(res.statusCode).toBe(200);
+      expect(JSON.parse(res.body).data.alreadySent).toBe(true);
+      expect(liveChatService.sendAdminReply).not.toHaveBeenCalled();
+      expect(prisma.reservation.update).not.toHaveBeenCalled();
+    });
+
+    it('DUPLICATE_REPLY (retry setelah timeout) → sukses, bukan "gagal" palsu', async () => {
+      vi.mocked(prisma.reservation.findUnique).mockResolvedValue(reservationRow as any);
+      vi.mocked(liveChatService.sendAdminReply).mockResolvedValue({
+        success: false,
+        error: { code: 'DUPLICATE_REPLY', message: 'Pesan yang sama sedang diproses/sudah dikirim dalam 2 detik terakhir.' },
+      } as any);
+
+      const res = await app.inject({
+        method: 'POST',
+        url: `/api/staff/reservations/${RES_ID}/otw`,
+        headers: staffHeaders,
+        payload: { customText: '', markEnRoute: true },
+      });
+
+      expect(res.statusCode).toBe(200);
+      expect(JSON.parse(res.body).success).toBe(true);
+      expect(prisma.reservation.update).toHaveBeenCalled();
+    });
+
+    it('gagal kirim WA non-duplikat → 400 dan tidak ada tulisan DB', async () => {
+      vi.mocked(prisma.reservation.findUnique).mockResolvedValue(reservationRow as any);
+      vi.mocked(liveChatService.sendAdminReply).mockResolvedValue({
+        success: false,
+        error: { code: 'WAHA_DOWN', message: 'Gateway WhatsApp tidak tersedia.' },
+      } as any);
+
+      const res = await app.inject({
+        method: 'POST',
+        url: `/api/staff/reservations/${RES_ID}/otw`,
+        headers: staffHeaders,
+        payload: { customText: '', markEnRoute: true },
+      });
+
+      expect(res.statusCode).toBe(400);
+      expect(JSON.parse(res.body).error.message).toBe('Gateway WhatsApp tidak tersedia.');
+      expect(prisma.reservation.update).not.toHaveBeenCalled();
     });
   });
 });

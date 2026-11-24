@@ -3,12 +3,13 @@ import { Navigation, MapPin, RefreshCw, AlertTriangle } from 'lucide-react';
 import { Modal } from '../ui/Modal';
 
 /**
- * Modal konfirmasi OTW terpadu (plan 2026-10-04, unifikasi 1-tap).
+ * Modal konfirmasi OTW terpadu (plan 2026-10-04, revisi 2026-11-24).
  *
- * Satu-satunya gerbang sebelum Bidan "berangkat": menampilkan draf pesan ke
- * pasien + status titik awal (GPS). Tombol utamanya memanggil `onConfirm`
- * SECARA SINKRON dari gesture klik — di dalamnya parent membuka Google Maps
- * (anti pop-up block) lalu mengirim OTW. Modal presentational murni.
+ * Gerbang terakhir sebelum Bidan "berangkat": menampilkan draf pesan ke pasien +
+ * status titik awal (GPS). `onConfirm` mengirim pesan lebih dulu (maks 10 dtk),
+ * baru membuka Google Maps setelah server mengonfirmasi; selama menunggu, Bidan
+ * bisa memilih "Buka peta sekarang" yang tetap menyimpan pesan ke antrean pending.
+ * Modal presentational murni — tanpa I/O.
  */
 export interface OtwConfirmModalProps {
   open: boolean;
@@ -22,6 +23,8 @@ export interface OtwConfirmModalProps {
   sending?: boolean;
   onRetryGps: () => void;
   onConfirm: () => void;
+  /** Jalan keluar saat pengiriman masih berjalan: buka peta, pesan masuk antrean. */
+  onOpenMaps?: () => void;
   onClose: () => void;
 }
 
@@ -34,6 +37,7 @@ export const OtwConfirmModal: React.FC<OtwConfirmModalProps> = ({
   sending = false,
   onRetryGps,
   onConfirm,
+  onOpenMaps,
   onClose,
 }) => {
   if (!open) return null;
@@ -67,14 +71,25 @@ export const OtwConfirmModal: React.FC<OtwConfirmModalProps> = ({
             )}
             <span>{sending ? 'Mengirim...' : 'Kirim OTW & Buka Peta'}</span>
           </button>
-          <button
-            type="button"
-            onClick={onClose}
-            disabled={sending}
-            className="w-full min-h-[44px] py-2.5 px-4 bg-surface hover:bg-fill-1 border border-divider text-ink-2 dark:text-ink rounded-2xl text-xs font-bold transition active:scale-[0.98] disabled:opacity-40"
-          >
-            Batal
-          </button>
+          {sending && onOpenMaps ? (
+            <button
+              type="button"
+              onClick={onOpenMaps}
+              className="w-full min-h-[44px] inline-flex items-center justify-center gap-2 py-2.5 px-4 bg-surface hover:bg-fill-1 border border-divider text-ink-2 dark:text-ink rounded-2xl text-xs font-bold transition active:scale-[0.98]"
+            >
+              <MapPin size={14} aria-hidden="true" />
+              <span>Buka peta sekarang (pesan menyusul)</span>
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={sending}
+              className="w-full min-h-[44px] py-2.5 px-4 bg-surface hover:bg-fill-1 border border-divider text-ink-2 dark:text-ink rounded-2xl text-xs font-bold transition active:scale-[0.98] disabled:opacity-40"
+            >
+              Batal
+            </button>
+          )}
         </div>
       }
     >

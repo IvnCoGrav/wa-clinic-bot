@@ -36,6 +36,37 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
 - **Dampak:** skrip tidak bisa dipakai sebagai gerbang regresi Live Chat; perubahan UI berikutnya bisa lolos tanpa deteksi.
 - **Mitigasi sementara:** guard baru `scripts/verify-livechat-viewport.mjs` (8 check, 8/8 PASS) khusus kontrak viewport/container-only scroll.
 - **Rencana:** perbarui selector/teks yang sudah berubah atau pensiunkan skrip lama; gunakan `npm run build` + guard baru + uji perangkat sebagai gate.
+## 374. [OTW / Staf] Batas Rekonsiliasi Antrean OTW Pending (2026-11-24, OPEN — by design, Fase 4)
+
+- **Konteks:** antrean `staff_otw_outbox_v1` (sessionStorage, TTL 2 jam) dikirim ulang otomatis saat aplikasi kembali aktif (`visibilitychange`/`focus`/`online`) dan sekali setelah daftar tugas termuat.
+- **Batasan yang tersisa:**
+  1. **Tidak ada background sync.** Bila Bidan menutup aplikasi total (bukan sekadar pindah app) pesan tidak terkirim sampai portal dibuka lagi, dan `sessionStorage` hilang bila tab ditutup → pesan hilang (bukan terkirim ganda). Tidak memakai Service Worker/Background Sync karena harus tetap zero-dependency dan tidak menambah surface PWA.
+  2. **Flush hanya untuk reservasi yang termuat di daftar tugas hari ini** (`tasks` + `upcomingTasks`). Bila jadwal tidak ikut terambil (mis. filter/tenant lain), item ditunda — tidak dibuang.
+  3. **TTL 2 jam** menyamai outbox pesan; di luar itu item dibuang diam-diam demi privasi (draf memuat nama pasien).
+  4. **Batas 10 dtk per item** saat flush: bila gateway lambat, item tetap pending dan dicoba pada resume berikutnya (bukan kegagalan permanen).
+- **Verifikasi:** `tests/unit/otw-flush.test.ts` (12 skenario: rekonsiliasi server, tunda, buang status tiba, buang kedaluwarsa, sukses, duplikat, gagal dipertahankan, timeout, throw, urutan berurutan, antrean kosong), `tests/unit/otw-departure.test.ts`, `tests/unit/staff-dashboard-hardening.test.ts` (S-10).
+
+## 373. [Design Gate] `check:design` dashboard sudah merah sebelum perubahan OTW 2026-11-24 (OPEN — pre-existing)
+
+- **Status:** OPEN, **bukan regresi** pekerjaan OTW 2026-11-24.
+- **Bukti pre-existing:** `git diff --name-only` pada sesi OTW tidak memuat satu pun file di bawah; working tree bersih sebelum pekerjaan dimulai. Sub-gate dijalankan terpisah dan gagal pada file yang tidak tersentuh.
+- **Pelanggaran yang tersisa:**
+  1. `check:tokens` — hex hardcode total 279 (baseline 275): `src/config/actionPermissions.ts` (2 hex, batas 0), `src/index.css` (9 hex, batas 7).
+  2. `check:dark-parity` — `src/pages/tenant/FollowUpQueue.tsx` (3 kelas palet tanpa `dark:`).
+  3. `check:a11y` — `src/components/common/UiFeedback.tsx` (`<div|span>` onClick tanpa role), `src/components/customer/AddressBookDrawer.tsx` (3 `label` tanpa `htmlFor`).
+  4. `check:dates` — `src/components/staff/ScorecardReportPanel.tsx:490` memakai `new Date().toLocaleString('id-ID')`, wajib lewat `src/utils/dateWib.ts`.
+  5. `check:contrast` **lulus**.
+- **Catatan:** karena `check:tokens` gagal lebih dulu, sub-gate lain tidak berjalan otomatis di `npm run check:design`; jalankan manual saat memperbaikinya.
+
+## 372. [OTW / Staf] Sisa Risiko Idempotensi Klaim OTW Setelah Kirim (2026-11-24, OPEN — by design, Fase 1)
+- **Konteks:** Fase 1 plan "Perbaikan Fondasional Alur OTW Bidan" (insiden Bidan Thabita 2026-11-24, reservasi `8878ffbf-...`, `otw_sent_at` NULL). Endpoint `POST /api/staff/reservations/:id/otw` kini mengklaim reservasi di dalam `prisma.$transaction` ber-`pg_advisory_xact_lock(hashtext('staff_otw:<id>'))`, meneruskan `requestId` klien sebagai `clientTempId`, dan memperlakukan `DUPLICATE_REPLY` sebagai sukses.
+- **Batasan yang tersisa (bukan regresi, tercatat sadar):**
+  1. **WA terkirim tapi transaksi gagal commit** (timeout transaksi 20 dtk / koneksi DB putus tepat setelah gateway membalas) → `otw_sent_at` tidak tercatat, sehingga retry berikutnya dapat mengirim ulang. Belum ada kolom/tabel idempotensi permanen (`otw_request_id`). Mitigasi sementara: fast-path `otw_sent_at` + `clientTempId` in-memory TTL 5 menit. Solusi permanen butuh migrasi schema (dijadwalkan terpisah).
+  2. **`clientTempId` disimpan di memori proses** (`LiveChatService.recentClientTemps`). Berlaku selama deployment single-instance; multi-replica membuat idempotensi retry tidak berlaku lintas proses (sama dengan catatan di `live-chat.service.ts`).
+  3. **Koneksi pool tertahan selama pengiriman WA** (maks 20 dtk) per OTW karena kunci bersifat transaksi. Lonjakan OTW serentak (mis. 20 bidan pada jam yang sama) menekan pool; pantau `pg_stat_activity` bila tenant bertumbuh.
+  4. **Kunci memakai `hashtext` 32-bit** → tabrakan antar reservasi berbeda sangat jarang; dampaknya hanya serialisasi tambahan antar dua reservasi, bukan salah data.
+  5. **Belum diverifikasi terhadap Postgres nyata** — suite berjalan dengan mock Prisma (`$transaction` dijalankan inline, `$queryRaw` di-mock). Wajib smoke test di staging sebelum rilis produksi.
+- **Verifikasi:** `tests/integration/otw-depart-endpoint.test.ts` (describe "Fase 1 — klaim atomik & idempotensi retry": kunci advisory diambil di dalam transaksi, `requestId` → `clientTempId`, pembacaan di dalam kunci mencegah kirim ganda, `DUPLICATE_REPLY` → sukses, gagal non-duplikat → 400 tanpa tulisan DB), `tests/unit/staff-treatment-time-guard.test.ts`.
 
 ## 369. [Analitik / Baseline] Ketiadaan Snapshot Permanen & Cache Invalidation Pengaturan Tenant (2026-11-24, DEFERRED / ACCEPTED)
 
