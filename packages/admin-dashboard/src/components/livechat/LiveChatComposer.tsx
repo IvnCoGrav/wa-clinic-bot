@@ -703,13 +703,13 @@ const LiveChatComposerInner = (
         </div>
       )}
 
-      <div ref={composerWrapperRef} className={`chat-composer-inner flex items-end space-x-1.5 sm:space-x-2 bg-fill-1 p-1 sm:p-1.5 md:p-2 pb-[max(0.5rem,env(safe-area-inset-bottom,0.5rem))] border border-divider w-full mb-0 ${replyingTo ? 'rounded-b-none border-t-0' : 'rounded-t-xl rounded-b-none'} border-b-0`}>
+      <div ref={composerWrapperRef} className={`chat-composer-inner flex items-end space-x-1.5 sm:space-x-2 bg-fill-1 py-1 px-1.5 sm:p-1.5 md:p-2 pb-[max(0.35rem,env(safe-area-inset-bottom,0.35rem))] border border-divider w-full mb-0 ${replyingTo ? 'rounded-b-none border-t-0' : 'rounded-t-xl rounded-b-none'} border-b-0`}>
         <div className="relative shrink-0" ref={toolsMenuRef}>
           <button
             type="button"
             onClick={() => setToolsMenuOpen(!toolsMenuOpen)}
             disabled={sending || generatingDraft}
-            className={`w-8 h-8 sm:w-10 sm:h-10 min-w-[32px] min-h-[32px] sm:min-w-[40px] sm:min-h-[40px] p-0 bg-surface border border-divider hover:border-accent disabled:opacity-40 rounded-xl text-xs font-bold transition flex items-center justify-center shadow-xs active:scale-95 shrink-0 touch-manipulation ${
+            className={`w-[38px] h-[38px] sm:w-10 sm:h-10 min-w-[38px] min-h-[38px] sm:min-w-[40px] sm:min-h-[40px] p-0 bg-surface border border-divider hover:border-accent disabled:opacity-40 rounded-xl text-xs font-bold transition flex items-center justify-center shadow-xs active:scale-95 shrink-0 touch-manipulation ${
               toolsMenuOpen ? 'bg-accent-soft border-accent text-accent' : 'text-ink-2 hover:text-accent'
             }`}
             title="Fitur & Lampiran (AI Copilot / Gambar)"
@@ -978,7 +978,7 @@ const LiveChatComposerInner = (
           onPaste={handlePaste}
           onInput={handleInput}
           onKeyDown={handleKeyDown}
-          className={`chat-contenteditable flex-1 w-full min-w-0 rounded-xl border focus:outline-none text-[16px] sm:text-sm text-ink py-0 px-2.5 sm:px-3 shadow-xs min-h-[30px] sm:min-h-[34px] max-h-[125px] overflow-y-auto leading-normal outline-none ${
+          className={`chat-contenteditable flex-1 w-full min-w-0 rounded-xl border focus:outline-none text-[16px] sm:text-sm text-ink py-1.5 sm:py-2 px-2.5 sm:px-3 shadow-xs min-h-[38px] max-h-[125px] overflow-y-auto leading-relaxed outline-none ${
             isInternalMode
               ? 'bg-amber-50 border-amber-300 focus:border-amber-400 focus:ring-1 focus:ring-amber-300 dark:bg-amber-950/30 dark:border-amber-700'
               : 'bg-surface border-divider focus:border-accent focus:ring-1 focus:ring-accent'
@@ -1004,7 +1004,7 @@ const LiveChatComposerInner = (
           aria-label="Kirim Balasan"
           onClick={handleSend}
           disabled={sendDisabled}
-          className="w-8 h-8 sm:w-auto sm:px-4 min-w-[32px] min-h-[32px] sm:min-w-[40px] sm:min-h-[38px] p-0 sm:py-2.5 bg-accent hover:bg-accent-hover disabled:opacity-40 text-on-solid rounded-xl text-xs font-bold transition flex items-center justify-center space-x-1.5 shadow-xs shrink-0 active:scale-95 touch-manipulation cursor-pointer"
+          className="w-[38px] h-[38px] sm:w-auto sm:px-4 min-w-[38px] min-h-[38px] sm:min-w-[40px] sm:min-h-[38px] p-0 sm:py-2.5 bg-accent hover:bg-accent-hover disabled:opacity-40 text-on-solid rounded-xl text-xs font-bold transition flex items-center justify-center space-x-1.5 shadow-xs shrink-0 active:scale-95 touch-manipulation cursor-pointer"
           title="Kirim Balasan"
         >
           <Send size={15} />

@@ -115,7 +115,12 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
       const vvt = vv ? vv.pageTop : 0;
       document.documentElement.style.setProperty('--vvh', `${vh}px`);
       document.documentElement.style.setProperty('--vvt', `${vvt}px`);
-      const isKbOpen = vv ? vv.height < window.innerHeight - 80 : false;
+      // Di iOS Safari/PWA standalone, window.innerHeight bisa ikut menyusut saat keyboard terbuka,
+      // atau visualViewport.height jauh lebih kecil dari window.screen.height.
+      const screenH = typeof window !== 'undefined' ? (window.screen?.height || window.innerHeight) : 0;
+      const isKbOpen = vv
+        ? ((screenH > 0 && screenH - vv.height > 150) || vv.height < window.innerHeight - 80)
+        : false;
       document.documentElement.setAttribute('data-keyboard-open', isKbOpen ? 'true' : 'false');
     };
     updateVvh();
