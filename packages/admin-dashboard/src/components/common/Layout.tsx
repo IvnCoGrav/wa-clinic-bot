@@ -473,6 +473,20 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
 
   const isLiveChat = location.pathname.includes('/live-chat');
 
+  // 🔄 Jaga --vvt tetap akurat bila iOS memilih menggeser dokumen (bukan visual viewport).
+  // Listener visualViewport.scroll tidak selalu terpicu oleh document scroll, jadi
+  // tambahkan window.scroll khusus di Live Chat agar shell tetap mengikuti viewport.
+  useEffect(() => {
+    if (!isLiveChat) return;
+    const updateVvtOnScroll = () => {
+      const vv = window.visualViewport;
+      document.documentElement.style.setProperty('--vvt', `${vv ? vv.pageTop : window.scrollY}px`);
+    };
+    updateVvtOnScroll();
+    window.addEventListener('scroll', updateVvtOnScroll, { passive: true });
+    return () => window.removeEventListener('scroll', updateVvtOnScroll);
+  }, [isLiveChat]);
+
   // 🔒 Lock outer window scroll strictly when on LiveChat, preventing iOS Safari from scrolling window on input focus
   useEffect(() => {
     if (isLiveChat) {

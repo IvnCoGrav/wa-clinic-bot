@@ -9,6 +9,7 @@ import { extractMedia, extractLocation } from '../utils/mediaExtractor';
 import { extractQuotedMessage } from '../types/livechat';
 import { saveConversationScroll, getConversationScroll } from './useLiveChatScroll';
 import { loadConversationDraft } from './useLiveChatDrafts';
+import { centerElementInScrollContainer } from '../utils/livechatScroll';
 import type { ChatMessage, LiveChatItem } from '../types/livechat';
 import type { PinnedMessageData } from '../components/livechat/MessagePinBanner';
 
@@ -122,7 +123,7 @@ export function useLiveChatActiveThread({
     const doScroll = () => {
       const el = document.getElementById(`msg-${msgId}`);
       if (el) {
-        el.scrollIntoView({ behavior: smooth ? 'smooth' : 'auto', block: 'center' });
+        centerElementInScrollContainer(chatContainerRef.current, el, smooth ? 'smooth' : 'auto');
       }
     };
     doScroll();
@@ -134,7 +135,7 @@ export function useLiveChatActiveThread({
     setTimeout(() => {
       setHighlightedMsgId((prev) => (prev === msgId ? null : prev));
     }, 3500);
-  }, []);
+  }, [chatContainerRef]);
 
   const loadThread = useCallback(async (conversationId: string, focusMessageId?: string) => {
     const reqId = ++activeThreadRequestIdRef.current;
