@@ -280,7 +280,7 @@ body.body-scroll-locked {
 /* 📱 Ketika keyboard iOS aktif, hilangkan safe-area-inset-bottom agar kolom chat mepet presisi di atas keyboard */
 html[data-keyboard-open="true"] .chat-composer-container {
   padding-bottom: 2px !important;
-  padding-top: 4px !important;
+  padding-top: 1px !important;
   margin-bottom: 0px !important;
 }
 
