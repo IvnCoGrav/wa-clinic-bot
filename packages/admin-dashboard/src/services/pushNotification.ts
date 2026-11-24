@@ -137,10 +137,11 @@ export async function subscribeToPushNotifications(
 /**
  * Membatalkan langganan Web Push Notification.
  */
-export async function unsubscribeFromPushNotifications(): Promise<{ success: boolean; error?: string }> {
+let unsubscribeInFlight: Promise<{ success: boolean; error?: string }> | null = null;
+
+async function performUnsubscribe(): Promise<{ success: boolean; error?: string }> {
   try {
     if (!('serviceWorker' in navigator)) return { success: true };
-    // Timeout safeguard: cegah hang jika serviceWorker belum aktif/siap
     const swReadyWithTimeout = Promise.race([
       navigator.serviceWorker.ready,
       new Promise<null>((resolve) => setTimeout(() => resolve(null), 1500)),
@@ -154,12 +155,22 @@ export async function unsubscribeFromPushNotifications(): Promise<{ success: boo
       await apiRequest('/api/admin/push/unsubscribe', {
         method: 'POST',
         body: JSON.stringify({ endpoint }),
+        timeoutMs: 4000,
       }).catch(() => {});
     }
     return { success: true };
   } catch (err: any) {
     return { success: false, error: err.message };
   }
+}
+
+export function unsubscribeFromPushNotifications(): Promise<{ success: boolean; error?: string }> {
+  if (!unsubscribeInFlight) {
+    unsubscribeInFlight = performUnsubscribe().finally(() => {
+      unsubscribeInFlight = null;
+    });
+  }
+  return unsubscribeInFlight;
 }
 
 /**

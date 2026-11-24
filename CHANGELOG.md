@@ -4,6 +4,22 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### 2026-11-23 - Fix: Alur Logout Portal Staf Macet (Dual-Context Desync & Elevasi Dialog)
+
+- **Konteks:** Terapis melaporkan klik "Keluar" harus 2x baru muncul modal, dan setelah dikonfirmasi akun tetap tidak keluar (harus mengulangi siklus 2x atau tutup aplikasi baru keluar).
+- **Akar Masalah:**
+  1. Login terapis via `/admin/login` mengaktifkan `user` di `AuthContext` dan `staff` di `StaffAuthContext`. Tombol logout lama hanya mengeksekusi `staffLogout()` (`staff = null`), sedangkan `user` di `AuthContext` masih utuh sehingga `StaffProtectedRoute` menolak redirect dan menahan pengguna di halaman.
+  2. Ketiadaan mekanisme redirect/refresh eksplisit (`logout()` tidak di-`await` dan tanpa `window.location.replace`).
+  3. Drawer menutup prematur (`setShowMenuDrawer(false)` dipanggil sebelum konfirmasi pengguna).
+- **Perbaikan:**
+  - `StaffToday.tsx`: Menyatukan seluruh alur logout ke satu fungsi kanonis `handleLogout` ber-guard `isLoggingOutRef`. Membersihkan kedua konteks secara paralel (`staffLogout({ server: false })` + `adminLogout({ awaitServer: true })`) dan mengeksekusi hard redirect `window.location.replace('/admin/login')`.
+  - `AuthContext.tsx`: Mendukung opsi `{ awaitServer: true }` dengan `keepalive` pada `POST /api/admin/auth/logout`.
+  - `StaffAuthContext.tsx`: Mendukung opsi `{ server: false }` untuk pembersihan lokal tanpa memanggil endpoint logout server duplikat.
+  - `pushNotification.ts`: Deduplikasi panggilan `unsubscribeFromPushNotifications()` via `unsubscribeInFlight`.
+  - `UiFeedback.tsx`: Hardening elevasi dialog konfirmasi ke `z-dialog-top` (12500) agar selalu berada mutlak di atas seluruh modal/lightbox bertumpuk.
+- **Tes:** Guard statis baru di `tests/unit/staff-dashboard-hardening.test.ts` (19 passed) dan behavioral test di `tests/integration/staff-routes.test.ts` (POST /api/admin/auth/logout membersihkan kedua cookie dan sesi staf). Build Vite & typecheck hijau.
+
+
 #### 2026-11-23 - GPS Staf: Banner Consent In-App Dihapus (S-06 Revisi)
 
 - **Konteks:** Bidan menerima dua permintaan izin beruntun: banner aplikasi "Izinkan aplikasi memakai lokasi di latar…", lalu prompt izin native browser. Pemilik menilai redundan dan meminta banner dihapus permanen.

@@ -212,11 +212,11 @@ useEffect(() => {
           document.body
         )}
 
-      {/* Confirm Dialog Modal (lapisan z-dialog, di atas overlay lama) */}
+      {/* Confirm Dialog Modal (z-dialog-top: selalu di atas modal/lightbox lain) */}
       {confirmState &&
         createPortal(
           <div
-            className="modal-backdrop fixed inset-0 z-dialog flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/60 animate-fadeIn"
+            className="modal-backdrop fixed inset-0 z-dialog-top flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/60 animate-fadeIn"
             onClick={() => handleConfirmAnswer(false)}
           >
             <div

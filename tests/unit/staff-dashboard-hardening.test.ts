@@ -23,6 +23,8 @@ const watermark = read('packages/admin-dashboard/src/utils/imageWatermark.ts');
 const api = read('packages/admin-dashboard/src/services/api.ts');
 const createReservation = read('packages/admin-dashboard/src/components/calendar/CreateReservationModal.tsx');
 const brandContext = read('packages/admin-dashboard/src/contexts/BrandContext.tsx');
+const authContext = read('packages/admin-dashboard/src/contexts/AuthContext.tsx');
+const uiFeedback = read('packages/admin-dashboard/src/components/common/UiFeedback.tsx');
 
 describe('S-02 outbox PII', () => {
   it('outbox memakai sessionStorage + TTL + tanpa gambar, dan dibersihkan saat logout', () => {
@@ -140,5 +142,27 @@ describe('Cfg-015 hardcode brand/tenant', () => {
     expect(api).not.toContain("headers['x-tenant-id'] = 'default-tenant'");
     expect(brandContext).toContain('/api/admin/settings');
     expect(createReservation).toContain('/api/admin/tenant-settings');
+  });
+});
+
+describe('Logout portal staf — dual-context & lapisan dialog', () => {
+  it('memakai satu handler kanonis, membersihkan kedua context, lalu redirect keras', () => {
+    expect(staffToday).toContain('handleLogout');
+    expect(staffToday).toContain('staffLogout({ server: false })');
+    expect(staffToday).toContain('adminLogout({ awaitServer: true })');
+    expect(staffToday).toContain("window.location.replace('/admin/login')");
+    expect(staffToday).not.toContain('const logout = staff ? staffLogout : adminLogout;');
+    expect(staffToday).not.toMatch(/\blogout\(\);/);
+  });
+
+  it('logout server memakai keepalive + batas waktu saat redirect keras', () => {
+    expect(authContext).toContain('awaitServer');
+    expect(authContext).toContain('keepalive');
+    expect(staffAuth).toContain('server?: boolean');
+  });
+
+  it('dialog konfirmasi berada di lapisan z-dialog-top', () => {
+    expect(uiFeedback).toContain('z-dialog-top');
+    expect(uiFeedback).not.toMatch(/modal-backdrop fixed inset-0 z-dialog flex/);
   });
 });

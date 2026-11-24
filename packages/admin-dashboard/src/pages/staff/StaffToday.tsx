@@ -108,7 +108,6 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
   // (mis. saat kunjungan selesai) agar mesin idle tetap bersih.
   const { stopTelemetry } = useTripTelemetry();
 
-  const logout = staff ? staffLogout : adminLogout;
   const currentStaff = staff || (user ? { id: user.id, name: user.name, role: user.role, phone: user.phone } : null);
   
   // Navigation Tabs: 'today' (Hari Ini & Live Chat) vs 'upcoming' (Jadwal Mendatang) vs 'completed' (Treatment Selesai)
@@ -177,6 +176,37 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
     telegramChatId: string | null;
   } | null>(null);
   const [loadingTelegramInfo, setLoadingTelegramInfo] = useState(false);
+
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const isLoggingOutRef = useRef(false);
+
+  const handleLogout = async () => {
+    if (isLoggingOutRef.current) return;
+
+    const ok = await confirm({
+      title: 'Keluar dari Portal?',
+      message: 'Apakah Anda yakin ingin keluar dari akun terapis ini?',
+      confirmText: 'Ya, Keluar',
+      danger: true,
+    });
+    if (!ok) return;
+
+    isLoggingOutRef.current = true;
+    setIsLoggingOut(true);
+    try {
+      await Promise.allSettled([
+        // PII & state staf dibersihkan lokal; server logout-all dijalankan sekali oleh adminLogout.
+        staffLogout({ server: false }),
+        adminLogout({ awaitServer: true }),
+      ]);
+    } catch (err) {
+      console.error('[StaffToday] Logout error:', err);
+    } finally {
+      setShowMenuDrawer(false);
+      setShowStaffProfileModal(false);
+      window.location.replace('/admin/login');
+    }
+  };
 
   const userRole = (currentStaff?.role || '').toLowerCase();
   const isSupervisor =
@@ -3016,22 +3046,17 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
 
               <button
                 type="button"
-                onClick={async () => {
-                  setShowMenuDrawer(false);
-                  const ok = await confirm({
-                    title: 'Keluar dari Portal?',
-                    message: 'Apakah Anda yakin ingin keluar dari akun terapis ini?',
-                    confirmText: 'Ya, Keluar',
-                    danger: true,
-                  });
-                  if (ok) {
-                    logout();
-                  }
-                }}
-                className="w-full flex items-center justify-center space-x-1.5 py-2 px-2.5 rounded-xl bg-danger-soft hover:bg-danger-line text-[11px] font-semibold text-danger border border-danger-line shadow-xs transition active:scale-95"
+                onClick={handleLogout}
+                disabled={isLoggingOut}
+                aria-busy={isLoggingOut}
+                className="w-full flex items-center justify-center space-x-1.5 py-2 px-2.5 rounded-xl bg-danger-soft hover:bg-danger-line text-[11px] font-semibold text-danger border border-danger-line shadow-xs transition active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed"
               >
-                <LogOut size={13} className="flex-shrink-0" />
-                <span className="truncate">Keluar</span>
+                {isLoggingOut ? (
+                  <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent" aria-hidden="true" />
+                ) : (
+                  <LogOut size={13} className="flex-shrink-0" />
+                )}
+                <span className="truncate">{isLoggingOut ? 'Keluar...' : 'Keluar'}</span>
               </button>
 
               {/* Version & Build Timestamp */}
@@ -3126,22 +3151,18 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
             {/* Actions */}
             <div className="pt-2 space-y-2">
               <button
-                onClick={async () => {
-                  const ok = await confirm({
-                    title: 'Keluar dari Portal?',
-                    message: 'Apakah Anda yakin ingin keluar dari akun terapis ini?',
-                    confirmText: 'Ya, Keluar',
-                    danger: true,
-                  });
-                  if (ok) {
-                    setShowStaffProfileModal(false);
-                    logout();
-                  }
-                }}
-                className="w-full py-3 px-4 bg-danger-soft hover:bg-danger-line text-danger border border-danger-line rounded-2xl text-sm font-bold transition flex items-center justify-center space-x-2 shadow-xs"
+                type="button"
+                onClick={handleLogout}
+                disabled={isLoggingOut}
+                aria-busy={isLoggingOut}
+                className="w-full py-3 px-4 bg-danger-soft hover:bg-danger-line text-danger border border-danger-line rounded-2xl text-sm font-bold transition flex items-center justify-center space-x-2 shadow-xs disabled:opacity-60 disabled:cursor-not-allowed"
               >
-                <LogOut size={16} />
-                <span>Keluar Akun (Logout)</span>
+                {isLoggingOut ? (
+                  <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" aria-hidden="true" />
+                ) : (
+                  <LogOut size={16} />
+                )}
+                <span>{isLoggingOut ? 'Keluar...' : 'Keluar Akun (Logout)'}</span>
               </button>
             </div>
         </Modal>
