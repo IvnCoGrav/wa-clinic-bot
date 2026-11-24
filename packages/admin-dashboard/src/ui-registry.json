@@ -390,6 +390,19 @@
         "error"
       ],
       "reviewed": false
+    },
+    {
+      "name": "ChartSeriesToggle",
+      "layer": "domain",
+      "path": "src/components/analytics/ChartSeriesToggle.tsx",
+      "whenToUse": "Tombol pil toggle interaktif untuk menyaring visibilitas seri grafik (Bulan Ini, Bulan Lalu, Baseline Rata-rata 6 Bulan). Dipakai di header grafik Financial Analytics dan Overview.",
+      "states": [
+        "default",
+        "hover",
+        "active",
+        "disabled"
+      ],
+      "reviewed": false
     }
   ],
   "pages": [

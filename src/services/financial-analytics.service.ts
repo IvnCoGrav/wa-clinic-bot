@@ -2,8 +2,20 @@ import { prisma } from '../db/client';
 import { DEFAULT_TENANT_ID } from '../config/tenant';
 import { responseCacheService } from './response-cache.service';
 import { resolveReservationBilling, type CatalogPriceCache } from './reservation-billing.service';
-import { wibMonthBoundsUtc } from '../utils/wib-time';
+import { wibMonthBoundsUtc, shiftWibMonth } from '../utils/wib-time';
 import { getPaymentDisplayStatus, type PaymentDisplayStatus } from '../domain/reservation-payment';
+import { getAnalyticsBaselineSettings, type BaselineMode } from '../config/analytics-baseline';
+import {
+  buildDailyBaseline,
+  type BaselineReservationInput,
+  type DailyBaselineResult,
+} from '../domain/daily-baseline';
+
+const REVENUE_EXCLUDED_STATUSES = ['cancelled', 'CANCELLED'] as const;
+function isCancelledStatus(status: unknown): boolean {
+  const s = String(status ?? '').toLowerCase();
+  return s === 'cancelled';
+}
 
 /**
  * SEC-AUDIT-12: netralkan formula injection CSV (CWE-1236). Nilai yang diawali
@@ -43,6 +55,11 @@ export interface DailyRevenuePoint {
   pendingRevenue: number;
   bookingsCount: number;
   isPastOrToday: boolean;
+  lastMonthRevenue: number | null;
+  lastMonthBookings: number | null;
+  avg6mRevenue: number | null;
+  avg6mBookings: number | null;
+  baselineSamples: number;
 }
 
 export interface CategoryRevenueItem {
@@ -94,6 +111,17 @@ export interface TransactionLedgerItem {
   isRepeatOrder: boolean;
 }
 
+export interface BaselineMeta {
+  available: boolean;
+  reason?: 'INSUFFICIENT_HISTORY' | 'NO_HISTORY' | 'QUERY_FAILED';
+  mode: BaselineMode;
+  smoothingWindowDays: number;
+  monthsRequested: number;
+  monthsUsed: number;
+  windowStart: { year: number; month: number };
+  windowEnd: { year: number; month: number };
+}
+
 export interface MonthlyAnalyticsResponse {
   year: number;
   month: number;
@@ -105,6 +133,7 @@ export interface MonthlyAnalyticsResponse {
   staffPerformance: StaffPerformanceItem[];
   topServices: TopServiceItem[];
   transactions: TransactionLedgerItem[];
+  baseline: BaselineMeta;
 }
 
 export class FinancialAnalyticsService {
@@ -126,12 +155,80 @@ export class FinancialAnalyticsService {
   }
 
   /**
+   * Memuat data baseline multi-bulan (rata-rata 6 bulan & bulan lalu) dengan caching mandiri (TTL 600s).
+   */
+  private static async loadDailyBaseline(
+    tenantId: string,
+    year: number,
+    month: number
+  ): Promise<{ result: DailyBaselineResult | null; settings: any }> {
+    const settings = await getAnalyticsBaselineSettings(tenantId);
+    const key = `analytics:baseline:${tenantId}:${year}:${month}:${settings.months}:${settings.mode}:${settings.smoothingWindowDays}`;
+    const cached = responseCacheService.get<DailyBaselineResult>(key);
+    if (cached) {
+      return { result: cached, settings };
+    }
+
+    const first = shiftWibMonth(year, month, -settings.months);
+    const last = shiftWibMonth(year, month, -1);
+    const firstBounds = wibMonthBoundsUtc(first.year, first.month);
+    const lastBounds = wibMonthBoundsUtc(last.year, last.month);
+
+    if (!firstBounds || !lastBounds) {
+      return { result: null, settings };
+    }
+
+    try {
+      const rows = await prisma.reservation.findMany({
+        where: {
+          tenant_id: tenantId,
+          status: { notIn: [...REVENUE_EXCLUDED_STATUSES] },
+          booking_date: { gte: firstBounds.start, lte: lastBounds.end },
+        },
+        select: {
+          booking_date: true,
+          status: true,
+          purchase_value: true,
+          discount_amount: true,
+          delivery_fee: true,
+          treatment_detail: true,
+          customer: { select: { ongkir: true } },
+          items: { select: { price: true } },
+        },
+      });
+
+      const cache: CatalogPriceCache = new Map();
+      const inputs: BaselineReservationInput[] = [];
+      for (const r of rows) {
+        if (isCancelledStatus(r.status)) continue;
+        const { totalFee } = await resolveReservationBilling(r as any, tenantId, cache);
+        inputs.push({ bookingDate: r.booking_date, revenue: totalFee, bookings: 1 });
+      }
+
+      const result = buildDailyBaseline({
+        targetYear: year,
+        targetMonth: month,
+        settings,
+        reservations: inputs,
+      });
+
+      // M3.3: Cache HANYA bila query sukses (TTL 600 detik = 10 menit)
+      responseCacheService.set(key, result, 600);
+      return { result, settings };
+    } catch (err) {
+      console.warn('[ANALYTICS] baseline fallback:', err);
+      return { result: null, settings };
+    }
+  }
+
+  /**
    * Mengambil data analitik keuangan dan reservasi bulanan teragregasi
    */
   static async getMonthlyAnalytics(
     tenantId = DEFAULT_TENANT_ID,
     targetYear?: number,
-    targetMonth?: number
+    targetMonth?: number,
+    options?: { includeBaseline?: boolean }
   ): Promise<MonthlyAnalyticsResponse> {
     const nowWib = new Date(Date.now() + 7 * 3600 * 1000);
     const fallbackYear = nowWib.getUTCFullYear();
@@ -149,45 +246,56 @@ export class FinancialAnalyticsService {
 
     const { startOfMonth, endOfMonth, daysInMonth, monthName } = this.getMonthDateRange(year, month);
 
-    let rows: any[] = [];
-    try {
-      rows = await prisma.reservation.findMany({
-        where: {
-          tenant_id: tenantId,
-          booking_date: {
-            gte: startOfMonth,
-            lte: endOfMonth,
-          },
-        },
-        include: {
-          customer: {
-            select: {
-              id: true,
-              name: true,
-              phone: true,
-              kelurahan: true,
-              kecamatan: true,
-              kota: true,
-              ongkir: true,
+    // R-07: Jalankan loadDailyBaseline dan query transaksi bulanan secara paralel via Promise.all
+    const baselinePromise = options?.includeBaseline !== false
+      ? this.loadDailyBaseline(tenantId, year, month)
+      : Promise.resolve({ result: null, settings: null });
+
+    const rowsPromise = (async () => {
+      try {
+        return await prisma.reservation.findMany({
+          where: {
+            tenant_id: tenantId,
+            booking_date: {
+              gte: startOfMonth,
+              lte: endOfMonth,
             },
           },
-          assigned_staff: {
-            select: {
-              id: true,
-              name: true,
-              role: true,
+          include: {
+            customer: {
+              select: {
+                id: true,
+                name: true,
+                phone: true,
+                kelurahan: true,
+                kecamatan: true,
+                kota: true,
+                ongkir: true,
+              },
             },
+            assigned_staff: {
+              select: {
+                id: true,
+                name: true,
+                role: true,
+              },
+            },
+            items: true,
           },
-          items: true,
-        },
-        orderBy: {
-          booking_date: 'asc',
-        },
-      });
-    } catch (err) {
-      console.warn('[ANALYTICS] DB fetch fallback:', err);
-      rows = [];
-    }
+          orderBy: {
+            booking_date: 'asc',
+          },
+        });
+      } catch (err) {
+        console.warn('[ANALYTICS] DB fetch fallback:', err);
+        return [] as any[];
+      }
+    })();
+
+    const [{ result: baselineResult, settings: baselineSettings }, rows] = await Promise.all([
+      baselinePromise,
+      rowsPromise,
+    ]);
 
     // Inisialisasi struktur daily trend (1..daysInMonth)
     const dailyMap = new Map<number, {
@@ -228,7 +336,7 @@ export class FinancialAnalyticsService {
       );
 
       const isCompleted = (r.status || '').toLowerCase() === 'completed';
-      const isCancelled = (r.status || '').toLowerCase() === 'cancelled';
+      const isCancelled = isCancelledStatus(r.status);
       const isLunas = Boolean(r.purchase_occurred_at);
       // Seam kanonis: completed-tanpa-bayar ditampilkan sebagai
       // SELESAI_BELUM_VERIFIKASI, bukan "Tagih di Tempat" (menyesatkan).
@@ -363,6 +471,9 @@ export class FinancialAnalyticsService {
       const currentDayMs = new Date(Date.UTC(year, month - 1, d, 23, 59, 59)).getTime();
       const isPastOrToday = currentDayMs <= Date.now() + 7 * 3600 * 1000;
 
+      const baselinePoint = baselineResult?.byDay.get(d);
+      const prevPoint = baselineResult?.previousMonth.byDay.get(d);
+
       dailyTrend.push({
         day: d,
         dateStr,
@@ -372,6 +483,11 @@ export class FinancialAnalyticsService {
         pendingRevenue: bucket.pendingRevenue,
         bookingsCount: bucket.bookingsCount,
         isPastOrToday,
+        lastMonthRevenue: prevPoint !== undefined ? prevPoint.revenue : null,
+        lastMonthBookings: prevPoint !== undefined ? prevPoint.bookings : null,
+        avg6mRevenue: baselineResult?.available ? (baselinePoint?.avg6mRevenue ?? null) : null,
+        avg6mBookings: baselineResult?.available ? (baselinePoint?.avg6mBookings ?? null) : null,
+        baselineSamples: baselineResult?.available ? (baselinePoint?.samples ?? 0) : 0,
       });
     }
 
@@ -430,6 +546,28 @@ export class FinancialAnalyticsService {
       estimatedRevenue: val.revenue,
     })).sort((a, b) => b.count - a.count).slice(0, 10);
 
+    const baselineMeta: BaselineMeta = baselineResult
+      ? {
+          available: baselineResult.available,
+          reason: baselineResult.reason,
+          mode: baselineResult.mode,
+          smoothingWindowDays: baselineResult.smoothingWindowDays,
+          monthsRequested: baselineResult.monthsRequested,
+          monthsUsed: baselineResult.monthsUsed,
+          windowStart: baselineResult.windowStart,
+          windowEnd: baselineResult.windowEnd,
+        }
+      : {
+          available: false,
+          reason: 'QUERY_FAILED',
+          mode: baselineSettings.mode,
+          smoothingWindowDays: baselineSettings.smoothingWindowDays,
+          monthsRequested: baselineSettings.months,
+          monthsUsed: 0,
+          windowStart: shiftWibMonth(year, month, -baselineSettings.months),
+          windowEnd: shiftWibMonth(year, month, -1),
+        };
+
     const result: MonthlyAnalyticsResponse = {
       year,
       month,
@@ -454,6 +592,7 @@ export class FinancialAnalyticsService {
       staffPerformance,
       topServices,
       transactions,
+      baseline: baselineMeta,
     };
 
     responseCacheService.set(cacheKey, result, 30); // Cache 30 detik
@@ -468,7 +607,7 @@ export class FinancialAnalyticsService {
     year: number,
     month: number
   ): Promise<string> {
-    const data = await this.getMonthlyAnalytics(tenantId, year, month);
+    const data = await this.getMonthlyAnalytics(tenantId, year, month, { includeBaseline: false });
     
     const headers = [
       'No. Transaksi',

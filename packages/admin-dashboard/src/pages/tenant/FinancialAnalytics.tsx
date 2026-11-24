@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { apiRequest } from '../../services/api';
 import { useUiFeedback } from '../../components/common/UiFeedback';
 import { Modal } from '../../components/ui/Modal';
@@ -32,9 +32,9 @@ import {
 import {
   ResponsiveContainer,
   AreaChart,
-  Area,
-  BarChart,
   Bar,
+  ComposedChart,
+  Line,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -50,8 +50,12 @@ import { useTheme } from '../../contexts/ThemeContext';
 import { chartTheme } from '../../lib/chartTheme';
 import { RetentionTab } from '../../components/analytics/RetentionTab';
 import { TreatmentHeatmapTab } from '../../components/analytics/TreatmentHeatmapTab';
+import { ChartSeriesToggle, type ChartSeriesToggleItem } from '../../components/analytics/ChartSeriesToggle';
+import { DailyComparisonTooltip } from '../../components/analytics/DailyComparisonTooltip';
+import { useChartSeriesToggles } from '../../hooks/useChartSeriesToggles';
+import { mapDailyTrendToChart, describeBaselineMode } from '../../lib/dashboard-metrics';
 import { formatRupiah } from '../../utils/money';
-import { formatMonthYearWib, formatWib } from '../../utils/dateWib';
+import { formatMonthYearWib, formatWib, formatWibDate } from '../../utils/dateWib';
 
 interface MonthlyKpiSummary {
   totalRevenue: number;
@@ -77,6 +81,22 @@ interface DailyRevenuePoint {
   pendingRevenue: number;
   bookingsCount: number;
   isPastOrToday: boolean;
+  lastMonthRevenue?: number | null;
+  lastMonthBookings?: number | null;
+  avg6mRevenue?: number | null;
+  avg6mBookings?: number | null;
+  baselineSamples?: number;
+}
+
+interface BaselineMeta {
+  available: boolean;
+  reason?: 'INSUFFICIENT_HISTORY' | 'NO_HISTORY' | 'QUERY_FAILED';
+  mode: 'weekday' | 'calendar';
+  smoothingWindowDays: number;
+  monthsRequested: number;
+  monthsUsed: number;
+  windowStart: { year: number; month: number };
+  windowEnd: { year: number; month: number };
 }
 
 interface CategoryRevenueItem {
@@ -139,6 +159,7 @@ interface MonthlyAnalyticsData {
   staffPerformance: StaffPerformanceItem[];
   topServices: TopServiceItem[];
   transactions: TransactionLedgerItem[];
+  baseline?: BaselineMeta;
 }
 
 const CATEGORY_COLORS = chartTheme.series;
@@ -191,6 +212,72 @@ export const FinancialAnalytics: React.FC = () => {
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'LUNAS' | 'SELESAI_BELUM_VERIFIKASI' | 'TAGIH_DI_TEMPAT'>('ALL');
   const [selectedTx, setSelectedTx] = useState<TransactionLedgerItem | null>(null);
   const [activeTab, setActiveTab] = useState<'keuangan' | 'retensi' | 'heatmap'>('keuangan');
+
+  // Series visibility toggles with localStorage persistence
+  const { visible: chartVisible, toggle: toggleChartSeries } = useChartSeriesToggles(
+    'fin-analytics:daily-series',
+    { current: true, lastMonth: true, baseline: true }
+  );
+
+  const chartDaily = useMemo(() => mapDailyTrendToChart(data?.dailyTrend || []), [data?.dailyTrend]);
+
+  const baselineAvailable = Boolean(data?.baseline?.available);
+
+  const currentMonthLabel = data?.monthName ? `${data.monthName} ${selectedYear}` : 'Bulan Ini';
+  const prevMonthInfo = data?.baseline?.windowEnd;
+  const prevMonthName = prevMonthInfo
+    ? formatWibDate(new Date(Date.UTC(prevMonthInfo.year, prevMonthInfo.month - 1, 15)), { month: 'short' })
+    : 'Bulan Lalu';
+  const prevMonthLabel = prevMonthInfo ? `${prevMonthName} ${prevMonthInfo.year}` : 'Bulan Lalu';
+
+  const windowStartInfo = data?.baseline?.windowStart;
+  const startMonthName = windowStartInfo
+    ? formatWibDate(new Date(Date.UTC(windowStartInfo.year, windowStartInfo.month - 1, 15)), { month: 'short' })
+    : '';
+  const baselineLabel = windowStartInfo && prevMonthInfo
+    ? `Rata-rata (${startMonthName}–${prevMonthName})`
+    : 'Rata-rata 6 Bln';
+
+  const chartLabels = useMemo(
+    () => ({
+      current: currentMonthLabel,
+      previous: prevMonthLabel,
+      baseline: baselineLabel,
+    }),
+    [currentMonthLabel, prevMonthLabel, baselineLabel]
+  );
+
+  const toggleItems: ChartSeriesToggleItem[] = useMemo(
+    () => [
+      {
+        key: 'current',
+        label: currentMonthLabel,
+        color: chartTheme.accent,
+        shape: 'bar',
+      },
+      {
+        key: 'lastMonth',
+        label: prevMonthLabel,
+        color: 'rgb(var(--c-info))',
+        dashed: true,
+        shape: 'line',
+      },
+      {
+        key: 'baseline',
+        label: baselineLabel,
+        color: 'rgb(var(--c-warning))',
+        shape: 'line',
+        disabled: !baselineAvailable,
+        disabledReason:
+          data?.baseline?.reason === 'INSUFFICIENT_HISTORY'
+            ? `Riwayat data belum mencukupi (tersedia ${data.baseline.monthsUsed} dari minimal 3 bulan)`
+            : data?.baseline?.reason === 'NO_HISTORY'
+            ? 'Belum ada riwayat transaksi 6 bulan sebelumnya'
+            : 'Data baseline tidak tersedia',
+      },
+    ],
+    [currentMonthLabel, prevMonthLabel, baselineLabel, baselineAvailable, data?.baseline]
+  );
 
   // Fetch monthly analytics data
   const fetchAnalytics = useCallback(async () => {
@@ -546,21 +633,16 @@ export const FinancialAnalytics: React.FC = () => {
               Grafik persebaran omset harian (Tgl 1 s/d {data?.dailyTrend?.length || 30})
             </p>
           </div>
-          <div className="flex items-center space-x-3 text-xs font-semibold text-ink-2">
-            <div className="flex items-center space-x-1.5">
-              <div className="w-3 h-3 rounded bg-accent" />
-              <span>Lunas</span>
-            </div>
-            <div className="flex items-center space-x-1.5">
-              <div className="w-3 h-3 rounded bg-warning" />
-              <span>Tagih di Tempat</span>
-            </div>
-          </div>
+          <ChartSeriesToggle
+            items={toggleItems}
+            visible={chartVisible}
+            onToggle={toggleChartSeries}
+          />
         </div>
 
         <div className="h-72 w-full pt-2">
           <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={data?.dailyTrend || []} margin={{ top: 10, right: 10, left: 0, bottom: 20 }}>
+            <ComposedChart data={chartDaily} margin={{ top: 10, right: 10, left: 0, bottom: 20 }}>
               <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} vertical={false} />
               <XAxis
                 dataKey="day"
@@ -576,35 +658,58 @@ export const FinancialAnalytics: React.FC = () => {
                 tickFormatter={(val) => formatCompactRupiah(val)}
               />
               <Tooltip
-                content={({ active, payload }) => {
-                  if (active && payload && payload.length) {
-                    const item = payload[0].payload as DailyRevenuePoint;
-                    return (
-                      <div className="bg-surface p-3 rounded-xl shadow-lg border border-divider text-xs space-y-1.5">
-                        <p className="font-bold text-ink border-b border-divider dark:border-divider pb-1">
-                          {item.dayName}, {item.dateStr}
-                        </p>
-                        <p className="text-accent font-bold">
-                          ✓ Lunas: {formatRupiah(item.lunasRevenue)}
-                        </p>
-                        {item.pendingRevenue > 0 && (
-                          <p className="text-warning font-semibold">
-                            ⏳ Tagih: {formatRupiah(item.pendingRevenue)}
-                          </p>
-                        )}
-                        <p className="text-ink font-bold pt-1 border-t border-divider dark:border-divider">
-                          Total Omset: {formatRupiah(item.revenue)} ({item.bookingsCount} Pasien)
-                        </p>
-                      </div>
-                    );
-                  }
-                  return null;
-                }}
+                content={
+                  <DailyComparisonTooltip
+                    labels={chartLabels}
+                    baselineAvailable={baselineAvailable}
+                    showBookings={true}
+                  />
+                }
               />
-              <Bar dataKey="lunasRevenue" stackId="a" fill={chartTheme.accent} radius={[0, 0, 0, 0]} />
-              <Bar dataKey="pendingRevenue" stackId="a" fill={chartTheme.series[3]} radius={[4, 4, 0, 0]} />
-            </BarChart>
+              {chartVisible.current && (
+                <>
+                  <Bar dataKey="lunasRevenue" stackId="a" fill={chartTheme.accent} radius={[0, 0, 0, 0]} />
+                  <Bar dataKey="pendingRevenue" stackId="a" fill={chartTheme.series[3]} radius={[4, 4, 0, 0]} />
+                </>
+              )}
+              {chartVisible.lastMonth && (
+                <Line
+                  type="monotone"
+                  dataKey="lastMonthRevenue"
+                  name="Bulan Lalu"
+                  stroke="rgb(var(--c-info))"
+                  strokeWidth={2}
+                  strokeDasharray="4 4"
+                  dot={false}
+                  connectNulls={false}
+                />
+              )}
+              {chartVisible.baseline && baselineAvailable && (
+                <Line
+                  type="monotone"
+                  dataKey="avg6mRevenue"
+                  name="Rata-rata 6 Bln"
+                  stroke="rgb(var(--c-warning))"
+                  strokeWidth={2.5}
+                  dot={false}
+                  connectNulls={false}
+                />
+              )}
+            </ComposedChart>
           </ResponsiveContainer>
+        </div>
+
+        {/* Catatan Kaki Chart & Konteks Baseline */}
+        <div className="pt-2 flex flex-col sm:flex-row sm:items-center justify-between text-[11px] text-ink-3 border-t border-divider gap-1">
+          <span>
+            * Mode{' '}
+            {describeBaselineMode(data?.baseline?.mode, data?.baseline?.smoothingWindowDays)}{' '}
+            ·{' '}
+            {data?.baseline?.available
+              ? `Basis data ${data.baseline.monthsUsed} dari ${data.baseline.monthsRequested} bulan historis`
+              : 'Baseline dinonaktifkan (riwayat belum mencukupi)'}
+          </span>
+          <span className="italic">Garis putus-putus & kurva adalah pembanding historis, bukan target mutlak.</span>
         </div>
       </div>
 

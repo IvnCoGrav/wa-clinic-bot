@@ -3,6 +3,16 @@
 Catatan temuan yang sengaja dipisah dari fitur aktif, supaya tidak hilang dan
 tidak disalahartikan sebagai bug dari perubahan terbaru.
 
+## 369. [Analitik / Baseline] Ketiadaan Snapshot Permanen & Cache Invalidation Pengaturan Tenant (2026-11-24, DEFERRED / ACCEPTED)
+
+- **Status:** DEFERRED / ACCEPTED (2026-11-24).
+- **Konteks:** Fitur kurva baseline historis multi-bulan (rata-rata 6 bulan mode weekday / kalender MA 7-hari) diimplementasikan secara dinamis di `src/services/financial-analytics.service.ts` dan `src/domain/daily-baseline.ts`.
+- **Item Tertunda / Keterbatasan yang Diterima:**
+  1. **Ketiadaan Snapshot Historis Permanen (On-The-Fly Aggregation):** Baseline 6 bulan dihitung secara dinamis dari tabel `reservations` dengan window 6 bulan ke belakang (WIB bounds). Sistem tidak menyimpan tabel materialisasi / snapshot bulanan permanen (`MonthlyBaselineSnapshot`). Beban query di-mitigasi dengan indeks `(tenant_id, status, booking_date)`, select minimalis namun **wajib** memuat field seam billing (`booking_date`, `status`, `purchase_value`, `discount_amount`, `delivery_fee`, `treatment_detail`, `items.price`, `customer.ongkir` — tanpa `items`/`ongkir` angka baseline akan lebih rendah dari omset nyata), dan cache in-memory TTL 600 detik (10 menit).
+  2. **Cache Invalidation Pengaturan Tenant Pasif:** Perubahan konfigurasi baseline di `Tenant.settings.analyticsBaseline` (misal pergantian mode `weekday` ke `calendar` atau modifikasi `months`) belum memiliki pembersih cache proaktif dari endpoint update settings tenant. Pembaruan akan terefleksi secara pasif setelah TTL cache 5 menit (`CACHE_TTL_MS`) berakhir atau saat proses restart.
+  3. **Penanganan Status Pembatalan & Status Khusus (#193a / R-03):** Fungsi `isCancelledStatus` kini menggunakan normalisasi `String(status).toLowerCase() === 'cancelled'` secara case-insensitive dengan pre-filter SQL `notIn: ['cancelled', 'CANCELLED']`. Status non-standar seperti `rejected` atau `hold` saat ini masih dihitung ke omset riil (sesuai perilaku historis #193a) dan dijadwalkan untuk unifikasi semantik status reservasi di tiket terpisah.
+- **Rencana Lanjutan Bila Diperlukan:** Jika volume data reservasi per tenant bertumbuh hingga ratusan ribu baris, buat background worker bulanan yang membekukan baseline ke tabel agregat atau tambahkan pemicu `clearAnalyticsBaselineSettingsCache(tenantId)` di rute pembaruan tenant settings.
+
 ## 368. [Test Hygiene] Flaky `reuse-gate` (perf) & `media-watermark-autoprune` (mtime) (2026-11-24, OPEN)
 
 - **Status:** OPEN — test-only; bukan bug produk, tidak menghalangi deploy logout.

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { refreshApi, getCachedApiResponse } from '../../services/api';
 import { 
@@ -24,25 +24,22 @@ import {
 } from 'recharts';
 import { emitBootPhase } from '../../lib/bootProgress';
 import { APP_VERSION, BUILD_DATE, BUILD_TIME } from '../../config/version';
-import { pickNumber, hasChartData, formatRupiah } from '../../lib/dashboard-metrics';
+import { pickNumber, hasChartData, formatRupiah, mapDailyTrendToChart, describeBaselineMode, type DailyChartPoint } from '../../lib/dashboard-metrics';
+import { ChartSeriesToggle, type ChartSeriesToggleItem } from '../../components/analytics/ChartSeriesToggle';
+import { DailyComparisonTooltip } from '../../components/analytics/DailyComparisonTooltip';
+import { useChartSeriesToggles } from '../../hooks/useChartSeriesToggles';
 import { Card } from '../../components/ui/Card';
 import { KpiCard } from '../../components/ui/KpiCard';
 import { Button } from '../../components/ui/Button';
 import { PageHeader } from '../../components/ui/PageHeader';
 import { useAuth } from '../../contexts/AuthContext';
 import { canDo } from '../../config/actionPermissions';
+import { formatWibDate } from '../../utils/dateWib';
 
 export const Overview: React.FC = () => {
   const { user } = useAuth();
   const canViewFinancialOverview = canDo(user?.role, 'view_financial_overview');
   const gridStroke = 'rgb(var(--c-divider))';
-  const tooltipStyle = {
-    background: 'rgb(var(--c-surface))',
-    border: '1px solid rgb(var(--c-divider))',
-    borderRadius: '12px',
-    boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
-    color: 'rgb(var(--c-ink))',
-  };
   
   const cachedHealth = getCachedApiResponse('/api/admin/health');
 
@@ -53,8 +50,77 @@ export const Overview: React.FC = () => {
   const [reservationsToday, setReservationsToday] = useState<number | null>(null);
   const [revenueMonth, setRevenueMonth] = useState<number | null>(null);
   const [aovMonth, setAovMonth] = useState<number | null>(null);
-  const [chartData, setChartData] = useState<{ name: string; revenue: number; bookings: number }[]>([]);
+  const [chartData, setChartData] = useState<DailyChartPoint[]>([]);
   const [chartLabel, setChartLabel] = useState('');
+  const [baselineMeta, setBaselineMeta] = useState<any>(null);
+
+  const { visible: chartVisible, toggle: toggleChartSeries } = useChartSeriesToggles(
+    'overview:daily-series',
+    { revenue: true, bookings: true, lastMonth: true, baseline: true }
+  );
+
+  const baselineAvailable = Boolean(baselineMeta?.available);
+
+  const prevMonthInfo = baselineMeta?.windowEnd;
+  const prevMonthName = prevMonthInfo
+    ? formatWibDate(new Date(Date.UTC(prevMonthInfo.year, prevMonthInfo.month - 1, 15)), { month: 'short' })
+    : 'Bulan Lalu';
+  const prevMonthLabel = prevMonthInfo ? `${prevMonthName} ${prevMonthInfo.year}` : 'Bulan Lalu';
+
+  const windowStartInfo = baselineMeta?.windowStart;
+  const startMonthName = windowStartInfo
+    ? formatWibDate(new Date(Date.UTC(windowStartInfo.year, windowStartInfo.month - 1, 15)), { month: 'short' })
+    : '';
+  const baselineLabel = windowStartInfo && prevMonthInfo
+    ? `Rata-rata (${startMonthName}–${prevMonthName})`
+    : 'Rata-rata 6 Bln';
+
+  const overviewLabels = useMemo(
+    () => ({
+      current: chartLabel || 'Bulan Ini',
+      previous: prevMonthLabel,
+      baseline: baselineLabel,
+    }),
+    [chartLabel, prevMonthLabel, baselineLabel]
+  );
+
+  const toggleItems: ChartSeriesToggleItem[] = useMemo(
+    () => [
+      {
+        key: 'revenue',
+        label: 'Omset',
+        color: 'rgb(var(--c-accent))',
+        shape: 'area',
+      },
+      {
+        key: 'bookings',
+        label: 'Reservasi',
+        color: 'rgb(var(--c-info))',
+        shape: 'line',
+      },
+      {
+        key: 'lastMonth',
+        label: prevMonthLabel,
+        color: 'rgb(var(--c-info))',
+        dashed: true,
+        shape: 'line',
+      },
+      {
+        key: 'baseline',
+        label: baselineLabel,
+        color: 'rgb(var(--c-warning))',
+        shape: 'line',
+        disabled: !baselineAvailable,
+        disabledReason:
+          baselineMeta?.reason === 'INSUFFICIENT_HISTORY'
+            ? `Riwayat data belum mencukupi (tersedia ${baselineMeta.monthsUsed} dari minimal 3 bulan)`
+            : baselineMeta?.reason === 'NO_HISTORY'
+            ? 'Belum ada riwayat transaksi 6 bulan sebelumnya'
+            : 'Data baseline tidak tersedia',
+      },
+    ],
+    [prevMonthLabel, baselineLabel, baselineAvailable, baselineMeta]
+  );
 
   const fetchStatus = async () => {
     try {
@@ -82,15 +148,8 @@ export const Overview: React.FC = () => {
         setRevenueMonth(pickNumber(d?.kpi?.totalRevenue));
         setAovMonth(pickNumber(d?.kpi?.aov));
         setChartLabel(d?.monthName ? `${d.monthName} ${d.year}` : '');
-        setChartData(
-          Array.isArray(d?.dailyTrend)
-            ? d.dailyTrend.map((x: any) => ({
-                name: String(x.day),
-                revenue: x.revenue || 0,
-                bookings: x.bookingsCount || 0,
-              }))
-            : []
-        );
+        setChartData(mapDailyTrendToChart(d?.dailyTrend));
+        setBaselineMeta(d?.baseline ?? null);
       }
     } catch (err: any) {
       console.error('Failed to load dashboard overview metrics:', err);
@@ -130,15 +189,8 @@ export const Overview: React.FC = () => {
             setRevenueMonth(pickNumber(d?.kpi?.totalRevenue));
             setAovMonth(pickNumber(d?.kpi?.aov));
             setChartLabel(d?.monthName ? `${d.monthName} ${d.year}` : '');
-            setChartData(
-              Array.isArray(d?.dailyTrend)
-                ? d.dailyTrend.map((x: any) => ({
-                    name: String(x.day),
-                    revenue: x.revenue || 0,
-                    bookings: x.bookingsCount || 0,
-                  }))
-                : []
-            );
+            setChartData(mapDailyTrendToChart(d?.dailyTrend));
+            setBaselineMeta(d?.baseline ?? null);
           } catch (err) {
             console.warn('Silent analytics refresh failed:', err);
           }
@@ -250,20 +302,27 @@ export const Overview: React.FC = () => {
         {/* Main Composed Chart — hanya untuk role dengan izin omzet (KNOWN #358 K-1) */}
         {canViewFinancialOverview && (
         <Card className="lg:col-span-2 p-5 space-y-4">
-          <div className="flex justify-between items-start">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
-              <h3 className="text-sm font-bold text-ink">Omset & Reservasi Harian</h3>
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm font-bold text-ink">Omset & Reservasi Harian</h3>
+                <Link to="/admin/financial-analytics" className="text-xs font-bold text-accent hover:underline">
+                  Detail Transaksi →
+                </Link>
+              </div>
               <p className="text-xs text-ink-3">
                 {chartLabel ? `Tren transaksi bulan ${chartLabel}` : 'Tren transaksi harian bulan berjalan'}
               </p>
             </div>
-            <Link to="/admin/financial-analytics" className="text-xs font-bold text-accent hover:underline">
-              Detail Transaksi →
-            </Link>
+            <ChartSeriesToggle
+              items={toggleItems}
+              visible={chartVisible}
+              onToggle={toggleChartSeries}
+            />
           </div>
 
           <div className="h-72">
-            {hasChartData(chartData) ? (
+            {hasChartData(chartData) || chartData.some((p) => (p.avg6mRevenue ?? 0) > 0) ? (
               <ResponsiveContainer width="100%" height="100%">
                 <ComposedChart data={chartData} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
                   <defs>
@@ -276,15 +335,63 @@ export const Overview: React.FC = () => {
                   <XAxis dataKey="name" stroke="rgb(var(--c-ink-3))" fontSize={11} tickFormatter={(val) => `Tgl ${val}`} />
                   <YAxis yAxisId="left" stroke="rgb(var(--c-accent))" fontSize={11} tickFormatter={(val) => `${(val / 1000).toFixed(0)}k`} />
                   <YAxis yAxisId="right" orientation="right" stroke="rgb(var(--c-info))" fontSize={11} allowDecimals={false} />
-                  <Tooltip 
-                    contentStyle={tooltipStyle}
-                    formatter={(value: any, name: string) => {
-                      if (name === 'Omset (Rp)') return [formatRupiah(Number(value)), name];
-                      return [value, name];
-                    }}
+                  <Tooltip
+                    content={
+                      <DailyComparisonTooltip
+                        labels={overviewLabels}
+                        baselineAvailable={baselineAvailable}
+                        showBookings={true}
+                      />
+                    }
                   />
-                  <Area yAxisId="left" type="monotone" dataKey="revenue" name="Omset (Rp)" stroke="rgb(var(--c-accent))" strokeWidth={2.5} fillOpacity={1} fill="url(#colorRevenue)" />
-                  <Line yAxisId="right" type="monotone" dataKey="bookings" name="Reservasi" stroke="rgb(var(--c-info))" strokeWidth={2} dot={{ r: 3 }} />
+                  {chartVisible.revenue && (
+                    <Area
+                      yAxisId="left"
+                      type="monotone"
+                      dataKey="revenue"
+                      name="Omset (Rp)"
+                      stroke="rgb(var(--c-accent))"
+                      strokeWidth={2.5}
+                      fillOpacity={1}
+                      fill="url(#colorRevenue)"
+                    />
+                  )}
+                  {chartVisible.bookings && (
+                    <Line
+                      yAxisId="right"
+                      type="monotone"
+                      dataKey="bookings"
+                      name="Reservasi"
+                      stroke="rgb(var(--c-info))"
+                      strokeWidth={2}
+                      dot={{ r: 3 }}
+                    />
+                  )}
+                  {chartVisible.lastMonth && (
+                    <Line
+                      yAxisId="left"
+                      type="monotone"
+                      dataKey="lastMonthRevenue"
+                      name="Bulan Lalu"
+                      stroke="rgb(var(--c-info))"
+                      strokeDasharray="4 4"
+                      strokeWidth={2}
+                      dot={false}
+                      connectNulls={false}
+                    />
+                  )}
+                  {chartVisible.baseline && baselineAvailable && (
+                    <Line
+                      yAxisId="left"
+                      type="monotone"
+                      dataKey="avg6mRevenue"
+                      name="Rata-rata 6 Bln"
+                      stroke="rgb(var(--c-warning))"
+                      strokeWidth={2.5}
+                      dot={false}
+                      connectNulls={false}
+                    />
+                  )}
                 </ComposedChart>
               </ResponsiveContainer>
             ) : (
@@ -295,6 +402,19 @@ export const Overview: React.FC = () => {
                 <Link to="/admin/financial-analytics" className="text-xs font-bold text-accent">Buka Dashboard Transaksi →</Link>
               </div>
             )}
+          </div>
+
+          {/* Catatan Kaki Baseline */}
+          <div className="pt-2 flex flex-col sm:flex-row sm:items-center justify-between text-[11px] text-ink-3 border-t border-divider gap-1">
+            <span>
+              * Mode{' '}
+              {describeBaselineMode(baselineMeta?.mode, baselineMeta?.smoothingWindowDays)}{' '}
+              ·{' '}
+              {baselineAvailable
+                ? `Basis data ${baselineMeta.monthsUsed} dari ${baselineMeta.monthsRequested} bulan historis`
+                : 'Baseline dinonaktifkan (riwayat belum mencukupi)'}
+            </span>
+            <span className="italic">Garis putus-putus & kurva adalah pembanding historis, bukan target.</span>
           </div>
         </Card>
         )}

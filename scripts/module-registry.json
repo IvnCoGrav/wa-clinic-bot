@@ -764,6 +764,41 @@
         "src/utils/whatsapp-message-id.ts"
       ],
       "test": "tests/unit/whatsapp-message-id.test.ts"
+    },
+    {
+      "id": "analytics.daily_baseline",
+      "title": "Perhitungan kurva baseline multi-bulan harian (domain murni)",
+      "description": "Perhitungan statistik baseline multi-bulan (weekday atau kalender moving average) dan komparasi bulan lalu untuk analitik tren harian tanpa I/O.",
+      "canonical": "src/domain/daily-baseline.ts",
+      "exports": [
+        "buildDailyBaseline",
+        "daysInMonth",
+        "wibDateParts"
+      ],
+      "forbiddenDeclarations": [
+        "buildDailyBaseline"
+      ],
+      "allowedFiles": [
+        "src/domain/daily-baseline.ts"
+      ],
+      "test": "tests/unit/daily-baseline.test.ts"
+    },
+    {
+      "id": "analytics.baseline_settings",
+      "title": "Konfigurasi baseline analitik tenant-aware",
+      "description": "Pengaturan jendela bulan, mode weekday/kalender, dan moving average smoothing per tenant dengan normalisasi ketat dan cache memori 5 menit.",
+      "canonical": "src/config/analytics-baseline.ts",
+      "exports": [
+        "getAnalyticsBaselineSettings",
+        "normalizeAnalyticsBaselineSettings"
+      ],
+      "forbiddenDeclarations": [
+        "getAnalyticsBaselineSettings"
+      ],
+      "allowedFiles": [
+        "src/config/analytics-baseline.ts"
+      ],
+      "test": "tests/unit/analytics-baseline-config.test.ts"
     }
   ]
 }
