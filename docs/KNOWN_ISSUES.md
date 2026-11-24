@@ -13,7 +13,7 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
 - **Perbaikan Fondasional (Fase 1 & 2):**
   1. `Layout.tsx` & `index.css`: Event handler `visualViewport` mencatat `vv.pageTop` ke custom property CSS `--vvt`. Shell root Live Chat (`data-livechat-shell`) diberi `top: isLiveChat ? 'var(--vvt, 0px)' : undefined`.
   2. `LiveChatComposer.tsx`, `LiveChatMessagePane.tsx`, `useLiveChatActiveThread.ts`, `LiveChatMonitor.tsx`: Hapus `window.scrollTo(0,0)` pada `onFocus`; ganti `scrollIntoView` menjadi scroll container pesan saja (`container.scrollTop = container.scrollHeight`); jadikan scroll fokus/resize instan (`smooth: false`).
-  3. `sw.js`: Bump cache PWA ke `admin-dashboard-v15`.
+  3. `sw.js`: Bump cache PWA ke `admin-dashboard-v16`.
 - **Hardening Lanjutan (2026-11-24):**
   1. `Layout.tsx`: listener `window.scroll` khusus Live Chat agar `--vvt` juga mutakhir bila iOS menggeser dokumen (bukan hanya visual viewport); update `--vvt` scoped ke halaman Live Chat.
   2. `utils/livechatScroll.ts`: helper `centerElementInScrollContainer` (container-only) untuk semua lompat-ke-pesan, menggantikan `scrollIntoView` yang dapat menggeser window/visual viewport.

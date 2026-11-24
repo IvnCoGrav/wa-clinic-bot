@@ -438,7 +438,7 @@ Ini bukan pengganti uji perangkat; hanya penjaga agar kontrak tidak hilang saat 
 - Rebuild `dist` dashboard (hasil `npm run build`).
 - Deploy standar (contoh sesuai runbook repo): `docker compose build app && docker compose up -d --no-deps app`.
 - **Tidak menyentuh WAHA/DB** → tidak perlu 2-step Meta gate.
-- PWA: setelah deploy, tutup/reopen PWA atau tunggu SW update. `CACHE_NAME` di `packages/admin-dashboard/public/sw.js` sudah dinaikkan ke `admin-dashboard-v15` (termasuk follow-up composer compact).
+- PWA: setelah deploy, tutup/reopen PWA atau tunggu SW update. `CACHE_NAME` di `packages/admin-dashboard/public/sw.js` sudah dinaikkan ke `admin-dashboard-v16` (termasuk follow-up composer compact).
 - Verifikasi di server: hash asset berubah; halaman memuat bundle baru.
 
 ### 3.6 Setelah deploy
