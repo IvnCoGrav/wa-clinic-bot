@@ -10,7 +10,8 @@ dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.
 - **Perbaikan Fondasional (Fase 1 & Fase 2):**
   1. **Kompensasi Visual Viewport (`Layout.tsx` & `index.css`):** Event handler `visualViewport` menyimpan `vv.pageTop` ke custom property CSS `--vvt`. Shell root Live Chat (`data-livechat-shell`) diberi `top: isLiveChat ? 'var(--vvt, 0px)' : undefined` dengan fallback `--vvt: 0px` di `:root`.
   2. **Container-Only Scroll & Eliminasi Window Scroll (`LiveChatComposer.tsx`, `LiveChatMessagePane.tsx`, `useLiveChatActiveThread.ts`, `LiveChatMonitor.tsx`):** Menghapus `window.scrollTo(0, 0)` dari handler `onFocus` composer; mengganti `messagesEndRef.current.scrollIntoView` menjadi scroll container pesan murni (`container.scrollTop = container.scrollHeight`); mengubah scroll saat fokus/resize viewport menjadi instan (non-smooth) untuk mencegah pergeseran mendadak saat keyboard beranimasi.
-  3. **PWA Cache Invalidation (`sw.js`):** Bump `CACHE_NAME` dari `admin-dashboard-v13` ke `admin-dashboard-v14` agar cache PWA di iPhone dibersihkan dan menyajikan bundle terbaru.
+  3. **PWA Cache Invalidation (`sw.js`):** Bump `CACHE_NAME` ke `admin-dashboard-v15` agar cache PWA di iPhone dibersihkan dan menyajikan bundle terbaru.
+  4. **Kompak Typefield & Padding Vertikal 0 (`LiveChatComposer.tsx`, `index.css`):** Mengubah padding vertikal typefield dari `py-2` menjadi `py-0`, mengurangi `min-h-[38px]` menjadi `min-h-[30px]`, `leading-normal`, serta merampingkan tombol aksi mobile agar bentuk kolom ketik tidak memakan ruang layar.
 - **Dokumentasi & Pelacakan:** Dicatat di `docs/KNOWN_ISSUES.md` (#370) dan `docs/FEATURE_INVENTORY.md`.
 
 #### 2026-11-23 - Fix: Alur Logout Portal Staf Macet (Dual-Context Desync & Elevasi Dialog)
