@@ -327,6 +327,9 @@ describe('POST /otw — kontrol keberangkatan (en_route + ETA)', () => {
       const sql = String((vi.mocked(prisma.$queryRaw).mock.calls.at(-1)![0] as any)?.join('?'));
       expect(sql).toContain('pg_advisory_xact_lock');
       expect(sql).toContain('hashtext');
+      // Regresi nyata 2026-11-24 (P2010): `$queryRaw` yang mengembalikan kolom `void`
+      // gagal di-deserialize Prisma. Query WAJIB memproyeksikan kolom int.
+      expect(sql).toContain('SELECT 1 AS locked');
     });
 
     it('requestId dari klien diteruskan sebagai clientTempId (idempotensi retry)', async () => {

@@ -572,7 +572,11 @@ export async function staffTodayRoutes(fastify: FastifyInstance) {
       // (bukan global).
       const otwClaim = await prisma.$transaction(
         async (tx) => {
-          await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${`staff_otw:${id}`}))`;
+          // `pg_advisory_xact_lock` mengembalikan `void`. Prisma gagal men-deserialize
+          // kolom `void` dari `$queryRaw` (P2010 "Failed to deserialize column of type
+          // 'void'"), sehingga fungsi dibungkus subquery dan hanya kolom int yang
+          // diproyeksikan ke Prisma. Terverifikasi pada Postgres produksi 2026-11-24.
+          await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(hashtext(${`staff_otw:${id}`}))) AS otw_lock`;
 
           const fresh = await tx.reservation.findUnique({
             where: { id },
