@@ -4,6 +4,15 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### 2026-11-24 - Fix: Live Chat iOS — Kompensasi Visual Viewport Saat Mengetik (#370)
+
+- **Masalah:** Saat kolom ketik ("Tulis balasan...") difokuskan pada iPhone Safari / PWA standalone, keyboard iOS muncul dan visual viewport mengecil sekaligus bergeser ke bawah (`visualViewport.offsetTop` / `pageTop` ≈ 355 px). Aplikasi belum mengompensasi `offsetTop`, sehingga shell Live Chat tertinggal di atas dan meninggalkan area kosong (celah hitam) di atas keyboard. Selain itu, `onFocus` memanggil `window.scrollTo(0,0)` dan `messagesEndRef.scrollIntoView(...)`, memicu perebutan scroll dan lonjakan tampilan.
+- **Perbaikan Fondasional (Fase 1 & Fase 2):**
+  1. **Kompensasi Visual Viewport (`Layout.tsx` & `index.css`):** Event handler `visualViewport` menyimpan `vv.pageTop` ke custom property CSS `--vvt`. Shell root Live Chat (`data-livechat-shell`) diberi `top: isLiveChat ? 'var(--vvt, 0px)' : undefined` dengan fallback `--vvt: 0px` di `:root`.
+  2. **Container-Only Scroll & Eliminasi Window Scroll (`LiveChatComposer.tsx`, `LiveChatMessagePane.tsx`, `useLiveChatActiveThread.ts`, `LiveChatMonitor.tsx`):** Menghapus `window.scrollTo(0, 0)` dari handler `onFocus` composer; mengganti `messagesEndRef.current.scrollIntoView` menjadi scroll container pesan murni (`container.scrollTop = container.scrollHeight`); mengubah scroll saat fokus/resize viewport menjadi instan (non-smooth) untuk mencegah pergeseran mendadak saat keyboard beranimasi.
+  3. **PWA Cache Invalidation (`sw.js`):** Bump `CACHE_NAME` dari `admin-dashboard-v13` ke `admin-dashboard-v14` agar cache PWA di iPhone dibersihkan dan menyajikan bundle terbaru.
+- **Dokumentasi & Pelacakan:** Dicatat di `docs/KNOWN_ISSUES.md` (#370) dan `docs/FEATURE_INVENTORY.md`.
+
 #### 2026-11-23 - Fix: Alur Logout Portal Staf Macet (Dual-Context Desync & Elevasi Dialog)
 
 - **Konteks:** Terapis melaporkan klik "Keluar" harus 2x baru muncul modal, dan setelah dikonfirmasi akun tetap tidak keluar (harus mengulangi siklus 2x atau tutup aplikasi baru keluar).

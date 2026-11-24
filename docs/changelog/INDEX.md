@@ -5,8 +5,16 @@
 > Dilarang menyerap seluruh file sejarah 1,1 MB ke context window LLM.
 > Regenerate ulang index setiap entri baru: `node scripts/make-changelog-index.mjs --write`.
 
-Total entri terindeks: 703
+Total entri terindeks: 711
 
+- 2026-11-24 | Fix: Live Chat iOS — Kompensasi Visual Viewport Saat Mengetik (#370)
+- 2026-11-23 | Fix: Alur Logout Portal Staf Macet (Dual-Context Desync & Elevasi Dialog)
+- 2026-11-23 | GPS Staf: Banner Consent In-App Dihapus (S-06 Revisi)
+- 2026-11-20 | Fix: Gambar Live Chat Hilang (Operasi JSON Prisma Tidak Sah + Kuota Thumbnail)
+- 2026-11-20 | GPS Keberangkatan Tanpa Warm-up Latar (Opsi C) + Hapus Banner Izin Lokasi
+- 2026-11-20 | Raport Admin Sesuai Prototipe (F9)
+- 2026-11-20 | UX: Antrean Verifikasi Bukti Chat (Filter, Konteks, Pagination, Preview Dampak)
+- 2026-11-20 | Fitur & Deploy: Raport Kinerja Bidan (F1–F8) + Gate Rollout
 - 2026-11-19 | Ops: Eksekusi Data Historis P1 Meta CAPI di Produksi (D1 Redaksi PII + D2 Backfill `purcha
 - 2026-11-19 | Fix: Remediasi P1 Meta CAPI (#356) — Guard Nilai `warn`, Nilai GROSS, Prefix `returning_`,
 - 2026-11-19 | Fix: Audit `tenantId` pada Route/Service Lama (SEC-AUDIT A-015b)

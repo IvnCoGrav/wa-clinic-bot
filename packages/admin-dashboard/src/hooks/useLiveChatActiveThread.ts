@@ -95,7 +95,7 @@ export function useLiveChatActiveThread({
   const lastScrolledInChatQueryRef = useRef<string>('');
   const autoDeepSearchDoneRef = useRef<string>('');
 
-  const scrollToBottom = useCallback((smooth = false, force = false) => {
+  const scrollToBottom = useCallback((_smooth = false, force = false) => {
     const el = chatContainerRef.current;
     if (!el) return;
     const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
@@ -103,12 +103,11 @@ export function useLiveChatActiveThread({
     if (!isNearBottom && !force) return;
     wasNearBottomRef.current = true;
     const doScroll = () => {
-      if (chatContainerRef.current) {
-        chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight + 99999;
-      }
-      if ((isNearBottom || force) && messagesEndRef.current) {
-        messagesEndRef.current.scrollIntoView({ behavior: smooth ? 'smooth' : 'auto', block: 'end' });
-      }
+      const container = chatContainerRef.current;
+      if (!container) return;
+      // Container-only: jangan scrollIntoView, karena dapat menggeser
+      // window / visual viewport iOS saat keyboard terbuka.
+      container.scrollTop = container.scrollHeight;
     };
     doScroll();
     requestAnimationFrame(doScroll);
@@ -116,7 +115,7 @@ export function useLiveChatActiveThread({
       setTimeout(doScroll, 60);
       setTimeout(doScroll, 150);
     }
-  }, [chatContainerRef, messagesEndRef]);
+  }, [chatContainerRef]);
 
   const scrollToMessage = useCallback((msgId: string, smooth = true) => {
     setHighlightedMsgId(msgId);

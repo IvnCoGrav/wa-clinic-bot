@@ -107,9 +107,15 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const updateVvh = () => {
-      const vh = window.visualViewport ? window.visualViewport.height : window.innerHeight;
+      const vv = window.visualViewport;
+      const vh = vv ? vv.height : window.innerHeight;
+      // pageTop: posisi visual viewport relatif terhadap dokumen.
+      // Mencakup offsetTop + scroll dokumen, sehingga aman untuk dua mekanisme
+      // geser iOS (visual-viewport pan maupun document scroll).
+      const vvt = vv ? vv.pageTop : 0;
       document.documentElement.style.setProperty('--vvh', `${vh}px`);
-      const isKbOpen = window.visualViewport ? window.visualViewport.height < window.innerHeight - 80 : false;
+      document.documentElement.style.setProperty('--vvt', `${vvt}px`);
+      const isKbOpen = vv ? vv.height < window.innerHeight - 80 : false;
       document.documentElement.setAttribute('data-keyboard-open', isKbOpen ? 'true' : 'false');
     };
     updateVvh();
@@ -482,7 +488,13 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
 
   return (
     <div
-      style={{ height: isLiveChat ? 'var(--vvh, 100dvh)' : undefined, maxHeight: isLiveChat ? 'var(--vvh, 100dvh)' : undefined }}
+      data-livechat-shell={isLiveChat ? 'true' : undefined}
+      style={{
+        height: isLiveChat ? 'var(--vvh, 100dvh)' : undefined,
+        maxHeight: isLiveChat ? 'var(--vvh, 100dvh)' : undefined,
+        // Kompensasi pan visual viewport iOS (keyboard). Class root sudah `relative`.
+        top: isLiveChat ? 'var(--vvt, 0px)' : undefined,
+      }}
       className={`${isLiveChat ? 'h-[100dvh] max-h-[100dvh] overflow-hidden touch-pan-y' : 'min-h-screen'} bg-app text-ink flex flex-col md:flex-row relative overscroll-y-contain`}
     >
       {/* ⬅️ Mobile Edge Swipe-Back Floating Indicator (Max 100px with resistance physics) */}
