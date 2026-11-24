@@ -1,7 +1,7 @@
 # Plan Perbaikan — Live Chat iOS: Kolom Ketik Naik & Area Chat Kosong Saat Mengetik
 
 - **Tanggal:** 2026-11-24
-- **Status:** **IMPLEMENTED — SMOKE TEST PENDING** (core fix terverifikasi pada iPhone fisik Safari & PWA standalone; 4 smoke test interaksi + matriks regresi Android/iPad/desktop belum dijalankan)
+- **Status:** **IMPLEMENTED — SMOKE TEST PENDING** (core fix terverifikasi pada iPhone fisik Safari & PWA standalone; 4 smoke test interaksi + matriks regresi Android/iPad/desktop belum dijalankan). **Deployed app-only 2026-11-24 11:37 WIB** dari commit `7c730356`; WAHA/worker/DB tidak disentuh.
 - **Lingkup:** `packages/admin-dashboard` — halaman `/admin/live-chat`, mode mobile iPhone Safari/PWA.
 - **Bukan lingkup:** isi chat, template treatment, jadwal, backend, WAHA, database, prompt AI.
 - **Bukti awal:** rekaman `ScreenRecording_11-24-2026 10-17-06_1.mp4` + validasi kode/build 2026-11-24.
