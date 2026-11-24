@@ -84,6 +84,16 @@ describe('Staff Treatment Time Guard & Anti-Spam Arrival', () => {
     staffTripTrackingService.clearAll();
     vi.spyOn(StaffAuthService, 'validateSession').mockResolvedValue(staffSession as any);
     vi.spyOn(liveChatService, 'sendAdminReply').mockResolvedValue({ success: true } as any);
+    // Fase 1 (plan 2026-11-24): klaim OTW berjalan di dalam transaksi ber-kunci.
+    const prismaAny = prisma as any;
+    prismaAny.reservation.findUnique.mockReset();
+    prismaAny.reservation.update.mockReset();
+    prismaAny.$queryRaw.mockReset();
+    prismaAny.$transaction.mockReset();
+    prismaAny.$queryRaw.mockResolvedValue([{ pg_advisory_xact_lock: null }]);
+    prismaAny.$transaction.mockImplementation(async (arg: any) =>
+      typeof arg === 'function' ? arg(prisma) : Promise.all(arg)
+    );
     vi.mocked(prisma.reservation.update).mockResolvedValue({ id: RES_ID, status: 'en_route' } as any);
   });
 
@@ -91,7 +101,7 @@ describe('Staff Treatment Time Guard & Anti-Spam Arrival', () => {
 
   it('Kasus 1: OTW H-30 mnt -> lolos (200)', async () => {
     const bookingDate = new Date(Date.now() + 30 * 60 * 1000);
-    vi.mocked(prisma.reservation.findUnique).mockResolvedValueOnce({
+    vi.mocked(prisma.reservation.findUnique).mockResolvedValue({
       ...baseReservation,
       booking_date: bookingDate,
     } as any);
@@ -110,7 +120,7 @@ describe('Staff Treatment Time Guard & Anti-Spam Arrival', () => {
 
   it('Kasus 2: OTW H-3 jam -> tolak "Pesan OTW hanya dapat dikirim maksimal 2 jam sebelum jam reservasi."', async () => {
     const bookingDate = new Date(Date.now() + 180 * 60 * 1000); // 3 jam lagi
-    vi.mocked(prisma.reservation.findUnique).mockResolvedValueOnce({
+    vi.mocked(prisma.reservation.findUnique).mockResolvedValue({
       ...baseReservation,
       booking_date: bookingDate,
     } as any);
@@ -130,7 +140,7 @@ describe('Staff Treatment Time Guard & Anti-Spam Arrival', () => {
 
   it('Kasus 3: OTW janji + 20 mnt (lewat batas toleransi 15 mnt) -> tolak "Jadwal treatment sudah masuk jam pelaksanaan"', async () => {
     const bookingDate = new Date(Date.now() - 20 * 60 * 1000); // 20 mnt yang lalu
-    vi.mocked(prisma.reservation.findUnique).mockResolvedValueOnce({
+    vi.mocked(prisma.reservation.findUnique).mockResolvedValue({
       ...baseReservation,
       booking_date: bookingDate,
     } as any);
@@ -151,7 +161,7 @@ describe('Staff Treatment Time Guard & Anti-Spam Arrival', () => {
   it('Kasus 3b: OTW janji + 20 mnt oleh Supervisor -> lolos bypass (200)', async () => {
     vi.spyOn(StaffAuthService, 'validateSession').mockResolvedValueOnce(supervisorSession as any);
     const bookingDate = new Date(Date.now() - 20 * 60 * 1000);
-    vi.mocked(prisma.reservation.findUnique).mockResolvedValueOnce({
+    vi.mocked(prisma.reservation.findUnique).mockResolvedValue({
       ...baseReservation,
       booking_date: bookingDate,
     } as any);
@@ -173,7 +183,7 @@ describe('Staff Treatment Time Guard & Anti-Spam Arrival', () => {
     const auditSpy = vi.spyOn(auditService, 'logAdminAction').mockResolvedValue({} as any);
     const sendReplySpy = vi.spyOn(liveChatService, 'sendAdminReply');
 
-    vi.mocked(prisma.reservation.findUnique).mockResolvedValueOnce({
+    vi.mocked(prisma.reservation.findUnique).mockResolvedValue({
       ...baseReservation,
       otw_sent_at: otwSentAt,
     } as any);
@@ -217,7 +227,7 @@ describe('Staff Treatment Time Guard & Anti-Spam Arrival', () => {
     const auditSpy = vi.spyOn(auditService, 'logAdminAction').mockResolvedValue({} as any);
     const sendReplySpy = vi.spyOn(liveChatService, 'sendAdminReply').mockResolvedValueOnce({ success: true, messageId: 'msg-1' } as any);
 
-    vi.mocked(prisma.reservation.findUnique).mockResolvedValueOnce({
+    vi.mocked(prisma.reservation.findUnique).mockResolvedValue({
       ...baseReservation,
       otw_sent_at: null,
     } as any);

@@ -49,11 +49,8 @@ import { useTripTelemetry } from '../../hooks/useTripTelemetry';
 import { usePullToRefresh } from '../../hooks/usePullToRefresh';
 import { PullToRefreshIndicator } from '../../components/common/PullToRefreshIndicator';
 import {
-  calculateHaversineKm,
-  estimateTravelMinutesKm,
   getOtwGate,
   isWithinGpsWarmupWindow,
-  formatWibClock,
   needsNavigationPreflight,
   isGeolocationPermissionGranted,
   startDepartGpsWarmup,
@@ -87,6 +84,16 @@ import { useStaffMessages } from './useStaffMessages';
 import { useStaffFailedOutbox } from './useStaffFailedOutbox';
 import { useStaffChatSend } from './useStaffChatSend';
 import { filterTasksByQuery, groupTasksByDate } from './staffTaskGrouping';
+import {
+  OTW_SEND_DEADLINE_MS,
+  buildOtwPayload,
+  createOtwRequestId,
+  sendOtwWithDeadline,
+  type SendOtwResult,
+} from './otwDeparture';
+import { enqueuePendingOtw } from './otwPendingStore';
+import { markPendingOtwAttempt, readPendingOtw, removePendingOtw } from './otwPendingStore';
+import { flushPendingOtwQueue } from './otwFlush';
 import { StaffUpcomingCard } from './StaffUpcomingCard';
 import { StaffCompletedCard } from './StaffCompletedCard';
 
@@ -147,6 +154,18 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
   const [isOnline, setIsOnline] = useState<boolean>(() => (typeof navigator !== 'undefined' ? navigator.onLine : true));
   const [mobileView, setMobileView] = useState<'list' | 'chat'>('list');
   const [sendingOtwId, setSendingOtwId] = useState<string | null>(null);
+  // Fase 3 (plan 2026-11-24): state terpisah untuk POST OTW. `sendingOtwId` hanya
+  // menandai fase persiapan (rekam GPS + ambil template), bukan pengiriman.
+  const [otwSendingId, setOtwSendingId] = useState<string | null>(null);
+  // Fase 4/5 (plan 2026-11-24): baris OTW yang belum terkonfirmasi server.
+  const [pendingOtwIds, setPendingOtwIds] = useState<string[]>([]);
+  const refreshPendingOtwIds = () => {
+    try {
+      setPendingOtwIds(readPendingOtw().map((item) => item.reservationId));
+    } catch {
+      setPendingOtwIds([]);
+    }
+  };
   const [sendingArrivalId, setSendingArrivalId] = useState<string | null>(null);
   const [completingVisitId, setCompletingVisitId] = useState<string | null>(null);
   const [todayFilter, setTodayFilter] = useState<'all' | 'pending' | 'completed'>('all');
@@ -245,6 +264,8 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
     task: StaffTask;
     navUrl: string | null;
     draft: string;
+    /** Kunci idempotensi stabil per percobaan keberangkatan (retry/flush memakai nilai sama). */
+    requestId: string;
   } | null>(null);
   const [preflightTask, setPreflightTask] = useState<StaffTask | null>(null);
 
@@ -278,6 +299,12 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
   const currentStaffRef = useRef(currentStaff);
   const isSupervisorRef = useRef(isSupervisor);
   const fetchTasksRef = useRef<((isPolling?: boolean, currentScope?: 'mine' | 'all') => Promise<void>) | null>(null);
+  // Fase 4 (plan 2026-11-24): pengiriman ulang OTW pending dipanggil dari handler
+  // resume (mount-once effect) sehingga fungsi terbaru dibaca lewat ref.
+  const otwFlushRef = useRef<(() => Promise<void>) | null>(null);
+  const otwFlushInFlightRef = useRef(false);
+  const tasksSnapshotRef = useRef<StaffTask[]>([]);
+  const didInitialOtwFlushRef = useRef(false);
 
   currentStaffRef.current = currentStaff;
   isSupervisorRef.current = isSupervisor;
@@ -320,6 +347,8 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
 
   selectedTaskRef.current = selectedTask;
   allTasksRef.current = [...tasks, ...upcomingTasks, ...completedTasks];
+  // Snapshot untuk rekonsiliasi OTW pending (dibaca dari ref agar effect mount-once aman).
+  tasksSnapshotRef.current = [...tasks, ...upcomingTasks];
 
   // Tandai boot progress: halaman portal staff sudah tampil
   useEffect(() => {
@@ -586,7 +615,13 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
   useEffect(() => {
     const resume = () => {
       if (document.visibilityState !== 'visible') return;
+      // Fase 4: refetch sekarang (UI responsif), lalu kirim ulang OTW pending dan
+      // refetch sekali lagi setelah selesai agar status `en_route` ikut terbarui.
       fetchTasksRef.current?.(true);
+      const flush = otwFlushRef.current;
+      if (flush) {
+        void flush().then(() => fetchTasksRef.current?.(true));
+      }
       if (selectedTaskRef.current?.conversationId) {
         refreshActiveChatRef.current?.({ keepScroll: true });
       }
@@ -1270,18 +1305,48 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
 
 
   // Quick Action: Send OTW notification using dynamic Super Admin template
-  // ── Unifikasi OTW (plan 2026-10-04) ─────────────────────────────────────────
+  // ── Unifikasi OTW (plan 2026-10-04, revisi 2026-11-24) ──────────────────────
   // SATU jalur kirim OTW untuk semua tombol (kartu & drawer) → mencegah kirim
   // ganda ke customer. Pesan hanya di-POST dari modal konfirmasi; `sendingOtwId`
-  // mengunci semua tombol selama proses. GMaps dibuka dari gesture tombol modal
-  // (sinkron) agar tidak diblokir pop-up-blocker.
+  // mengunci tombol selama fase persiapan (GPS + template).
+  //
+  // INVARIAN 2026-11-24: peta dibuka PALING LAMBAT 10 dtk setelah tap, dan
+  // pengiriman WA didahulukan (await) — bukan fire-and-forget yang bisa mati saat
+  // OS memindahkan Chrome ke background ketika Google Maps terbuka. Bila
+  // pengiriman belum terkonfirmasi, pesan masuk antrean pending (sessionStorage)
+  // dan direkonsiliasi saat aplikasi aktif kembali.
   const [otwDepart, setOtwDepart] = useState<{ lat: number; lng: number; accuracy: number } | null>(null);
   const [otwGpsChecking, setOtwGpsChecking] = useState(false);
 
+  /**
+   * Buka navigasi peta (Fase 6, plan 2026-11-24).
+   * - Klik anchor `target="_blank"` TIDAK terkena pop-up blocker walau dipanggil
+   *   setelah `await` (beda dengan `window.open`, yang mengembalikan null saat
+   *   `noopener` dipakai sehingga dulu memunculkan toast palsu / navigasi ganda).
+   * - Tanpa deteksi User-Agent: iPadOS 13+ menyamar sebagai "Macintosh", jadi
+   *   tebakan platform selalu punya celah.
+   * - `window.location.href` disiapkan sebagai fallback bila anchor gagal dibuat.
+   */
   const openMapsIfAny = (navUrl: string | null): void => {
     if (!navUrl || navUrl === '#') return;
-    const win = window.open(navUrl, '_blank', 'noopener,noreferrer');
-    if (!win) toast('Izinkan pop-up untuk membuka peta navigasi.', 'error');
+    try {
+      const anchor = document.createElement('a');
+      anchor.href = navUrl;
+      anchor.target = '_blank';
+      anchor.rel = 'noopener noreferrer';
+      anchor.style.display = 'none';
+      document.body.appendChild(anchor);
+      anchor.click();
+      document.body.removeChild(anchor);
+      return;
+    } catch {
+      /* lanjut ke fallback navigasi halaman */
+    }
+    try {
+      window.location.href = navUrl;
+    } catch {
+      toast('Tidak dapat membuka peta navigasi.', 'error');
+    }
   };
 
   /**
@@ -1344,7 +1409,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
     }
 
     setSendingOtwId(null);
-    setOtwModal({ task, navUrl, draft });
+    setOtwModal({ task, navUrl, draft, requestId: createOtwRequestId() });
   };
 
   const retryOtwGps = async () => {
@@ -1356,89 +1421,208 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
     }
   };
 
-  /** Konfirmasi modal OTW: buka peta (sinkron) lalu kirim — satu-satunya POST OTW. */
-  const confirmOtwDepart = () => {
+  /**
+   * Catat status OTW terkirim ke state lokal (kartu, daftar upcoming, drawer).
+   * Dipakai oleh jalur `sent` dan `already-sent` agar UI tidak berbeda rasanya.
+   */
+  const applyOtwSentState = (task: StaffTask, result: SendOtwResult) => {
+    if (result.status === 'already-sent') {
+      const serverOtwAt = result.data?.otwSentAt || task.otwSentAt || new Date().toISOString();
+      const nextStatus = result.data?.status || task.status;
+      const updateOtw = (t: StaffTask): StaffTask =>
+        t.reservationId === task.reservationId ? { ...t, otwSentAt: serverOtwAt, status: nextStatus } : t;
+      setTasks((prev) => prev.map(updateOtw));
+      setUpcomingTasks((prev) => prev.map(updateOtw));
+      setSelectedTask((prev) => (prev ? updateOtw(prev) : prev));
+      toast('Info OTW sudah pernah dikirim sebelumnya: tidak dikirim ulang.', 'info');
+      return;
+    }
+
+    const nowIso = new Date().toISOString();
+    const nextStatus = result.data?.status || 'en_route';
+    const updateOtw = (t: StaffTask): StaffTask =>
+      t.reservationId === task.reservationId ? { ...t, otwSentAt: nowIso, status: nextStatus } : t;
+    setTasks((prev) => prev.map(updateOtw));
+    setUpcomingTasks((prev) => prev.map(updateOtw));
+    setSelectedTask((prev) => (prev ? updateOtw(prev) : prev));
+    if (task.conversationId && selectedTaskRef.current?.conversationId === task.conversationId) {
+      void fetchMessages(task.conversationId, { silent: true });
+    }
+    toast(`OTW terkirim ke WhatsApp ${task.customerName || 'pasien'}`, 'success');
+  };
+
+  /** Simpan percobaan OTW yang belum terkonfirmasi agar tidak hilang saat pindah ke peta. */
+  const rememberPendingOtw = (
+    m: NonNullable<typeof otwModal>,
+    reason: string
+  ) => {
+    enqueuePendingOtw({
+      requestId: m.requestId,
+      reservationId: m.task.reservationId,
+      customerName: m.task.customerName || undefined,
+      conversationId: m.task.conversationId || null,
+      draft: m.draft,
+      depart: otwDepart,
+      dest: { lat: m.task.address?.lat ?? null, lng: m.task.address?.lng ?? null },
+      createdAt: new Date().toISOString(),
+      attempts: 1,
+      lastError: reason,
+    });
+    refreshPendingOtwIds();
+  };
+
+  /**
+   * Satu-satunya POST OTW (plan 2026-11-24, Fase 3).
+   * Urutan: kirim dulu (maks 10 dtk) → baru buka peta. Gagal → modal TETAP terbuka
+   * (Bidan harus tahu pesan belum terkirim), kecuali ia menekan "Buka peta sekarang".
+   */
+  const confirmOtwDepart = async () => {
     const m = otwModal;
-    if (!m) return;
-    const { task, navUrl, draft } = m;
+    if (!m || otwSendingId) return;
+    const { task, navUrl, draft, requestId } = m;
 
     const TERMINAL = ['completed', 'cancelled', 'rejected'];
-    if (TERMINAL.includes(String(task.status || '').toLowerCase())) {
+    if (TERMINAL.includes(String(task.status || '').toLowerCase()) || task.otwSentAt) {
       setOtwModal(null);
+      setOtwDepart(null);
       openMapsIfAny(navUrl);
       return;
     }
 
-    // Guard ganda (anti double-tap / lintas tombol saat in-flight).
-    if (task.otwSentAt) {
-      setOtwModal(null);
-      openMapsIfAny(navUrl);
+    const payload = buildOtwPayload({ requestId, draft, depart: otwDepart, dest: task.address });
+
+    setOtwSendingId(task.reservationId);
+    let result: SendOtwResult;
+    try {
+      result = await sendOtwWithDeadline({
+        deadlineMs: OTW_SEND_DEADLINE_MS,
+        post: () =>
+          apiRequest(`/api/staff/reservations/${task.reservationId}/otw`, {
+            method: 'POST',
+            keepalive: true,
+            body: JSON.stringify(payload.body),
+          }),
+      });
+    } finally {
+      setOtwSendingId(null);
+    }
+
+    if (result.status === 'failed') {
+      // Peta TIDAK dibuka: keberangkatan tanpa notifikasi harus keputusan sadar Bidan.
+      toast(`Gagal kirim OTW: ${result.error || 'periksa koneksi'}`, 'error');
       return;
     }
 
-    // 1. Buka Google Maps SINKRON dari gesture (anti pop-up block).
-    openMapsIfAny(navUrl);
-
-    // 2. ETA best-effort dari titik awal (bila GPS & tujuan tersedia).
-    const depart = otwDepart;
-    const destLat = task.address?.lat;
-    const destLng = task.address?.lng;
-    let etaMinutes: number | null = null;
-    let arrivalWib: string | null = null;
-    if (depart && destLat != null && destLng != null) {
-      const km = calculateHaversineKm(depart.lat, depart.lng, destLat, destLng);
-      etaMinutes = estimateTravelMinutesKm(km);
-      arrivalWib = formatWibClock(new Date(), etaMinutes);
+    if (result.status === 'pending') {
+      rememberPendingOtw(m, 'Belum terkonfirmasi (batas tunggu 10 dtk)');
+      toast('Pesan OTW belum terkonfirmasi. Peta dibuka sekarang; pesan dikirim ulang saat aplikasi aktif kembali.', 'info');
+    } else {
+      applyOtwSentState(task, result);
     }
 
     setOtwModal(null);
     setOtwDepart(null);
-
-    // 3. Kirim OTW (fire-and-forget) — satu-satunya jalur POST OTW.
-    (async () => {
-      try {
-        const res = await apiRequest(`/api/staff/reservations/${task.reservationId}/otw`, {
-          method: 'POST',
-          keepalive: true,
-          body: JSON.stringify({
-            customText: draft,
-            markEnRoute: true,
-            ...(etaMinutes != null ? { etaMinutes } : {}),
-            ...(arrivalWib ? { arrivalWib } : {}),
-            ...(depart ? { lat: depart.lat, lng: depart.lng, accuracy: depart.accuracy } : {}),
-          }),
-        });
-        if (res?.success) {
-          if (res?.data?.alreadySent) {
-            const serverOtwAt = res?.data?.otwSentAt || task.otwSentAt || new Date().toISOString();
-            const nextStatus = res?.data?.status || task.status;
-            const updateOtw = (t: StaffTask): StaffTask =>
-              t.reservationId === task.reservationId ? { ...t, otwSentAt: serverOtwAt, status: nextStatus } : t;
-            setTasks((prev) => prev.map(updateOtw));
-            setUpcomingTasks((prev) => prev.map(updateOtw));
-            setSelectedTask((prev) => (prev ? updateOtw(prev) : prev));
-            toast('Info OTW sudah pernah dikirim sebelumnya: tidak dikirim ulang.', 'info');
-            return;
-          }
-          const nowIso = new Date().toISOString();
-          const nextStatus = res?.data?.status || 'en_route';
-          const updateOtw = (t: StaffTask): StaffTask =>
-            t.reservationId === task.reservationId ? { ...t, otwSentAt: nowIso, status: nextStatus } : t;
-          setTasks((prev) => prev.map(updateOtw));
-          setUpcomingTasks((prev) => prev.map(updateOtw));
-          setSelectedTask((prev) => (prev ? updateOtw(prev) : prev));
-          if (task.conversationId && selectedTaskRef.current?.conversationId === task.conversationId) {
-            void fetchMessages(task.conversationId, { silent: true });
-          }
-          toast(`OTW terkirim ke WhatsApp ${task.customerName || 'pasien'}`, 'success');
-        } else {
-          toast(`Gagal kirim OTW: ${res?.error || 'kesalahan tidak diketahui'}`, 'error');
-        }
-      } catch (err) {
-        toast(`Gagal kirim OTW: ${(err as any)?.message || 'periksa koneksi'}`, 'error');
-      }
-    })();
+    openMapsIfAny(navUrl);
   };
+
+  /**
+   * Jalan keluar eksplisit saat pengiriman masih berjalan: Bidan tidak boleh
+   * terhalang berangkat hanya karena jaringan lambat. Pesan tetap diantrekan.
+   */
+  const departWithoutWaiting = () => {
+    const m = otwModal;
+    if (!m) return;
+    rememberPendingOtw(m, 'Dibuka manual sebelum konfirmasi server');
+    setOtwModal(null);
+    setOtwDepart(null);
+    openMapsIfAny(m.navUrl);
+    toast('Peta dibuka. Pesan OTW menyusul saat jaringan tersedia.', 'info');
+  };
+
+  /**
+   * Fase 4: rekonsiliasi antrean OTW pending.
+   * - Server otoritatif: `otwSentAt` sudah terisi → item dibuang tanpa kirim.
+   * - Di luar jendela/status tiba → dibuang (tidak mengirim "saya OTW" telat).
+   * - Gagal jaringan → dipertahankan untuk percobaan berikutnya.
+   */
+  const flushOtwPending = async () => {
+    if (otwFlushInFlightRef.current) return;
+    const list = readPendingOtw();
+    refreshPendingOtwIds();
+    if (list.length === 0) return;
+
+    otwFlushInFlightRef.current = true;
+    try {
+      const snapshot = tasksSnapshotRef.current;
+      const report = await flushPendingOtwQueue({
+        list,
+        getTask: (reservationId) => {
+          const found = snapshot.find((t) => t.reservationId === reservationId);
+          if (!found) return undefined;
+          return { bookingDate: found.bookingDate, status: found.status, otwSentAt: found.otwSentAt || null };
+        },
+        send: (pending) =>
+          sendOtwWithDeadline({
+            deadlineMs: OTW_SEND_DEADLINE_MS,
+            post: () =>
+              apiRequest(`/api/staff/reservations/${pending.reservationId}/otw`, {
+                method: 'POST',
+                keepalive: true,
+                body: JSON.stringify(
+                  buildOtwPayload({
+                    requestId: pending.requestId,
+                    draft: pending.draft,
+                    depart: pending.depart,
+                    dest: pending.dest,
+                  }).body
+                ),
+              }),
+          }),
+        remove: (requestId) => {
+          removePendingOtw(requestId);
+        },
+        mark: (requestId, patch) => {
+          markPendingOtwAttempt(requestId, patch);
+        },
+      });
+
+      refreshPendingOtwIds();
+
+      const delivered = report.sent + report.alreadySent;
+      if (delivered > 0) {
+        toast(`Pesan OTW menyusul berhasil terkirim (${delivered}).`, 'success');
+      }
+      if (report.failed > 0) {
+        toast(`${report.failed} pesan OTW masih tertunda. Akan dicoba lagi saat jaringan membaik.`, 'error');
+      }
+      if (report.dropped > 0) {
+        toast(`${report.dropped} pesan OTW tidak dikirim karena jadwal sudah lewat/selesai.`, 'info');
+      }
+    } catch (err) {
+      // Rekonsiliasi tidak boleh mengganggu alur utama portal staf.
+      console.warn('[OTW] gagal rekonsiliasi antrean pending:', err);
+    } finally {
+      otwFlushInFlightRef.current = false;
+    }
+  };
+
+  otwFlushRef.current = flushOtwPending;
+
+  // Tampilkan badge OTW pending sejak halaman dibuka (mis. setelah reload di jalan).
+  useEffect(() => {
+    refreshPendingOtwIds();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Percobaan pertama setelah daftar tugas termuat — tanpa menunggu Bidan pindah app.
+  useEffect(() => {
+    if (didInitialOtwFlushRef.current) return;
+    if (tasks.length === 0) return;
+    if (readPendingOtw().length === 0) return;
+    didInitialOtwFlushRef.current = true;
+    void flushOtwPending();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tasks]);
 
   // Kontrol keberangkatan terpadu (plan 2026-10-04).
   // Tracking GPS kontinu tetap DI-DEPRECATE (tidak andal di PWA).
@@ -2538,6 +2722,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                       index={idx}
                       isSelected={selectedTask?.reservationId === task.reservationId}
                       isSendingOtw={sendingOtwId === task.reservationId}
+                      otwPending={pendingOtwIds.includes(task.reservationId)}
                       isCompleting={completingVisitId === task.reservationId}
                       isSendingArrival={sendingArrivalId === task.reservationId}
                       isSupervisor={isSupervisor}
@@ -3586,11 +3771,12 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
         draft={otwModal?.draft || ''}
         depart={otwDepart}
         gpsChecking={otwGpsChecking}
-        sending={!!sendingOtwId}
+        sending={!!otwSendingId}
         onRetryGps={retryOtwGps}
         onConfirm={confirmOtwDepart}
+        onOpenMaps={departWithoutWaiting}
         onClose={() => {
-          if (sendingOtwId) return;
+          if (otwSendingId) return;
           setOtwModal(null);
           setOtwDepart(null);
         }}

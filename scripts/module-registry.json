@@ -799,6 +799,27 @@
         "src/config/analytics-baseline.ts"
       ],
       "test": "tests/unit/analytics-baseline-config.test.ts"
+    },
+    {
+      "id": "staff.otw_departure",
+      "title": "Kontrak keberangkatan OTW: kirim dulu, peta kemudian",
+      "description": "Urutan pengiriman OTW dengan batas tunggu 10 detik (bukan fire-and-forget), penyusunan payload ETA/GPS, keputusan kirim-ulang antrean pending berbasis jendela waktu server, dan kunci idempotensi per percobaan keberangkatan. Murni tanpa DOM/jaringan.",
+      "canonical": "packages/admin-dashboard/src/pages/staff/otwDeparture.ts",
+      "exports": [
+        "OTW_SEND_DEADLINE_MS",
+        "buildOtwPayload",
+        "sendOtwWithDeadline",
+        "resolveFlushDecision",
+        "createOtwRequestId",
+        "describeOtwError"
+      ],
+      "forbiddenDeclarations": [],
+      "allowedFiles": [
+        "packages/admin-dashboard/src/pages/staff/otwDeparture.ts",
+        "packages/admin-dashboard/src/pages/staff/otwPendingStore.ts",
+        "packages/admin-dashboard/src/pages/staff/otwFlush.ts"
+      ],
+      "test": "tests/unit/otw-departure.test.ts"
     }
   ]
 }

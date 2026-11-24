@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import { apiRequest } from '../services/api';
 import { restoreSessionToken } from '../services/sessionRestore';
 import { emitBootPhase, setBootMessage } from '../lib/bootProgress';
+import { OTW_PENDING_KEY } from '../pages/staff/otwPendingStore';
 
 export interface StaffUser {
   id: string;
@@ -214,6 +215,8 @@ export const StaffAuthProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     localStorage.removeItem('staff_failed_outbox_v1');
     try {
       sessionStorage.removeItem('staff_failed_outbox_v2');
+      // Antrean OTW pending memuat draf pesan (nama pasien) → wajib ikut dibersihkan.
+      sessionStorage.removeItem(OTW_PENDING_KEY);
     } catch {
       /* storage diblokir */
     }

@@ -16,7 +16,7 @@ import { isStaffSupervisorRole, canReceiveStaffAlert } from '../../domain/staff-
 import { sanitizeMessageForStaff, sanitizeStaffHubPayload } from '../../utils/pii-masker';
 import { sanitizeCustomerNameForGreeting } from '../../utils/name-sanitizer';
 import { ensureStaffSignature } from '../../utils/staff-signature';
-import { EN_ROUTE_STATUS } from '../../domain/reservation-status';
+import { EN_ROUTE_STATUS, canTransition } from '../../domain/reservation-status';
 import { reservationStatusService } from '../../services/reservation-status.service';
 import { createMonotonicSseSequencer } from '../../utils/sse-sequence';
 import { resolveSessionTenantId } from '../admin/route-helpers';
@@ -407,6 +407,8 @@ export async function staffTodayRoutes(fastify: FastifyInstance) {
           arrivalWib?: string;
           markEnRoute?: boolean;
           forceResend?: boolean;
+          /** Idempotency key stabil per percobaan keberangkatan (plan 2026-11-24). */
+          requestId?: string;
         };
       }>,
       reply: FastifyReply
@@ -418,6 +420,11 @@ export async function staffTodayRoutes(fastify: FastifyInstance) {
       const isSupervisor = isStaffSupervisorRole(role);
       const { id } = request.params;
       const customText = request.body?.customText ?? request.body?.text;
+      // Idempotency key dari klien: stabil per percobaan keberangkatan (bukan per
+      // tap), sehingga retry setelah timeout/outbox flush tidak mengirim WA ganda.
+      const rawRequestId = (request.body as any)?.requestId;
+      const otwRequestId =
+        typeof rawRequestId === 'string' && rawRequestId.trim() ? rawRequestId.trim().slice(0, 120) : undefined;
 
       // Validasi opsional data keberangkatan (defensif: nilai aneh diabaikan).
       const body = request.body || {};
@@ -480,8 +487,12 @@ export async function staffTodayRoutes(fastify: FastifyInstance) {
         });
       }
 
-      // Idempotensi OTW: jika pesan OTW sudah pernah dikirim dan bukan forceResend oleh supervisor,
-      // jangan kirim ulang. Kembalikan 200 dengan alreadySent: true agar frontend tersinkronkan.
+      // Idempotensi OTW (fast-path): jika pesan OTW sudah pernah dikirim dan bukan
+      // forceResend oleh supervisor, jangan kirim ulang. Kembalikan 200 dengan
+      // alreadySent: true agar frontend tersinkronkan.
+      // CATATAN: ini hanya fast-path baca. Keputusan final diambil di dalam
+      // transaksi ber-kunci (`pg_advisory_xact_lock`) di bawah, karena cek-lalu-aksi
+      // di sini bisa dilalui dua request paralel sekaligus.
       const alreadySentAt = (reservation as any).otw_sent_at ? new Date((reservation as any).otw_sent_at) : null;
       const forceResend = body.forceResend === true && isSupervisor;
       if (alreadySentAt && !forceResend) {
@@ -548,32 +559,100 @@ export async function staffTodayRoutes(fastify: FastifyInstance) {
         finalText = ensureStaffSignature(finalText, therapistName);
       }
 
-      const replyResult = await liveChatService.sendAdminReply({
-        conversationId: conversation.id,
-        text: finalText,
-        tenantId,
-        adminName: therapistName,
-        forceEscalate: true,
-      });
+      // ── Klaim atomik OTW (plan 2026-11-24, Fase 1) ────────────────────────────
+      // Dua request OTW paralel (double-tap, dua tab, atau flush outbox saat HP
+      // kembali aktif) tidak boleh mengirim WhatsApp dua kali. Cek `otw_sent_at`
+      // di luar transaksi bersifat check-then-act: keduanya bisa lolos cek lalu
+      // sama-sama mengirim. Kunci advisory per-reservasi memaksa request kedua
+      // menunggu commit request pertama, lalu membaca `otw_sent_at` yang sudah terisi.
+      //
+      // `pg_advisory_xact_lock` berumur transaksi → pengiriman WA + update status
+      // WAJIB di dalam transaksi yang sama agar klaim tetap sah. Konsekuensi: satu
+      // koneksi pool tertahan selama pengiriman (±1-3 dtk), terkunci per-reservasi
+      // (bukan global).
+      const otwClaim = await prisma.$transaction(
+        async (tx) => {
+          await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${`staff_otw:${id}`}))`;
 
-      if (!replyResult.success) {
-        return reply.status(400).send({ success: false, error: replyResult.error });
+          const fresh = await tx.reservation.findUnique({
+            where: { id },
+            select: { otw_sent_at: true, status: true },
+          });
+          if (!fresh) return { state: 'missing' as const };
+
+          const freshSentAt = (fresh as any).otw_sent_at ? new Date((fresh as any).otw_sent_at) : null;
+          if (freshSentAt && !forceResend) {
+            return {
+              state: 'already_sent' as const,
+              otwSentAt: freshSentAt.toISOString(),
+              status: (fresh as any).status,
+            };
+          }
+
+          const freshStatusLower = String((fresh as any).status || '').toLowerCase();
+          if (['completed', 'cancelled', 'rejected'].includes(freshStatusLower)) {
+            return { state: 'terminal' as const, status: (fresh as any).status };
+          }
+
+          const replyResult = await liveChatService.sendAdminReply({
+            conversationId: conversation.id,
+            text: finalText,
+            tenantId,
+            adminName: therapistName,
+            forceEscalate: true,
+            ...(otwRequestId ? { clientTempId: otwRequestId } : {}),
+          });
+
+          if (!replyResult.success) {
+            // DUPLICATE_REPLY = pesan identik baru saja diproses (retry setelah
+            // timeout klien). Pasien sudah menerima pesan → perlakukan sebagai
+            // sukses agar Bidan tidak melihat "gagal" palsu lalu mengirim ulang.
+            const duplicateCode = (replyResult.error as any)?.code;
+            if (duplicateCode !== 'DUPLICATE_REPLY') {
+              return { state: 'failed' as const, error: replyResult.error };
+            }
+          }
+
+          // Persist status OTW + (opsional) pindah status ke `en_route` (seam kanonis).
+          const nextStatus =
+            markEnRoute && canTransition(freshStatusLower, EN_ROUTE_STATUS) ? EN_ROUTE_STATUS : undefined;
+          if (nextStatus) {
+            await reservationStatusService.applyTransition(
+              { id, status: (fresh as any).status } as any,
+              { to: nextStatus, extraData: { otw_sent_at: new Date() }, db: tx }
+            );
+          } else {
+            await tx.reservation.update({
+              where: { id },
+              data: { otw_sent_at: new Date() },
+            });
+          }
+
+          return { state: 'sent' as const, nextStatus, replyResult };
+        },
+        { maxWait: 5000, timeout: 20000 }
+      );
+
+      if (otwClaim.state === 'missing') {
+        return reply.status(404).send({ success: false, error: 'Reservasi tidak ditemukan.' });
+      }
+      if (otwClaim.state === 'already_sent') {
+        return reply.status(200).send({
+          success: true,
+          data: { alreadySent: true, otwSentAt: otwClaim.otwSentAt, status: otwClaim.status },
+        });
+      }
+      if (otwClaim.state === 'terminal') {
+        return reply.status(400).send({
+          success: false,
+          error: `Pesan OTW tidak dapat dikirim untuk jadwal berstatus "${otwClaim.status}".`,
+        });
+      }
+      if (otwClaim.state === 'failed') {
+        return reply.status(400).send({ success: false, error: otwClaim.error });
       }
 
-      // Persist status OTW + (opsional) pindah status ke `en_route` (lewat seam kanonis).
-      const nextStatus =
-        markEnRoute && (await import('../../domain/reservation-status')).canTransition(statusLower, EN_ROUTE_STATUS) ? EN_ROUTE_STATUS : undefined;
-      if (nextStatus) {
-        await reservationStatusService.applyTransition(reservation as any, {
-          to: nextStatus,
-          extraData: { otw_sent_at: new Date() },
-        });
-      } else {
-        await prisma.reservation.update({
-          where: { id },
-          data: { otw_sent_at: new Date() },
-        });
-      }
+      const { nextStatus, replyResult } = otwClaim;
 
       // Fase 1 (plan 2026-10-02): sambungkan titik keberangkatan Bidan ke memori
       // pemantauan CS. Tanpa ini, peta/motor & sisa km di widget CS kosong.
@@ -664,6 +743,7 @@ export async function staffTodayRoutes(fastify: FastifyInstance) {
           textPreview: finalText.slice(0, 60),
           enRoute: Boolean(nextStatus),
           etaMinutes,
+          ...(otwRequestId ? { requestId: otwRequestId } : {}),
         },
         ipAddress: request.ip,
         tenantId,
