@@ -7,10 +7,12 @@
 
 ## 1. Daftar Kapabilitas Kanonis Aktif
 
-Total kapabilitas terdaftar: **39 modul**.
+Total kapabilitas terdaftar: **41 modul**.
 
 | ID Kapabilitas | Judul & Deskripsi | Modul Kanonis | Ekspor Resmi | Test File |
 |---|---|---|---|---|
+| `analytics.baseline_settings` | **Konfigurasi baseline analitik tenant-aware**<br>Pengaturan jendela bulan, mode weekday/kalender, dan moving average smoothing per tenant dengan normalisasi ketat dan cache memori 5 menit. | [`src/config/analytics-baseline.ts`](../src/config/analytics-baseline.ts) | `getAnalyticsBaselineSettings`, `normalizeAnalyticsBaselineSettings` | [`analytics-baseline-config.test.ts`](../tests/unit/analytics-baseline-config.test.ts) |
+| `analytics.daily_baseline` | **Perhitungan kurva baseline multi-bulan harian (domain murni)**<br>Perhitungan statistik baseline multi-bulan (weekday atau kalender moving average) dan komparasi bulan lalu untuk analitik tren harian tanpa I/O. | [`src/domain/daily-baseline.ts`](../src/domain/daily-baseline.ts) | `buildDailyBaseline`, `daysInMonth`, `wibDateParts` | [`daily-baseline.test.ts`](../tests/unit/daily-baseline.test.ts) |
 | `capi.pure_helpers` | **Helper murni Meta Conversions API**<br>Transformasi deterministik nilai CAPI, format _fbc, hash SHA-256, decrypt token, kanonikalisasi landing URL, ekstraksi nominal template, dan event_id Purchase — tanpa I/O. | [`src/services/capi.helpers.ts`](../src/services/capi.helpers.ts) | `maskName`, `parseCapiValue`, `formatMetaFbc`, `sha256Hash`, `decryptCapiToken`, `resolveCanonicalLandingUrl`, `extractValueByFormat`, `normalizeCapiMatchingGeo`, `buildDeterministicPurchaseEventId`, `buildLegacyPurchaseEventId` | [`capi-value-guard.test.ts`](../tests/unit/capi-value-guard.test.ts) |
 | `date.parse_indonesian` | **Parser tanggal bahasa Indonesia**<br>Parsing ekspresi tanggal bahasa alami Indonesia (hari, nama bulan teks/angka, relatif) menjadi objek Date standar. | [`src/utils/indonesian-date-parser.ts`](../src/utils/indonesian-date-parser.ts) | `parseIndonesianDate`, `parseHistoricalIndonesianDate`, `applyBookingTimeToDate` | [`indonesian-date-parser.test.ts`](../tests/unit/v3/indonesian-date-parser.test.ts) |
 | `followup.holiday_scheduling` | **Kontrak & resolusi Mode Libur Follow-Up**<br>Parser konfigurasi libur tenant, resolver state (active/exit_pending/manual_expired), clamp jadwal ke hari buka pertama, dan epoch skema repeat 25/50/75 hari yang non-retroaktif. | [`src/config/followup-scheduling.ts`](../src/config/followup-scheduling.ts) | `parseFollowUpHolidayConfig`, `parseFollowUpHolidayInput`, `resolveFollowUpHolidayState`, `clampScheduledAtToPostHoliday`, `countWibDaysBetween`, `isRepeatSchemeEligible`, `NEXT_TREATMENT_SCHEME_EPOCH` | [`followup-holiday-state.test.ts`](../tests/unit/followup-holiday-state.test.ts) |
@@ -52,6 +54,24 @@ Total kapabilitas terdaftar: **39 modul**.
 | `whatsapp.message_id` | **Validasi & klasifikasi format WhatsApp Message ID**<br>Leaf util murni tanpa I/O untuk validasi format message ID reply_to per provider (WAHA serialized vs WABA wamid) dan deteksi error format ID untuk fallback fail-open. | [`src/utils/whatsapp-message-id.ts`](../src/utils/whatsapp-message-id.ts) | `isValidReplyToForProvider`, `isReplyIdFormatError` | [`whatsapp-message-id.test.ts`](../tests/unit/whatsapp-message-id.test.ts) |
 
 ## 2. Rincian Modul & Aturan Guardrail
+
+### `analytics.baseline_settings` — Konfigurasi baseline analitik tenant-aware
+
+- **Deskripsi:** Pengaturan jendela bulan, mode weekday/kalender, dan moving average smoothing per tenant dengan normalisasi ketat dan cache memori 5 menit.
+- **File Kanonis:** [`src/config/analytics-baseline.ts`](../src/config/analytics-baseline.ts)
+- **Ekspor Kanonis:** `getAnalyticsBaselineSettings`, `normalizeAnalyticsBaselineSettings`
+- **Simbol Terlarang di Luar Kanonis:** `getAnalyticsBaselineSettings`
+- **File yang Diizinkan:** `src/config/analytics-baseline.ts`
+- **File Test:** [`tests/unit/analytics-baseline-config.test.ts`](../tests/unit/analytics-baseline-config.test.ts)
+
+### `analytics.daily_baseline` — Perhitungan kurva baseline multi-bulan harian (domain murni)
+
+- **Deskripsi:** Perhitungan statistik baseline multi-bulan (weekday atau kalender moving average) dan komparasi bulan lalu untuk analitik tren harian tanpa I/O.
+- **File Kanonis:** [`src/domain/daily-baseline.ts`](../src/domain/daily-baseline.ts)
+- **Ekspor Kanonis:** `buildDailyBaseline`, `daysInMonth`, `wibDateParts`
+- **Simbol Terlarang di Luar Kanonis:** `buildDailyBaseline`
+- **File yang Diizinkan:** `src/domain/daily-baseline.ts`
+- **File Test:** [`tests/unit/daily-baseline.test.ts`](../tests/unit/daily-baseline.test.ts)
 
 ### `capi.pure_helpers` — Helper murni Meta Conversions API
 

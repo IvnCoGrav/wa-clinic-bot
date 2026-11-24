@@ -103,3 +103,21 @@ Kontrak kanonis perhitungan corong iklan (*Ad Funnel Metrics*) yang bersumber da
 | **baselineViewsAtHour** | Nilai tengah (*median*) jumlah `paidViews` pada jendela jam operasional yang sama selama 7 hari terakhir (WIB). Digunakan sebagai pembanding dinamis untuk mendeteksi penurunan trafik abnormal (*low traffic ratio*). | Perhitungan historis dinamis |
 | **ctr** | Rasio klik terhadap kunjungan: $\text{CTR} = \frac{\text{uniquePaidClicks}}{\text{paidViews}}$ (bernilai 0 jika `paidViews = 0`). | Turunan |
 
+---
+
+## 8. Baseline Harian Multi-Bulan (Daily Baseline)
+
+Kontrak kanonis perhitungan pembanding historis harian (*Daily Baseline*) yang bersumber dari seam tunggal `src/domain/daily-baseline.ts` dan diorkestrasi oleh `src/services/financial-analytics.service.ts`:
+
+### Definisi Metrik
+- **avg6mRevenue**: Rata-rata omset historis harian dari jendela multi-bulan (default 6 bulan, rentang $M-1$ s/d $M-6$).
+  - **Mode `weekday` (Default)**: Rata-rata omset per hari-dalam-pekan (semua Minggu, semua Senin, dst.) dari bulan-bulan terpakai dalam jendela. Menghilangkan bias fluktuasi hari kerja vs akhir pekan.
+  - **Mode `calendar`**: Rata-rata omset per tanggal kalender $1 \dots 31$ dari bulan-bulan dalam jendela yang memiliki tanggal tersebut. Jika `smoothingWindowDays` dikonfigurasi (3, 5, atau 7 hari), moving average terpusat diterapkan untuk menghilangkan lonjakan anomali satu hari (*spike smoothing*).
+- **avg6mBookings**: Rata-rata jumlah reservasi/pasien harian yang dihitung dengan metode dan mode yang sama seperti `avg6mRevenue`.
+- **lastMonthRevenue / lastMonthBookings**: Realisasi omset dan reservasi pada tanggal yang sama pada bulan $M-1$ (bernilai `null` bila tanggal tersebut tidak ada di bulan sebelumnya, misal tanggal 31 pada bulan 30 hari, **atau** bila bulan $M-1$ sama sekali tidak memiliki transaksi sehingga tidak digambar sebagai garis rata nol).
+- **Status Transaksi yang Dikecualikan**: Transaksi berstatus `cancelled` / `CANCELLED` dikecualikan dari perhitungan omset dan kunjungan baseline.
+- **Aturan Bulan Kosong**: Bulan historis tanpa transaksi sama sekali dihitung sebagai *missing data* (tidak dimasukkan ke pembagi rata-rata).
+- **Ambang Ketersediaan Data (`minMonths`)**: Baseline hanya dinyatakan aktif (`available: true`) bila jumlah bulan yang memiliki transaksi aktif $\ge \text{minMonths}$ (default 3 bulan). Bila kurang, baseline diberi tanda `available: false` dengan alasan `INSUFFICIENT_HISTORY` agar tidak menampilkan kurva semu pada klinik baru.
+- **Catatan Snapshot**: Baseline dihitung dinamis dari data transaksi dengan caching 10 menit (TTL 600 detik). Angka historis mencerminkan resolusi billing terkini.
+
+
