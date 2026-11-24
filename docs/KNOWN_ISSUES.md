@@ -3,9 +3,9 @@
 Catatan temuan yang sengaja dipisah dari fitur aktif, supaya tidak hilang dan
 tidak disalahartikan sebagai bug dari perubahan terbaru.
 
-## 370. [Live Chat Mobile / iOS Viewport] Celah Hitam & Kolom Ketik Tertinggal Saat Keyboard Muncul di iPhone Safari / PWA (2026-11-24, FIXED — PENDING PHYSICAL iOS TEST)
+## 370. [Live Chat Mobile / iOS Viewport] Celah Hitam & Kolom Ketik Tertinggal Saat Keyboard Muncul di iPhone Safari / PWA (2026-11-24, RESOLVED)
 
-- **Status:** FIXED — PENDING PHYSICAL iOS TEST.
+- **Status:** RESOLVED (2026-11-24, terverifikasi pada iPhone fisik Safari & PWA standalone di server produksi).
 - **Gejala & Pengukuran:** Pada iPhone Safari & PWA standalone (Add to Home Screen), saat fokus ke kolom "Tulis balasan...", keyboard iOS muncul, tinggi visual viewport berkurang menjadi `≈ 470 px`, dan `visualViewport.offsetTop`/`pageTop` bergeser ke bawah sebesar `≈ 355 px` (terekam di `ScreenRecording_11-24-2026 10-17-06_1.mp4`). Karena shell Live Chat tidak mengompensasi `offsetTop`, posisi shell tertinggal di atas sehingga menyisakan celah hitam kosong di area atas keyboard dan kolom ketik tampak naik ke tengah.
 - **Akar Masalah:**
   1. Ketiadaan kompensasi terhadap `visualViewport.offsetTop` / `pageTop`; `window.scrollTo(0,0)` pada iOS Safari tidak mereset offset visual viewport.
