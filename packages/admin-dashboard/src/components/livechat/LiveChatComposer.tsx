@@ -970,10 +970,10 @@ const LiveChatComposerInner = (
           spellCheck={true}
           data-placeholder={isInternalMode ? 'Tulis catatan internal...' : 'Tulis balasan...'}
           onFocus={() => {
-            if (typeof window !== 'undefined') {
-              window.scrollTo(0, 0);
-              onRequestScrollToBottom?.();
-            }
+            // Jangan panggil window.scrollTo: tidak mereset visualViewport iOS
+            // dan dapat memicu lompatan saat keyboard beranimasi.
+            // Cukup minta daftar pesan scroll ke bawah (container-only).
+            onRequestScrollToBottom?.();
           }}
           onPaste={handlePaste}
           onInput={handleInput}

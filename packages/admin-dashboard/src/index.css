@@ -9,6 +9,7 @@
     --sal: env(safe-area-inset-left, 0px);
     --sar: env(safe-area-inset-right, 0px);
     --vvh: 100dvh;
+    --vvt: 0px;
 
     --background: 210 20% 98%;
     --foreground: 200 30% 10%;

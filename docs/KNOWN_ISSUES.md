@@ -3,6 +3,19 @@
 Catatan temuan yang sengaja dipisah dari fitur aktif, supaya tidak hilang dan
 tidak disalahartikan sebagai bug dari perubahan terbaru.
 
+## 370. [Live Chat Mobile / iOS Viewport] Celah Hitam & Kolom Ketik Tertinggal Saat Keyboard Muncul di iPhone Safari / PWA (2026-11-24, FIXED — PENDING PHYSICAL iOS TEST)
+
+- **Status:** FIXED — PENDING PHYSICAL iOS TEST.
+- **Gejala & Pengukuran:** Pada iPhone Safari & PWA standalone (Add to Home Screen), saat fokus ke kolom "Tulis balasan...", keyboard iOS muncul, tinggi visual viewport berkurang menjadi `≈ 470 px`, dan `visualViewport.offsetTop`/`pageTop` bergeser ke bawah sebesar `≈ 355 px` (terekam di `ScreenRecording_11-24-2026 10-17-06_1.mp4`). Karena shell Live Chat tidak mengompensasi `offsetTop`, posisi shell tertinggal di atas sehingga menyisakan celah hitam kosong di area atas keyboard dan kolom ketik tampak naik ke tengah.
+- **Akar Masalah:**
+  1. Ketiadaan kompensasi terhadap `visualViewport.offsetTop` / `pageTop`; `window.scrollTo(0,0)` pada iOS Safari tidak mereset offset visual viewport.
+  2. `LiveChatComposer.tsx` `onFocus` memanggil `window.scrollTo(0, 0)` dan `messagesEndRef.scrollIntoView(...)`, memicu perebutan scroll dokumen dan lonjakan visual saat keyboard beranimasi.
+- **Perbaikan Fondasional (Fase 1 & 2):**
+  1. `Layout.tsx` & `index.css`: Event handler `visualViewport` mencatat `vv.pageTop` ke custom property CSS `--vvt`. Shell root Live Chat (`data-livechat-shell`) diberi `top: isLiveChat ? 'var(--vvt, 0px)' : undefined`.
+  2. `LiveChatComposer.tsx`, `LiveChatMessagePane.tsx`, `useLiveChatActiveThread.ts`, `LiveChatMonitor.tsx`: Hapus `window.scrollTo(0,0)` pada `onFocus`; ganti `scrollIntoView` menjadi scroll container pesan saja (`container.scrollTop = container.scrollHeight`); jadikan scroll fokus/resize instan (`smooth: false`).
+  3. `sw.js`: Bump cache PWA ke `admin-dashboard-v14`.
+- **Tautan Terkait:** Lanjutan pengujian fisik keyboard iOS pada #249 dan #316.
+
 ## 369. [Analitik / Baseline] Ketiadaan Snapshot Permanen & Cache Invalidation Pengaturan Tenant (2026-11-24, DEFERRED / ACCEPTED)
 
 - **Status:** DEFERRED / ACCEPTED (2026-11-24).

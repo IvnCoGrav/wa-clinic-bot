@@ -1453,7 +1453,7 @@ export const LiveChatMessagePane: React.FC<LiveChatMessagePaneProps> = ({
                         onOpenQuickReservation={handleOpenQuickReservation}
                         onGenerateInvoice={handleGenerateActiveReservationInvoice}
                         hasActiveReservation={Boolean(activeConfirmedReservation || activePendingReservation)}
-                        onRequestScrollToBottom={() => scrollToBottom(true, false)}
+                        onRequestScrollToBottom={() => scrollToBottom(false, false)}
                         chatBotActive={chatBotActive}
                         onToggleGlobalBot={canToggleGlobalBot ? () => handleToggleGlobalBot(!chatBotActive) : undefined}
                       />

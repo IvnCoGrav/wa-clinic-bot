@@ -640,7 +640,7 @@ export const LiveChatMonitor: React.FC = () => {
       if (throttleTimer) return;
       throttleTimer = setTimeout(() => {
         throttleTimer = null;
-        scrollToBottom(true, false);
+        scrollToBottom(false, false);
       }, 200);
     };
     const vp = window.visualViewport;
