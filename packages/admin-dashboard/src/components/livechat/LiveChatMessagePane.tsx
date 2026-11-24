@@ -1021,6 +1021,7 @@ export const LiveChatMessagePane: React.FC<LiveChatMessagePaneProps> = ({
                       loadOlderMessages();
                     }
                   }}
+                  data-chat-scroll-container="true"
                   className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-1.5 sm:p-2.5 md:p-3 space-y-1.5 sm:space-y-2 my-1 sm:my-1.5 rounded-lg sm:rounded-xl border border-divider bg-content"
                   style={{
                     backgroundImage: currentTheme === 'dark'

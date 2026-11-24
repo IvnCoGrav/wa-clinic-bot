@@ -4,6 +4,7 @@
  */
 import React from 'react';
 import { QuotedMessageData } from '../../types/livechat';
+import { centerElementInScrollContainer, CHAT_SCROLL_CONTAINER_ATTR } from '../../utils/livechatScroll';
 
 interface LiveChatQuotedPreviewProps {
   quotedMsg: QuotedMessageData;
@@ -15,7 +16,10 @@ function jumpToMessage(id?: string | null) {
   if (!id) return;
   const target = document.getElementById(`msg-${id}`);
   if (!target) return;
-  target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  const container = target.closest(
+    `[${CHAT_SCROLL_CONTAINER_ATTR}="true"]`,
+  ) as HTMLElement | null;
+  centerElementInScrollContainer(container, target, 'smooth');
   target.classList.add('ring-2', 'ring-accent');
   setTimeout(() => target.classList.remove('ring-2', 'ring-accent'), 1200);
 }

@@ -1,5 +1,5 @@
 // Service Worker for Admin PWA with Web Push VAPID Support & Offline Caching
-const CACHE_NAME = 'admin-dashboard-v15';
+const CACHE_NAME = 'admin-dashboard-v16';
 const PRECACHE_ASSETS = [
   '/admin/',
   '/admin/manifest.json',

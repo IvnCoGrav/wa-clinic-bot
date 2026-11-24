@@ -277,18 +277,20 @@ body.body-scroll-locked {
   touch-action: none !important;
 }
 
-/* 📱 Ketika keyboard iOS aktif, hilangkan safe-area-inset-bottom agar kolom chat mepet presisi di atas keyboard */
-html[data-keyboard-open="true"] .chat-composer-container {
-  padding-bottom: 2px !important;
+/* 📱 Ketika keyboard iOS aktif atau composer sedang fokus, hilangkan safe-area-inset-bottom
+   dan rampingkan padding luar agar kolom chat mepet presisi di atas keyboard */
+html[data-keyboard-open="true"] .chat-composer-container,
+.chat-composer-container:focus-within {
+  padding-bottom: 0px !important;
   padding-top: 1px !important;
   margin-bottom: 0px !important;
 }
 
-/* AUDIT FASE 4: padding safe-area sebenarnya berada di wrapper DALAM composer,
-   bukan hanya container luar. Tanpa rule ini, keyboard iOS menyisakan celah
-   ±0.5rem + inset di atas keyboard. */
-html[data-keyboard-open="true"] .chat-composer-inner {
-  padding-bottom: 2px !important;
+/* Padding luar composer inner dirampingkan saat keyboard aktif / fokus */
+html[data-keyboard-open="true"] .chat-composer-inner,
+.chat-composer-inner:focus-within {
+  padding-top: 3px !important;
+  padding-bottom: 3px !important;
 }
 
 /* Modal & Sidebar Backdrop overscroll isolation.

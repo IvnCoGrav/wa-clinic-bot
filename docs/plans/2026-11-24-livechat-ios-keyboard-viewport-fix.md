@@ -1,10 +1,22 @@
 # Plan Perbaikan — Live Chat iOS: Kolom Ketik Naik & Area Chat Kosong Saat Mengetik
 
 - **Tanggal:** 2026-11-24
-- **Status:** **SELESAI / RESOLVED** (2026-11-24 — terverifikasi pada iPhone fisik Safari & PWA standalone di server produksi)
+- **Status:** **IMPLEMENTED — SMOKE TEST PENDING** (core fix terverifikasi pada iPhone fisik Safari & PWA standalone; 4 smoke test interaksi + matriks regresi Android/iPad/desktop belum dijalankan)
 - **Lingkup:** `packages/admin-dashboard` — halaman `/admin/live-chat`, mode mobile iPhone Safari/PWA.
 - **Bukan lingkup:** isi chat, template treatment, jadwal, backend, WAHA, database, prompt AI.
 - **Bukti awal:** rekaman `ScreenRecording_11-24-2026 10-17-06_1.mp4` + validasi kode/build 2026-11-24.
+
+### Status verifikasi 2026-11-24
+
+- [x] iPhone Safari: keyboard muncul → panel penuh, tanpa celah hitam, kolom ketik di atas keyboard.
+- [x] iPhone PWA standalone: hasil sama.
+- [ ] Smoke test `/` (Balasan Cepat) tampil tepat di atas kolom ketik.
+- [ ] Smoke test kirim pesan + auto-scroll instan.
+- [ ] Smoke test buka/tutup keyboard berulang tanpa pergeseran.
+- [ ] Smoke test modal/drawer `fixed` menutup layar penuh.
+- [ ] Regresi Android Chrome, iPad, desktop.
+- [x] `npm run build` dashboard + `npm run check:reuse` (0 pelanggaran baru).
+- [x] `node scripts/verify-livechat-viewport.mjs` (8/8 lulus).
 
 ---
 
@@ -426,7 +438,7 @@ Ini bukan pengganti uji perangkat; hanya penjaga agar kontrak tidak hilang saat 
 - Rebuild `dist` dashboard (hasil `npm run build`).
 - Deploy standar (contoh sesuai runbook repo): `docker compose build app && docker compose up -d --no-deps app`.
 - **Tidak menyentuh WAHA/DB** → tidak perlu 2-step Meta gate.
-- PWA: setelah deploy, tutup/reopen PWA atau tunggu SW update. Jika perlu, bump `CACHE_NAME` di `packages/admin-dashboard/public/sw.js` (`admin-dashboard-v13` → `v14`) agar asset lama dibersihkan.
+- PWA: setelah deploy, tutup/reopen PWA atau tunggu SW update. `CACHE_NAME` di `packages/admin-dashboard/public/sw.js` sudah dinaikkan ke `admin-dashboard-v15` (termasuk follow-up composer compact).
 - Verifikasi di server: hash asset berubah; halaman memuat bundle baru.
 
 ### 3.6 Setelah deploy

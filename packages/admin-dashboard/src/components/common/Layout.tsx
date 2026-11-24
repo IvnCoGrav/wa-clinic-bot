@@ -115,7 +115,12 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
       const vvt = vv ? vv.pageTop : 0;
       document.documentElement.style.setProperty('--vvh', `${vh}px`);
       document.documentElement.style.setProperty('--vvt', `${vvt}px`);
-      const isKbOpen = vv ? vv.height < window.innerHeight - 80 : false;
+      // Di iOS Safari/PWA standalone, window.innerHeight bisa ikut menyusut saat keyboard terbuka,
+      // atau visualViewport.height jauh lebih kecil dari window.screen.height.
+      const screenH = typeof window !== 'undefined' ? (window.screen?.height || window.innerHeight) : 0;
+      const isKbOpen = vv
+        ? ((screenH > 0 && screenH - vv.height > 150) || vv.height < window.innerHeight - 80)
+        : false;
       document.documentElement.setAttribute('data-keyboard-open', isKbOpen ? 'true' : 'false');
     };
     updateVvh();
@@ -472,6 +477,20 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
   }, [swipeBackDistance]);
 
   const isLiveChat = location.pathname.includes('/live-chat');
+
+  // 🔄 Jaga --vvt tetap akurat bila iOS memilih menggeser dokumen (bukan visual viewport).
+  // Listener visualViewport.scroll tidak selalu terpicu oleh document scroll, jadi
+  // tambahkan window.scroll khusus di Live Chat agar shell tetap mengikuti viewport.
+  useEffect(() => {
+    if (!isLiveChat) return;
+    const updateVvtOnScroll = () => {
+      const vv = window.visualViewport;
+      document.documentElement.style.setProperty('--vvt', `${vv ? vv.pageTop : window.scrollY}px`);
+    };
+    updateVvtOnScroll();
+    window.addEventListener('scroll', updateVvtOnScroll, { passive: true });
+    return () => window.removeEventListener('scroll', updateVvtOnScroll);
+  }, [isLiveChat]);
 
   // 🔒 Lock outer window scroll strictly when on LiveChat, preventing iOS Safari from scrolling window on input focus
   useEffect(() => {

@@ -3,9 +3,9 @@
 Catatan temuan yang sengaja dipisah dari fitur aktif, supaya tidak hilang dan
 tidak disalahartikan sebagai bug dari perubahan terbaru.
 
-## 370. [Live Chat Mobile / iOS Viewport] Celah Hitam & Kolom Ketik Tertinggal Saat Keyboard Muncul di iPhone Safari / PWA (2026-11-24, RESOLVED)
+## 370. [Live Chat Mobile / iOS Viewport] Celah Hitam & Kolom Ketik Tertinggal Saat Keyboard Muncul di iPhone Safari / PWA (2026-11-24, FIXED — SMOKE TEST PENDING)
 
-- **Status:** RESOLVED (2026-11-24, terverifikasi pada iPhone fisik Safari & PWA standalone di server produksi).
+- **Status:** FIXED — SMOKE TEST PENDING. Core fix terverifikasi pada iPhone fisik Safari & PWA standalone; 4 smoke test interaksi + matriks regresi Android/iPad/desktop belum dijalankan.
 - **Gejala & Pengukuran:** Pada iPhone Safari & PWA standalone (Add to Home Screen), saat fokus ke kolom "Tulis balasan...", keyboard iOS muncul, tinggi visual viewport berkurang menjadi `≈ 470 px`, dan `visualViewport.offsetTop`/`pageTop` bergeser ke bawah sebesar `≈ 355 px` (terekam di `ScreenRecording_11-24-2026 10-17-06_1.mp4`). Karena shell Live Chat tidak mengompensasi `offsetTop`, posisi shell tertinggal di atas sehingga menyisakan celah hitam kosong di area atas keyboard dan kolom ketik tampak naik ke tengah.
 - **Akar Masalah:**
   1. Ketiadaan kompensasi terhadap `visualViewport.offsetTop` / `pageTop`; `window.scrollTo(0,0)` pada iOS Safari tidak mereset offset visual viewport.
@@ -13,8 +13,29 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
 - **Perbaikan Fondasional (Fase 1 & 2):**
   1. `Layout.tsx` & `index.css`: Event handler `visualViewport` mencatat `vv.pageTop` ke custom property CSS `--vvt`. Shell root Live Chat (`data-livechat-shell`) diberi `top: isLiveChat ? 'var(--vvt, 0px)' : undefined`.
   2. `LiveChatComposer.tsx`, `LiveChatMessagePane.tsx`, `useLiveChatActiveThread.ts`, `LiveChatMonitor.tsx`: Hapus `window.scrollTo(0,0)` pada `onFocus`; ganti `scrollIntoView` menjadi scroll container pesan saja (`container.scrollTop = container.scrollHeight`); jadikan scroll fokus/resize instan (`smooth: false`).
-  3. `sw.js`: Bump cache PWA ke `admin-dashboard-v14`.
+  3. `sw.js`: Bump cache PWA ke `admin-dashboard-v15`.
+- **Hardening Lanjutan (2026-11-24):**
+  1. `Layout.tsx`: listener `window.scroll` khusus Live Chat agar `--vvt` juga mutakhir bila iOS menggeser dokumen (bukan hanya visual viewport); update `--vvt` scoped ke halaman Live Chat.
+  2. `utils/livechatScroll.ts`: helper `centerElementInScrollContainer` (container-only) untuk semua lompat-ke-pesan, menggantikan `scrollIntoView` yang dapat menggeser window/visual viewport.
+  3. `useLiveChatActiveThread.ts` + `LiveChatQuotedPreview.tsx`: memakai helper container-only; `data-chat-scroll-container` sebagai penanda container pesan.
+  4. `scripts/verify-livechat-viewport.mjs`: guard statis 8 check kontrak viewport/scroll.
+- **Verifikasi:**
+  - [x] iPhone Safari: keyboard muncul → panel penuh, tidak ada celah hitam, kolom ketik di atas keyboard.
+  - [x] iPhone PWA standalone: keyboard muncul → sama.
+  - [ ] Smoke test `/` (Balasan Cepat) tampil tepat di atas kolom ketik.
+  - [ ] Smoke test kirim pesan + auto-scroll instan.
+  - [ ] Smoke test buka/tutup keyboard berulang tanpa pergeseran.
+  - [ ] Smoke test modal/drawer `fixed` menutup layar penuh.
+  - [ ] Regresi Android Chrome, iPad, desktop.
 - **Tautan Terkait:** Lanjutan pengujian fisik keyboard iOS pada #249 dan #316.
+
+## 371. [Test Hygiene] `verify-livechat-revision.mjs` Sudah Basi — 11 Cek Gagal Pre-existing (2026-11-24, OPEN)
+
+- **Status:** OPEN (pre-existing; bukan regresi #370).
+- **Bukti:** `node scripts/verify-livechat-revision.mjs` gagal 11 cek pada HEAD. Worktree terpisah di commit induk `dcc4c8b0` menghasilkan 11 kegagalan identik — selector/teks UI yang dicek sudah berubah.
+- **Dampak:** skrip tidak bisa dipakai sebagai gerbang regresi Live Chat; perubahan UI berikutnya bisa lolos tanpa deteksi.
+- **Mitigasi sementara:** guard baru `scripts/verify-livechat-viewport.mjs` (8 check, 8/8 PASS) khusus kontrak viewport/container-only scroll.
+- **Rencana:** perbarui selector/teks yang sudah berubah atau pensiunkan skrip lama; gunakan `npm run build` + guard baru + uji perangkat sebagai gate.
 
 ## 369. [Analitik / Baseline] Ketiadaan Snapshot Permanen & Cache Invalidation Pengaturan Tenant (2026-11-24, DEFERRED / ACCEPTED)
 
