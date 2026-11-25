@@ -2,10 +2,11 @@
  * Logika murni pull-to-refresh (swipe-down) untuk halaman tertentu.
  * Dipakai bersama `usePullToRefresh` + `PullToRefreshIndicator`.
  */
+import { applyRubberBand } from './swipeGesture';
 
 export const PULL_THRESHOLD_PX = 64;
 export const PULL_MAX_PX = 96;
-export const PULL_RESISTANCE = 0.55;
+export const PULL_RUBBER_RANGE_PX = 85;
 /** Jeda setelah refresh selesai sebelum gestur berikutnya diterima. */
 export const PULL_COOLDOWN_MS = 2000;
 /** Lama ikon centang "selesai" tampil. */
@@ -13,10 +14,9 @@ export const PULL_DONE_MS = 1100;
 
 export type PullPhase = 'idle' | 'pulling' | 'armed' | 'refreshing' | 'done';
 
-/** Jarak visual setelah hambatan (0..max). */
-export function applyPullResistance(deltaY: number, resistance = PULL_RESISTANCE, max = PULL_MAX_PX): number {
-  if (!Number.isFinite(deltaY) || deltaY <= 0) return 0;
-  return Math.min(max, deltaY * resistance);
+/** Jarak visual setelah redaman eksponensial (0..~max, tanpa dinding keras). */
+export function applyPullResistance(deltaY: number): number {
+  return applyRubberBand(deltaY, PULL_MAX_PX, PULL_RUBBER_RANGE_PX);
 }
 
 /** True bila tarikan sudah melewati ambang refresh. */

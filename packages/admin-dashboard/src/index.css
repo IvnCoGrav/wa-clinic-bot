@@ -595,6 +595,67 @@ textarea,
   animation: slideInFromLeft 0.22s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
+/* Pull-to-refresh: satu-satunya pemilik transform; React tidak menulis style. */
+.ptr-indicator {
+  --ptr-y: 0px;
+  --ptr-progress: 0;
+  transform: translate3d(0, var(--ptr-y), 0);
+  opacity: calc(0.4 + var(--ptr-progress) * 0.6);
+  will-change: transform;
+  transition: transform 220ms cubic-bezier(0.16, 1, 0.3, 1), opacity 120ms linear;
+}
+.ptr-indicator[data-ptr-phase='idle'] {
+  visibility: hidden;
+  opacity: 0;
+  /* Tunda visibility agar animasi balik 220ms tetap terlihat saat gestur dibatalkan. */
+  transition: transform 220ms cubic-bezier(0.16, 1, 0.3, 1), opacity 120ms linear, visibility 0s linear 220ms;
+}
+.ptr-indicator[data-ptr-phase='refreshing'],
+.ptr-indicator[data-ptr-phase='done'] {
+  /* Progress = 0 saat fase done; ikon sukses tidak boleh ikut pudar/mengecil. */
+  opacity: 1;
+}
+.ptr-indicator[data-ptr-phase='done'] .ptr-indicator__pill {
+  transform: scale(1);
+}
+.ptr-indicator[data-ptr-phase='pulling'],
+.ptr-indicator[data-ptr-phase='armed'] {
+  transition: none;
+}
+.ptr-indicator__pill {
+  transform: scale(calc(0.85 + var(--ptr-progress) * 0.15));
+  transition: transform 220ms cubic-bezier(0.16, 1, 0.3, 1), background-color 200ms ease;
+}
+.ptr-indicator[data-ptr-phase='pulling'] .ptr-indicator__pill,
+.ptr-indicator[data-ptr-phase='armed'] .ptr-indicator__pill {
+  transition: none;
+}
+.ptr-indicator__icon {
+  transform: rotate(calc(var(--ptr-progress) * 180deg));
+}
+@media (prefers-reduced-motion: reduce) {
+  .ptr-indicator,
+  .ptr-indicator__pill {
+    transition: none;
+  }
+}
+
+.swipe-back-indicator {
+  --sb-x: 0px;
+  --sb-progress: 0;
+  opacity: 0;
+  visibility: hidden;
+  transform: translate3d(var(--sb-x), -50%, 0) scale(calc(0.8 + var(--sb-progress) * 0.35));
+  will-change: transform;
+}
+.swipe-back-indicator[data-active='true'] {
+  opacity: 1;
+  visibility: visible;
+}
+@media (prefers-reduced-motion: reduce) {
+  .swipe-back-indicator { transition: none; }
+}
+
 /* ========================================================================= */
 /* Native Modal & Popover Animations (Zero External Dependency)              */
 /* Kompatibel dengan kelas-kelas utilitas modal/dialog: animate-in, etc.     */
@@ -750,11 +811,11 @@ html.dark,
    tampak memutih. Animasi ini hanya memulsa cincin/border merah. */
 @keyframes delayPulse {
   0%, 100% {
-    border-color: #dc2626;
+    border-color: rgb(220 38 38);
     box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.55);
   }
   50% {
-    border-color: #ef4444;
+    border-color: rgb(239 68 68);
     box-shadow: 0 0 0 7px rgba(220, 38, 38, 0);
   }
 }

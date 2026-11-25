@@ -169,57 +169,13 @@ export const LiveChatThreadList: React.FC<LiveChatThreadListProps> = ({
     setTimeout(() => setIconTooltip(null), 1200);
   };
 
-  const listTouchStartRef = useRef<{ x: number; y: number; time: number } | null>(null);
   const longPressTimerRef = useRef<any>(null);
   const longPressTriggeredRef = useRef(false);
   const longPressTouchRef = useRef<{ x: number; y: number } | null>(null);
 
-  const handleListTouchStart = (e: React.TouchEvent) => {
-    if (mobileView !== 'list' || e.touches.length !== 1) return;
-    const target = e.target as HTMLElement | null;
-    if (
-      target &&
-      (target.tagName === 'INPUT' ||
-        target.tagName === 'TEXTAREA' ||
-        target.tagName === 'SELECT' ||
-        target.tagName === 'BUTTON' ||
-        target.closest('button') ||
-        target.closest('input') ||
-        target.closest('textarea'))
-    ) {
-      listTouchStartRef.current = null;
-      return;
-    }
-    const touch = e.touches[0];
-    if (touch && touch.clientX <= 45) {
-      listTouchStartRef.current = {
-        x: touch.clientX,
-        y: touch.clientY,
-        time: Date.now(),
-      };
-    }
-  };
-
-  const handleListTouchMove = (e: React.TouchEvent) => {
-    if (!listTouchStartRef.current || e.touches.length === 0) return;
-    const touch = e.touches[0];
-    const deltaX = touch.clientX - listTouchStartRef.current.x;
-    const deltaY = touch.clientY - listTouchStartRef.current.y;
-    if (deltaX > 10 && Math.abs(deltaX) > Math.abs(deltaY) * 1.2) {
-      if (e.cancelable) e.preventDefault();
-    }
-  };
-
   return (
     <div
-      onTouchStart={handleListTouchStart}
-      onTouchMove={handleListTouchMove}
-      onTouchEnd={() => {
-        listTouchStartRef.current = null;
-      }}
-      onTouchCancel={() => {
-        listTouchStartRef.current = null;
-      }}
+      data-no-swipe-back="true"
       className={`${
         mobileView === 'chat' ? 'hidden lg:flex' : 'flex animate-mobile-list-enter lg:animate-none'
       } w-full lg:w-[320px] xl:w-[360px] lg:shrink-0 flex-col h-full bg-surface border-0 lg:border border-divider rounded-none lg:rounded-2xl shadow-none lg:shadow-xs overflow-hidden min-h-0`}

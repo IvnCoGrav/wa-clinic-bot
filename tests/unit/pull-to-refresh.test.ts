@@ -11,9 +11,16 @@ import {
 } from '../../packages/admin-dashboard/src/utils/pullToRefresh';
 
 describe('pullToRefresh — logika gestur swipe-down', () => {
-  it('hambatan & batas maksimum jarak visual', () => {
-    expect(applyPullResistance(100)).toBeCloseTo(55, 5);
-    expect(applyPullResistance(10000)).toBe(PULL_MAX_PX);
+  it('kurva eksponensial: tanpa dinding keras, asimtotik ke PULL_MAX_PX', () => {
+    expect(applyPullResistance(0)).toBe(0);
+    expect(applyPullResistance(85)).toBeCloseTo(60.68, 2);
+    expect(applyPullResistance(100)).toBeCloseTo(66.40, 2);
+    expect(applyPullResistance(10000)).toBeCloseTo(PULL_MAX_PX, 6);
+  });
+
+  it('refresh terpicu pada ~93px tarikan jari', () => {
+    expect(shouldTriggerRefresh(applyPullResistance(92))).toBe(false);
+    expect(shouldTriggerRefresh(applyPullResistance(94))).toBe(true);
   });
 
   it('delta negatif / tidak valid dianggap 0', () => {
