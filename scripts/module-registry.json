@@ -820,6 +820,34 @@
         "packages/admin-dashboard/src/pages/staff/otwFlush.ts"
       ],
       "test": "tests/unit/otw-departure.test.ts"
+    },
+    {
+      "id": "gesture.swipe",
+      "title": "Fisika & klasifikasi gestur swipe kanonis",
+      "description": "Redaman eksponensial, dominansi sumbu, arah swipe, dan pemetaan kelas slide tab — murni tanpa DOM.",
+      "canonical": "packages/admin-dashboard/src/utils/swipeGesture.ts",
+      "exports": [
+        "SWIPE_RATIO",
+        "EDGE_RATIO",
+        "TAB_SWIPE_MIN_PX",
+        "EDGE_OPEN_MIN_PX",
+        "EDGE_ZONE_PX",
+        "SWIPE_MAX_DURATION_MS",
+        "applyRubberBand",
+        "isDominantHorizontal",
+        "resolveSwipeDirection",
+        "slideClassFor"
+      ],
+      "forbiddenDeclarations": [
+        "applyRubberBand",
+        "isDominantHorizontal",
+        "resolveSwipeDirection",
+        "slideClassFor"
+      ],
+      "allowedFiles": [
+        "packages/admin-dashboard/src/utils/swipeGesture.ts"
+      ],
+      "test": "tests/unit/swipe-gesture.test.ts"
     }
   ]
 }

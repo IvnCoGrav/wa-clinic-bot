@@ -7,7 +7,7 @@
 
 ## 1. Daftar Kapabilitas Kanonis Aktif
 
-Total kapabilitas terdaftar: **42 modul**.
+Total kapabilitas terdaftar: **43 modul**.
 
 | ID Kapabilitas | Judul & Deskripsi | Modul Kanonis | Ekspor Resmi | Test File |
 |---|---|---|---|---|
@@ -17,6 +17,7 @@ Total kapabilitas terdaftar: **42 modul**.
 | `date.parse_indonesian` | **Parser tanggal bahasa Indonesia**<br>Parsing ekspresi tanggal bahasa alami Indonesia (hari, nama bulan teks/angka, relatif) menjadi objek Date standar. | [`src/utils/indonesian-date-parser.ts`](../src/utils/indonesian-date-parser.ts) | `parseIndonesianDate`, `parseHistoricalIndonesianDate`, `applyBookingTimeToDate` | [`indonesian-date-parser.test.ts`](../tests/unit/v3/indonesian-date-parser.test.ts) |
 | `followup.holiday_scheduling` | **Kontrak & resolusi Mode Libur Follow-Up**<br>Parser konfigurasi libur tenant, resolver state (active/exit_pending/manual_expired), clamp jadwal ke hari buka pertama, dan epoch skema repeat 25/50/75 hari yang non-retroaktif. | [`src/config/followup-scheduling.ts`](../src/config/followup-scheduling.ts) | `parseFollowUpHolidayConfig`, `parseFollowUpHolidayInput`, `resolveFollowUpHolidayState`, `clampScheduledAtToPostHoliday`, `countWibDaysBetween`, `isRepeatSchemeEligible`, `NEXT_TREATMENT_SCHEME_EPOCH` | [`followup-holiday-state.test.ts`](../tests/unit/followup-holiday-state.test.ts) |
 | `followup.schedule_allocator` | **Alokator slot follow-up beban-aware**<br>Membagi antrean follow-up ke slot jam kerja WIB secara deterministik, menghormati beban existing per hari, dan mengisi celah slot kosong untuk mencegah blasting. | [`src/services/followup-schedule-allocator.ts`](../src/services/followup-schedule-allocator.ts) | `allocateFollowUpSlots`, `loadFollowUpDailyLoad`, `loadFollowUpDailyLoadDetailed`, `getWibMinutes` | [`followup-schedule-allocator.test.ts`](../tests/unit/followup-schedule-allocator.test.ts) |
+| `gesture.swipe` | **Fisika & klasifikasi gestur swipe kanonis**<br>Redaman eksponensial, dominansi sumbu, arah swipe, dan pemetaan kelas slide tab — murni tanpa DOM. | [`packages/admin-dashboard/src/utils/swipeGesture.ts`](../packages/admin-dashboard/src/utils/swipeGesture.ts) | `SWIPE_RATIO`, `EDGE_RATIO`, `TAB_SWIPE_MIN_PX`, `EDGE_OPEN_MIN_PX`, `EDGE_ZONE_PX`, `SWIPE_MAX_DURATION_MS`, `applyRubberBand`, `isDominantHorizontal`, `resolveSwipeDirection`, `slideClassFor` | [`swipe-gesture.test.ts`](../tests/unit/swipe-gesture.test.ts) |
 | `json.extract` | **Ekstraksi JSON dari output AI**<br>Mengekstrak blok JSON seimbang dari respons teks LLM yang mengandung markdown atau teks pelengkap. | [`src/utils/json-extract.ts`](../src/utils/json-extract.ts) | `extractBalancedJson`, `extractJsonContent`, `repairTruncatedJson` | [`json-extract.test.ts`](../tests/unit/json-extract.test.ts) |
 | `livechat.serialize` | **Proyeksi DTO LiveChat**<br>Memetakan baris percakapan/kustomer/reservasi menjadi DTO LiveChat (badge reservasi, sumber lokasi, awaiting-reply) tanpa akses DB. | [`src/services/live-chat.serializer.ts`](../src/services/live-chat.serializer.ts) | `serializeLiveChatConversation` | [`livechat-payload-completeness.test.ts`](../tests/unit/livechat-payload-completeness.test.ts) |
 | `location.adequacy` | **Kecukupan, presisi, dan precedence lokasi tugas**<br>Resolver kanonis kecukupan/presisi/kepercayaan lokasi serta precedence titik tugas (pemilik koordinat) berbasis status; mencegah penurunan label & shareloc palsu. | [`src/domain/location-adequacy.ts`](../src/domain/location-adequacy.ts) | `resolveLocationAdequacy`, `resolveTaskLocationPrecedence`, `extractStaffVerifiedCoords`, `SAME_PLACE_TOLERANCE_M` | [`location-adequacy.test.ts`](../tests/unit/location-adequacy.test.ts) |
@@ -109,6 +110,15 @@ Total kapabilitas terdaftar: **42 modul**.
 - **Simbol Terlarang di Luar Kanonis:** `allocateFollowUpSlots`, `loadFollowUpDailyLoad`
 - **File yang Diizinkan:** `src/services/followup-schedule-allocator.ts`
 - **File Test:** [`tests/unit/followup-schedule-allocator.test.ts`](../tests/unit/followup-schedule-allocator.test.ts)
+
+### `gesture.swipe` — Fisika & klasifikasi gestur swipe kanonis
+
+- **Deskripsi:** Redaman eksponensial, dominansi sumbu, arah swipe, dan pemetaan kelas slide tab — murni tanpa DOM.
+- **File Kanonis:** [`packages/admin-dashboard/src/utils/swipeGesture.ts`](../packages/admin-dashboard/src/utils/swipeGesture.ts)
+- **Ekspor Kanonis:** `SWIPE_RATIO`, `EDGE_RATIO`, `TAB_SWIPE_MIN_PX`, `EDGE_OPEN_MIN_PX`, `EDGE_ZONE_PX`, `SWIPE_MAX_DURATION_MS`, `applyRubberBand`, `isDominantHorizontal`, `resolveSwipeDirection`, `slideClassFor`
+- **Simbol Terlarang di Luar Kanonis:** `applyRubberBand`, `isDominantHorizontal`, `resolveSwipeDirection`, `slideClassFor`
+- **File yang Diizinkan:** `packages/admin-dashboard/src/utils/swipeGesture.ts`
+- **File Test:** [`tests/unit/swipe-gesture.test.ts`](../tests/unit/swipe-gesture.test.ts)
 
 ### `json.extract` — Ekstraksi JSON dari output AI
 

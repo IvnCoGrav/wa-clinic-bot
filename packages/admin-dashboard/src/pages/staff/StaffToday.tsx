@@ -48,6 +48,8 @@ import { ThemeToggle } from '../../components/common/ThemeToggle';
 import { useTripTelemetry } from '../../hooks/useTripTelemetry';
 import { usePullToRefresh } from '../../hooks/usePullToRefresh';
 import { PullToRefreshIndicator } from '../../components/common/PullToRefreshIndicator';
+import { useSwipeGesture } from '../../hooks/useSwipeGesture';
+import { EDGE_ZONE_PX, EDGE_OPEN_MIN_PX, slideClassFor } from '../../utils/swipeGesture';
 import {
   getOtwGate,
   isWithinGpsWarmupWindow,
@@ -142,6 +144,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
     setActiveTab(nextTab);
     setMobileView('list');
   };
+  const tabSlideClass = slideClassFor(slideDirection);
 
   const [loading, setLoading] = useState(true);
   const [tasks, setTasks] = useState<StaffTask[]>([]);
@@ -761,90 +764,48 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
     }
   };
 
-  // Touch swipe gesture handler for mobile navigation
-  const touchStartRef = useRef<{ x: number; y: number; time: number } | null>(null);
-
-  const handleTouchStart = (e: React.TouchEvent) => {
-    if (e.touches.length === 1) {
-      touchStartRef.current = {
-        x: e.touches[0].clientX,
-        y: e.touches[0].clientY,
-        time: Date.now(),
-      };
-    }
-  };
-
-  const handleTouchEnd = (e: React.TouchEvent) => {
-    if (!touchStartRef.current || e.changedTouches.length === 0) return;
-    const start = touchStartRef.current;
-    touchStartRef.current = null;
-
-    const endX = e.changedTouches[0].clientX;
-    const endY = e.changedTouches[0].clientY;
-    const deltaX = endX - start.x;
-    const deltaY = endY - start.y;
-    const deltaTime = Date.now() - start.time;
-
-    // Abaikan gestur lambat (> 650ms), drag pendek, atau scroll dominan vertikal.
-    // Rasio horizontal diperketat (1.8x) agar scroll diagonal jempol tidak salah
-    // ganti tab. Ambang khusus pergantian TAB dinaikkan ke 60px (edge-swipe drawer
-    // tetap 35px karena dimulai dari tepi kanan layar).
-    if (deltaTime > 650 || Math.abs(deltaX) < 35 || Math.abs(deltaX) < Math.abs(deltaY) * 1.8) {
-      return;
-    }
-
-    const isRightEdgeStart = start.x >= window.innerWidth - 55;
-
-    // Right-Edge Swipe Gesture (Usap dari tepi paling kanan layar ke kiri) -> Buka Menu Drawer/Sidebar!
-    if (isRightEdgeStart && deltaX < -35) {
-      setShowMenuDrawer(true);
-      return;
-    }
-
-    // Swipe ke kanan saat drawer terbuka -> Tutup drawer
-    if (showMenuDrawer && deltaX > 35) {
-      setShowMenuDrawer(false);
-      return;
-    }
-
-    // Ambang khusus pergantian TAB (lebih ketat dari edge-swipe/drawer).
-    const TAB_SWIPE_MIN = 60;
-    const tabSwipeEngaged = Math.abs(deltaX) >= TAB_SWIPE_MIN;
-
-    // Ignore tab/chat swipe if other modals or image zoom are open
-    if (
-      detailModalTask ||
-      paymentModalTask ||
-      updateLocationModalTask ||
-      showStaffProfileModal ||
-      showMenuDrawer ||
-      zoomImageUrl
-    ) {
-      return;
-    }
-
-    // Case 1: In full-screen mobile chat view -> swipe RIGHT (left-to-right) navigates back to list
-    if (mobileView === 'chat' && activeTab === 'today') {
-      if (deltaX > TAB_SWIPE_MIN) {
-        handleBackToList();
+  const swipeRef = useSwipeGesture<HTMLDivElement>({
+    onSwipe: ({ direction, startX }) => {
+      if (
+        detailModalTask ||
+        paymentModalTask ||
+        updateLocationModalTask ||
+        showStaffProfileModal ||
+        showMenuDrawer ||
+        zoomImageUrl
+      ) {
+        return;
       }
-      return;
-    }
 
-    // Case 2: In tab list view -> swipe left/right switches tabs with directional sliding animation
-    if (mobileView === 'list' && tabSwipeEngaged) {
+      if (mobileView === 'chat' && activeTab === 'today') {
+        if (direction === 'right') handleBackToList();
+        return;
+      }
+
+      if (mobileView !== 'list') return;
+      // Tepi kiri milik Layout (swipe-back); jangan dobel aksi.
+      if (startX <= EDGE_ZONE_PX) return;
+
       const tabs: Array<'today' | 'upcoming' | 'completed'> = ['today', 'upcoming', 'completed'];
       const currentIndex = tabs.indexOf(activeTab);
-
-      if (deltaX < -TAB_SWIPE_MIN && currentIndex < tabs.length - 1) {
-        // Swipe Left -> next tab (content slides from right)
+      if (direction === 'left' && currentIndex < tabs.length - 1) {
         handleTabChange(tabs[currentIndex + 1]);
-      } else if (deltaX > TAB_SWIPE_MIN && currentIndex > 0) {
-        // Swipe Right -> previous tab (content slides from left)
+      } else if (direction === 'right' && currentIndex > 0) {
         handleTabChange(tabs[currentIndex - 1]);
       }
-    }
-  };
+    },
+  });
+
+  const drawerSwipeRef = useSwipeGesture<HTMLDivElement>({
+    threshold: EDGE_OPEN_MIN_PX,
+    onSwipe: ({ direction, fromRightEdge }) => {
+      if (!showMenuDrawer) {
+        if (direction === 'left' && fromRightEdge) setShowMenuDrawer(true);
+        return;
+      }
+      if (direction === 'right') setShowMenuDrawer(false);
+    },
+  });
 
   // Popstate event listener for hardware / browser back button
   useEffect(() => {
@@ -2380,13 +2341,11 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
   });
 
   return (
-    <div className="h-[100dvh] max-h-[100dvh] w-full max-w-full overflow-hidden bg-app text-ink flex flex-col font-sans select-none antialiased">
-      <PullToRefreshIndicator
-        distance={pullToRefresh.distance}
-        progress={pullToRefresh.progress}
-        phase={pullToRefresh.phase}
-        isDragging={pullToRefresh.isDragging}
-      />
+    <div
+      data-swipe-menu-owner="true"
+      className="h-[100dvh] max-h-[100dvh] w-full max-w-full overflow-hidden bg-app text-ink flex flex-col font-sans select-none antialiased"
+    >
+      <PullToRefreshIndicator ref={pullToRefresh.indicatorRef} phase={pullToRefresh.phase} />
       {/* WhatsApp Web Minimalist Clean Top Bar — hidden on mobile when chat active (fondasional gating) */}
       <header className={`${mobileView === 'chat' && activeTab === 'today' ? 'hidden md:block' : 'block'} bg-surface border-b border-divider dark:border-divider px-3 sm:px-4 py-2.5 sticky top-0 z-30 shadow-xs pt-[calc(0.625rem+env(safe-area-inset-top,0px))] md:pt-2.5 pl-[max(0.75rem,env(safe-area-inset-left,0px))] pr-[max(0.75rem,env(safe-area-inset-right,0px))] shrink-0`}>
         <div className="flex items-center justify-between gap-2 sm:gap-4 max-w-7xl mx-auto w-full">
@@ -2555,20 +2514,19 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
 
       {/* Main Split-View Workspace with Mobile Touch Swipe Navigation */}
       <div
+        ref={swipeRef}
         className="flex-1 min-h-0 flex overflow-hidden touch-pan-y"
-        onTouchStart={handleTouchStart}
-        onTouchEnd={handleTouchEnd}
       >
         {/* ========================================================================= */}
         {/* TAB 1: TUGAS HARI INI & LIVE CHAT SPLIT-VIEW (1 PAGE PER VIEW ON MOBILE) */}
         {/* ========================================================================= */}
         {activeTab === 'today' ? (
-          <>
+          <React.Fragment key={activeTab}>
             {/* Left Column: WhatsApp Chat List & Visit Schedule */}
             <div
               className={`${
                 mobileView === 'chat' ? 'hidden md:flex' : 'flex'
-              } w-full md:w-[420px] flex-col border-r border-divider dark:border-divider bg-fill-1 overflow-hidden flex-shrink-0 min-h-0 h-full animate-fadeIn`}
+              } w-full md:w-[420px] flex-col border-r border-divider dark:border-divider bg-fill-1 overflow-hidden flex-shrink-0 min-h-0 h-full ${tabSlideClass}`}
             >
               {/* Area gulir daftar tugas: judul + pencarian ikut ter-scroll,
                   HANYA baris filter status yang sticky (permintaan UX 2026-11-23). */}
@@ -2644,7 +2602,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
               </div>
 
                 {/* Hanya baris filter status yang sticky saat daftar digulir */}
-                <div className="sticky top-0 z-10 bg-surface/95 backdrop-blur border-b border-divider dark:border-divider px-3 py-2 flex items-center gap-1.5 overflow-x-auto no-scrollbar">
+                <div data-horizontal-scroll="true" className="sticky top-0 z-10 bg-surface/95 backdrop-blur border-b border-divider dark:border-divider px-3 py-2 flex items-center gap-1.5 overflow-x-auto no-scrollbar">
                   <button
                     type="button"
                     onClick={() => setTodayFilter('all')}
@@ -2750,6 +2708,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
 
             {/* Right Column: WhatsApp Live Chat Canvas */}
             <div
+              data-no-swipe-back="true"
               className={`${
                 mobileView === 'list' ? 'hidden md:flex' : 'flex'
               } flex-1 flex-col bg-content overflow-hidden relative min-h-0 h-full`}
@@ -2827,12 +2786,12 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
                 </div>
               )}
             </div>
-          </>
+          </React.Fragment>
         ) : activeTab === 'upcoming' ? (
           /* ========================================================================= */
           /* TAB 2: JADWAL MENDATANG (READ-ONLY, NO CHAT, 1 PAGE) */
           /* ========================================================================= */
-          <div className="flex-1 overflow-y-auto p-4 pb-20 sm:p-6 max-w-5xl mx-auto w-full space-y-6 animate-fadeIn">
+          <div key={activeTab} className={`flex-1 overflow-y-auto p-4 pb-20 sm:p-6 max-w-5xl mx-auto w-full space-y-6 ${tabSlideClass}`}>
             {/* Search Bar */}
             <div className="relative">
               <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center text-ink-2">
@@ -2896,7 +2855,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
           /* ========================================================================= */
           /* TAB 3: TREATMENT YANG SUDAH DILAKUKAN (SELESAI, 1 PAGE) */
           /* ========================================================================= */
-          <div className="flex-1 overflow-y-auto p-4 pb-20 sm:p-6 max-w-5xl mx-auto w-full space-y-6 animate-fadeIn">
+          <div key={activeTab} className={`flex-1 overflow-y-auto p-4 pb-20 sm:p-6 max-w-5xl mx-auto w-full space-y-6 ${tabSlideClass}`}>
             {/* Header / Summary Metrics */}
             <div className="grid grid-cols-1 gap-3.5">
               <div className="bg-surface p-4 rounded-2xl border border-divider shadow-xs flex items-center space-x-3.5">
@@ -2983,8 +2942,7 @@ export const StaffToday: React.FC<StaffTodayProps> = ({ defaultTab }) => {
       {/* RIGHT SIDEBAR SLIDE-OVER DRAWER (MENU GARIS TIGA - MAKS 50% LAYAR) */}
       {/* ========================================================================= */}
       <div
-        onTouchStart={handleTouchStart}
-        onTouchEnd={handleTouchEnd}
+        ref={drawerSwipeRef}
         className={`fixed inset-0 z-50 flex justify-end transition-opacity duration-300 ${
           showMenuDrawer ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
         }`}

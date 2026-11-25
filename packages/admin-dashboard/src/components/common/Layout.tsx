@@ -56,6 +56,12 @@ import { ThemeToggle } from './ThemeToggle';
 import { AppErrorBoundary } from './AppErrorBoundary';
 import { useBodyScrollLock } from '../../hooks/useBodyScrollLock';
 import { useCopilot } from '../../contexts/CopilotContext';
+import {
+  EDGE_ZONE_PX,
+  EDGE_OPEN_MIN_PX,
+  EDGE_RATIO,
+  applyRubberBand,
+} from '../../utils/swipeGesture';
 
 export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { businessName } = useBrandIdentity();
@@ -301,10 +307,16 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
 
       const target = e.target as HTMLElement | null;
 
-      // Guard: Abaikan jika menyentuh area live chat kecuali jika benar-benar di zona tepi kanan 30px
+      // Guard: Serahkan ke halaman bila halaman adalah pemilik menu swipe (misal StaffToday)
+      if (target?.closest('[data-swipe-menu-owner="true"]')) {
+        isTracking = false;
+        return;
+      }
+
+      // Guard: Abaikan jika menyentuh area live chat kecuali jika benar-benar di zona tepi kanan
       if (target?.closest('[data-no-swipe-menu]') || target?.closest('[data-chat-detail]')) {
         const touch = e.touches[0];
-        if (!touch || touch.clientX < window.innerWidth - 30) {
+        if (!touch || touch.clientX < window.innerWidth - EDGE_ZONE_PX) {
           isTracking = false;
           return;
         }
@@ -329,8 +341,8 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
       touchStartY = touch.clientY;
       wasOpenAtTouchStart = mobileMenuOpen;
 
-      // Zona tepi kanan ketat (hanya 30px dari sisi kanan layar) untuk membuka menu
-      const isRightEdge = touchStartX >= window.innerWidth - 30;
+      // Zona tepi kanan ketat (hanya EDGE_ZONE_PX dari sisi kanan layar) untuk membuka menu
+      const isRightEdge = touchStartX >= window.innerWidth - EDGE_ZONE_PX;
       if (mobileMenuOpen || isRightEdge) {
         isTracking = true;
       } else {
@@ -347,8 +359,8 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
       const absY = Math.abs(deltaY);
 
       // Case 1: When sidebar was CLOSED at start -> Swipe from RIGHT edge towards LEFT to open
-      if (!wasOpenAtTouchStart && touchStartX >= window.innerWidth - 24) {
-        if (deltaX < -45 && absX > absY * 2.2) {
+      if (!wasOpenAtTouchStart && touchStartX >= window.innerWidth - EDGE_ZONE_PX) {
+        if (deltaX < -EDGE_OPEN_MIN_PX && absX > absY * EDGE_RATIO) {
           justSwipedRef.current = true;
           openMobileMenu();
           isTracking = false;
@@ -358,7 +370,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
 
       // Case 2: When sidebar was OPEN at start -> Swipe RIGHT to close
       if (wasOpenAtTouchStart) {
-        if (deltaX > 45 && absX > absY * 2.2) {
+        if (deltaX > EDGE_OPEN_MIN_PX && absX > absY * EDGE_RATIO) {
           justSwipedRef.current = true;
           dismissMobileMenu();
           isTracking = false;
@@ -387,7 +399,12 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
   }, [mobileMenuOpen]);
 
   // ⬅️ Mobile Edge Swipe-Back Gesture Navigation (Left to Right from Edge)
-  const [swipeBackDistance, setSwipeBackDistance] = useState(0);
+  const swipeBackStateRef = useRef(0);
+  const swipeBackActiveRef = useRef(false);
+  const swipeBackArmedRef = useRef(false);
+  const swipeBackIndicatorRef = useRef<HTMLDivElement>(null);
+  const [swipeBackActive, setSwipeBackActive] = useState(false);
+  const [swipeBackArmed, setSwipeBackArmed] = useState(false);
   const swipeBackStartRef = useRef<{ x: number; y: number } | null>(null);
 
   useEffect(() => {
@@ -400,6 +417,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
         target?.closest('input') ||
         target?.closest('textarea') ||
         target?.closest('select') ||
+        target?.closest('[data-no-swipe]') ||
         target?.closest('[data-no-swipe-back]') ||
         target?.closest('[data-horizontal-scroll]')
       ) {
@@ -422,7 +440,9 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
       // Jika pergerakan dominan vertikal, segera batalkan pelacakan gestur swipe tepi
       if (Math.abs(deltaY) > 12 && Math.abs(deltaY) > deltaX) {
         swipeBackStartRef.current = null;
-        setSwipeBackDistance(0);
+        swipeBackStateRef.current = 0;
+        const el = swipeBackIndicatorRef.current;
+        if (el) el.style.setProperty('--sb-x', '0px');
         return;
       }
 
@@ -430,19 +450,31 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
         if (e.cancelable) {
           e.preventDefault();
         }
-        // Kurva peredam (resistance curve / rubber-band damping):
-        // Maksimal range 100px (100%), semakin ke kanan pergerakan semakin berkurang/lambat
-        const maxRangePx = 100;
-        const dist = maxRangePx * (1 - Math.exp(-deltaX / 100));
-        setSwipeBackDistance(dist);
+        const dist = applyRubberBand(deltaX, 100, 100);
+        swipeBackStateRef.current = dist;
+        const el = swipeBackIndicatorRef.current;
+        if (el) {
+          el.style.setProperty('--sb-x', `${dist}px`);
+          el.style.setProperty('--sb-progress', String(Math.min(1, dist / 100)));
+        }
+        if (dist > 0 && !swipeBackActiveRef.current) {
+          swipeBackActiveRef.current = true;
+          setSwipeBackActive(true);
+        }
+        if ((dist >= 50) !== swipeBackArmedRef.current) {
+          swipeBackArmedRef.current = dist >= 50;
+          setSwipeBackArmed(swipeBackArmedRef.current);
+        }
       } else if (deltaX < 0) {
-        setSwipeBackDistance(0);
+        swipeBackStateRef.current = 0;
+        const el = swipeBackIndicatorRef.current;
+        if (el) el.style.setProperty('--sb-x', '0px');
       }
     };
 
     const handleEdgeTouchEnd = () => {
       // Threshold aktivasi (mencapai 50% dari kurva maksimum 100px)
-      if (swipeBackDistance >= 50) {
+      if (swipeBackStateRef.current >= 50) {
         const backEvent = new CustomEvent('app-swipe-back', { cancelable: true });
         const notHandled = window.dispatchEvent(backEvent);
         if (notHandled) {
@@ -459,7 +491,13 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
           }
         }
       }
-      setSwipeBackDistance(0);
+      swipeBackStateRef.current = 0;
+      swipeBackActiveRef.current = false;
+      swipeBackArmedRef.current = false;
+      setSwipeBackArmed(false);
+      setSwipeBackActive(false);
+      const el = swipeBackIndicatorRef.current;
+      if (el) el.style.setProperty('--sb-x', '0px');
       swipeBackStartRef.current = null;
     };
 
@@ -474,7 +512,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
       window.removeEventListener('touchend', handleEdgeTouchEnd);
       window.removeEventListener('touchcancel', handleEdgeTouchEnd);
     };
-  }, [swipeBackDistance]);
+  }, []);
 
   const isLiveChat = location.pathname.includes('/live-chat');
 
@@ -517,28 +555,22 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
       className={`${isLiveChat ? 'h-[100dvh] max-h-[100dvh] overflow-hidden touch-pan-y' : 'min-h-screen'} bg-app text-ink flex flex-col md:flex-row relative overscroll-y-contain`}
     >
       {/* ⬅️ Mobile Edge Swipe-Back Floating Indicator (Max 100px with resistance physics) */}
-      {swipeBackDistance > 0 && (
+      <div
+        ref={swipeBackIndicatorRef}
+        data-active={swipeBackActive ? 'true' : 'false'}
+        aria-hidden="true"
+        className="swipe-back-indicator fixed left-2 top-1/2 z-[99999] pointer-events-none flex items-center justify-center"
+      >
         <div
-          className="fixed left-2 top-1/2 -translate-y-1/2 z-[99999] pointer-events-none transition duration-75 ease-out flex items-center justify-center"
-          style={{
-            transform: `translate(${swipeBackDistance}px, -50%) scale(${0.8 + (swipeBackDistance / 100) * 0.35})`,
-            opacity: Math.min(swipeBackDistance / 20, 1),
-          }}
+          className={`p-3 rounded-full shadow-2xl backdrop-blur-md border flex items-center justify-center ${
+            swipeBackArmed
+              ? 'bg-accent text-on-solid border-white/40 ring-4 ring-accent/25 shadow-accent/30'
+              : 'bg-surface/95 text-accent border-accent/30 shadow-lg'
+          }`}
         >
-          <div
-            className={`p-3 rounded-full shadow-2xl backdrop-blur-md border transition flex items-center justify-center ${
-              swipeBackDistance >= 50
-                ? 'bg-accent text-on-solid border-white/40 ring-4 ring-accent/25 shadow-accent/30'
-                : 'bg-surface/95 text-accent border-accent/30 shadow-lg'
-            }`}
-          >
-            <ChevronLeft
-              size={22}
-              className={`transition-transform duration-100 ${swipeBackDistance >= 50 ? 'scale-115 stroke-[2.5]' : ''}`}
-            />
-          </div>
+          <ChevronLeft size={22} className={swipeBackArmed ? 'scale-115 stroke-[2.5]' : ''} />
         </div>
-      )}
+      </div>
 
       {/* 🔔 Floating In-App WhatsApp-Style Incoming Chat Notification Banner */}
       {incomingToast && (
