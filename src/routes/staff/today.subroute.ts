@@ -12,7 +12,7 @@ import {
 } from '../../services/staff-trip-tracking.service';
 import { DEFAULT_TENANT_ID } from '../../config/tenant';
 import { prisma } from '../../db/client';
-import { isStaffSupervisorRole, canReceiveStaffAlert } from '../../domain/staff-role';
+import { isStaffSupervisorRole, canReceiveStaffAlert, isStaffTherapistRole } from '../../domain/staff-role';
 import { sanitizeMessageForStaff, sanitizeStaffHubPayload } from '../../utils/pii-masker';
 import { sanitizeCustomerNameForGreeting } from '../../utils/name-sanitizer';
 import { ensureStaffSignature } from '../../utils/staff-signature';
@@ -865,7 +865,10 @@ export async function staffTodayRoutes(fastify: FastifyInstance) {
           (auth.reservation as any).booking_date ?? null,
           progress?.etaMinutes ?? null
         );
-        if (delay.reason === 'OK' && delay.level !== 'none' && delay.level !== record.delayLevel) {
+        // Early warning keterlambatan hanya untuk staf terapis yang ditugaskan
+        const isTherapist = isStaffTherapistRole((auth.reservation as any).assigned_staff?.role);
+
+        if (isTherapist && delay.reason === 'OK' && delay.level !== 'none' && delay.level !== record.delayLevel) {
           staffTripTrackingService.recordTripPing(
             tenantId,
             reservationId,

@@ -4,6 +4,16 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### 2026-11-25 - Feat: Spesialisasi Notifikasi Keterlambatan Khusus Staff Terapis (#376)
+
+- **Konteks:** Menindaklanjuti audit operasional bahwa Departure Watchdog sebelumnya menyerap seluruh jadwal tanpa filter peran, memicu alarm palsu "Bidan Belum Ditugaskan terlambat" dan menghitung keterlambatan untuk staf kantor non-lapangan (Admin CS, Advertiser, SPV).
+- **Perbaikan Fondasional:**
+  1. **Predikat Kanonis (`src/domain/staff-role.ts`):** `isStaffTherapistRole` sebagai penentu peran terapis lapangan dengan normalisasi case-insensitive dan **kontrak tertutup 9 kunci** (`THERAPIST`, `SENIOR_THERAPIST`, `JUNIOR_THERAPIST`, `TERAPIS`, `TERAPIS_SENIOR`, `TERAPIS_JUNIOR`, `BIDAN`, `BIDAN_SENIOR`, `BIDAN_JUNIOR`). Peran semu (`NON_THERAPIST`, `ADMIN_THERAPIST`, `EX_THERAPIST`) ditolak; custom role di luar daftar tidak dianggap terapis sampai didaftarkan sengaja.
+  2. **Query & Filter Watchdog (`src/services/staff-departure-watchdog.service.ts`):** `listTodayDelayAlerts` menyaring `assigned_staff_id: { not: null }` (tanpa enum whitelist DB yang rentan mati senyap) dan memvalidasi `isStaffTherapistRole(r.assigned_staff?.role)`. Jadwal unassigned dan staf non-terapis dieliminasi 100% dari radar watchdog.
+  3. **Hardening Gerbang Notifikasi Admin (`src/services/staff-departure-watchdog.service.ts`):** `notifyDelayToAdmin` menambahkan `role: true` pada select dan menolak reservasi berstaf non-terapis dengan kode `NOT_A_THERAPIST` dan audit failure.
+  4. **PWA & Telemetry Guard (`src/services/staff-reservation.service.ts`, `src/services/staff-reservation-access.service.ts`, `src/routes/staff/today.subroute.ts`, `src/routes/admin/reservation-dispatch-trip.subroute.ts`):** Helper kanonis `loadAuthorizedReservation` menyertakan `role: true`; event `staff.trip_delay_warning` dan perhitungan itinerary `getTodayTasks` hanya menyematkan `delay` untuk Staff Terapis.
+- **Hasil Pengujian:** 118 tes targeted hijau (unit & integrasi watchdog, role delivery, otw, telemetry, dispatch) + typecheck & check:reuse bersih (189 baseline, 0 baru) + build penuh sukses. **Full suite `npm test`:** 1.076 file (1.075 pass, 1 skip), 8.497 test (8.469 pass, 28 skip, **0 failure**) — flake #368 tidak muncul pada run ini.
+
 #### 2026-11-24 - Fix: Live Chat iOS — Kompensasi Visual Viewport Saat Mengetik (#370)
 
 - **Masalah:** Saat kolom ketik ("Tulis balasan...") difokuskan pada iPhone Safari / PWA standalone, keyboard iOS muncul dan visual viewport mengecil sekaligus bergeser ke bawah (`visualViewport.offsetTop` / `pageTop` ≈ 355 px). Aplikasi belum mengompensasi `offsetTop`, sehingga shell Live Chat tertinggal di atas dan meninggalkan area kosong (celah hitam) di atas keyboard. Selain itu, `onFocus` memanggil `window.scrollTo(0,0)` dan `messagesEndRef.scrollIntoView(...)`, memicu perebutan scroll dan lonjakan tampilan.

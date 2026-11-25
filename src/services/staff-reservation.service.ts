@@ -31,6 +31,7 @@ import {
 } from '../domain/location-source';
 import { estimateTravelDurationMinutes } from '../utils/travel-duration';
 import { computeItineraryDelays } from '../domain/delay-watchdog';
+import { isStaffTherapistRole } from '../domain/staff-role';
 import { getDelayWatchdogSettings } from '../config/delay-watchdog-config';
 
 export interface StaffTaskChild {
@@ -742,8 +743,10 @@ export class StaffReservationService {
 
       // Perhitungan keterlambatan departure watchdog — satu seam domain yang
       // sama dengan service watchdog (anti-divergensi angka HP bidan vs admin).
-      const delayByReservationId = computeItineraryDelays({
-        tasks: rows.map((r) => ({
+      // Dikhususkan untuk Staff Terapis; tugas non-terapis/unassigned tidak dihitung telat.
+      const therapistTasks = rows
+        .filter((r) => isStaffTherapistRole((r as any).assigned_staff?.role))
+        .map((r) => ({
           id: r.id,
           staffId: (r as any).assigned_staff?.id || null,
           staffBase: (r as any).assigned_staff
@@ -763,7 +766,10 @@ export class StaffReservationService {
           arrivedAt: (r as any).arrived_at,
           hasDeparted: Boolean((r as any).otw_sent_at),
           hasArrived: Boolean((r as any).arrived_at),
-        })),
+        }));
+
+      const delayByReservationId = computeItineraryDelays({
+        tasks: therapistTasks,
         clinicLocation: clinicLoc,
         now,
         toleranceMinutes: watchdogSettings.toleranceMinutes,

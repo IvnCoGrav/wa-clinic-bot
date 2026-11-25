@@ -79,11 +79,29 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
   3. **Penanganan Status Pembatalan & Status Khusus (#193a / R-03):** Fungsi `isCancelledStatus` kini menggunakan normalisasi `String(status).toLowerCase() === 'cancelled'` secara case-insensitive dengan pre-filter SQL `notIn: ['cancelled', 'CANCELLED']`. Status non-standar seperti `rejected` atau `hold` saat ini masih dihitung ke omset riil (sesuai perilaku historis #193a) dan dijadwalkan untuk unifikasi semantik status reservasi di tiket terpisah.
 - **Rencana Lanjutan Bila Diperlukan:** Jika volume data reservasi per tenant bertumbuh hingga ratusan ribu baris, buat background worker bulanan yang membekukan baseline ke tabel agregat atau tambahkan pemicu `clearAnalyticsBaselineSettingsCache(tenantId)` di rute pembaruan tenant settings.
 
+## 376. [Staff / Watchdog] Spesialisasi Departure Watchdog Khusus Staff Terapis & Eksklusi Jadwal Unassigned (2026-11-25, RESOLVED)
+
+- **Status:** RESOLVED (2026-11-25)
+- **Konteks:** Sistem Departure Watchdog & Delay Early Warning sebelumnya menyerap seluruh jadwal hari ini tanpa memfilter `assigned_staff_id: { not: null }` maupun peran staf.
+- **Penyebab & Resiko:**
+  1. Reservasi yang belum ditugaskan (`unassigned`) dikelompokkan ke satu rantai rute fiktif (`delay-watchdog.ts:131-136`) dan memicu alert *"Bidan Belum Ditugaskan terlambat"* di Live Chat CS.
+  2. Reservasi yang ditugaskan ke staf kantor non-terapis (`ADMIN_CS`, `SPV_CS`, `ADVERTISER`, `SUPER_ADMIN`) ikut dihitung estimasi keterlambatan perjalanannya.
+- **Solusi yang Diimplementasikan:**
+  1. Predikat kanonis murni `isStaffTherapistRole` di `src/domain/staff-role.ts` (whitelist eksplisit: `THERAPIST`, `SENIOR_THERAPIST`, `JUNIOR_THERAPIST`, `TERAPIS`, `TERAPIS_SENIOR`, `TERAPIS_JUNIOR`, `BIDAN`, `BIDAN_SENIOR`, `BIDAN_JUNIOR`; menolak secara ketat peran semu seperti `NON_THERAPIST`, `ADMIN_THERAPIST`, atau `EX_THERAPIST`).
+  2. Query `listTodayDelayAlerts` pada `staff-departure-watchdog.service.ts` difilter dengan `where: { assigned_staff_id: { not: null } }`, select `role: true`, dan in-memory filter `isStaffTherapistRole(r.assigned_staff?.role)`.
+  3. Gerbang `notifyDelayToAdmin` menolak reservasi non-terapis dengan kode `NOT_A_THERAPIST`.
+  4. `StaffReservationService.getTodayTasks` hanya menyematkan `delay` pada reservasi yang ditugaskan ke Staff Terapis.
+  5. Telemetry ping `staff.trip_delay_warning` dan dispatch trip subroute memvalidasi `isStaffTherapistRole` staf yang ditugaskan.
+- **Keputusan Produk & Risiko Operasional Terbuka (T-04):**
+  Jadwal *unassigned* (belum ditugaskan) tidak dimunculkan sebagai keterlambatan keberangkatan di watchdog (karena belum ada terapis yang ditugaskan berangkat). Risiko operasional: CS tidak mendapat alarm push/SSE proaktif dari departure watchdog untuk jadwal yang belum ada bidannya, melainkan bergantung pada monitoring pasif filter tab Kalender & Reservasi ("Belum Ditugaskan"). Jika di masa depan manajemen menginginkan alarm proaktif tersendiri untuk jadwal belum ditugaskan, disarankan membangun modul "Unassigned Schedule Alert" khusus dengan SLA waktu (mis. H-2 jam belum ada terapis), bukan menumpang pada departure watchdog.
+- **Batasan Custom Role (R-01, 2026-11-25):** daftar peran terapis bersifat **tertutup** (9 kunci kanonis). Custom role tenant di luar daftar (mis. `MIDWIFE`, `BIDAN_SENIOR_2`, `TERAPIS_LAPANGAN`) **tidak** mendapat delay alert sampai kuncinya ditambahkan ke `CANONICAL_THERAPIST_ROLES` + test. Ini disengaja agar peran semu seperti `NON_THERAPIST` tidak lolos. Solusi jangka panjang (belum dieksekusi karena butuh migrasi): penanda kapabilitas di DB, mis. `Staff.is_field_therapist`, agar tenant dapat menandai role baru tanpa deploy.
+
 ## 368. [Test Hygiene] Flaky `reuse-gate` (perf) & `media-watermark-autoprune` (mtime) (2026-11-24, OPEN)
 
 - **Status:** OPEN — test-only; bukan bug produk, tidak menghalangi deploy logout.
 - **Gejala 1 (`reuse-gate.test.ts` #10):** pada suite penuh paralel, gate `src/` memakan **82,9 dtk** (batas 60 dtk) → 1 failure. Rerun isolasi: **14/14 PASS**, gate **35,9 dtk**. Jadi flaky performa di bawah beban paralel, bukan regresi kode.
 - **Gejala 2 (`media-watermark-autoprune.test.ts`):** dijalankan sendirian di Windows → **4/15 gagal** (4.2, 4.3, 4.4, 4.11). File baru ditulis lalu langsung dipangkas; mtime NTFS bisa sedikit **di depan** `Date.now()` (terukur 33/50), sehingga `Date.now() - mtime < 0` tetap dianggap "file baru" walau `MEDIA_HD_MIN_AGE_HOURS=0`. Di suite penuh test ini lulus (flaky).
+- **Verifikasi ulang 2026-11-25 (run #376, sesi terpisah):** `npm test` penuh → **1.075/1.076 file pass (1 skip)**, **8.469/8.497 test pass (28 skip), 0 failure**. `reuse-gate` #10 dan `media-watermark-autoprune` 4.11 **lulus** di run ini, sehingga kedua kasus di atas tetap dikategorikan flaky/tidak konsisten (bukan deterministik); jangan mengubah kode fitur untuk mengejarnya.
 - **Usulan perbaikan (belum dieksekusi):** guard `media.service.ts:947` menjadi `if (minAgeMs > 0 && Date.now() - candidate.mtimeMs < minAgeMs)` agar env `0` benar-benar menonaktifkan guard; atau test men-set mtime ke masa lalu seperti test 4.5. Untuk `reuse-gate`, naikkan ambang waktu khusus CI paralel atau tandai flaky.
 
 ## 367. [Auth / Staf] Dual-Source Auth Context & Residu Sesi Logout Offline (2026-11-23)

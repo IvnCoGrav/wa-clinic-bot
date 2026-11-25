@@ -35,7 +35,7 @@ export async function loadAuthorizedReservation(
     where: { id: reservationId },
     include: {
       customer: { select: { id: true, lat: true, lng: true, name: true } },
-      assigned_staff: { select: { name: true } },
+      assigned_staff: { select: { name: true, role: true } },
     },
   });
   if (!reservation || (reservation as any).tenant_id !== tenantId) {

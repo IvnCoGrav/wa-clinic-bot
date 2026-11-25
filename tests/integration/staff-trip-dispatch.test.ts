@@ -5,6 +5,7 @@ import { StaffAuthService } from '../../src/services/staff-auth.service';
 import { prisma } from '../../src/db/client';
 import { queueService } from '../../src/services/queue.service';
 import { staffTripTrackingService } from '../../src/services/staff-trip-tracking.service';
+import { getLiveChatHub } from '../../src/services/live-chat-hub.service';
 
 const ADMIN_KEY = 'test_admin_key_trip_dispatch';
 const ADMIN_HEADERS = { 'x-api-key': ADMIN_KEY };
@@ -50,6 +51,7 @@ describe('Staff Trip Telemetry & Admin Dispatch (Fase 2)', () => {
     arrived_at: null,
     booking_date: new Date(),
     customer: { id: 'cust-1', name: 'Bunda Rina', lat: -7.28, lng: 112.74 },
+    assigned_staff: { name: 'Bidan Dewi', phone: '08123456789', role: 'THERAPIST' },
   };
 
   beforeAll(async () => {
@@ -227,5 +229,98 @@ describe('Staff Trip Telemetry & Admin Dispatch (Fase 2)', () => {
     expect(body.data.trip).toBeNull();
     expect(body.data.isStalledOutsideTarget).toBe(false);
     expect(body.data.readyText.length).toBeGreaterThan(0);
+  });
+
+  it('POST /api/staff/telemetry mempublikasikan staff.trip_delay_warning HANYA untuk peran terapis', async () => {
+    const hub = getLiveChatHub();
+    const publishSpy = vi.spyOn(hub, 'publish').mockResolvedValue(true);
+
+    // Jadwal 45 menit yang lalu agar level keterlambatan masuk warning/critical
+    const pastBooking = new Date(Date.now() - 45 * 60 * 1000);
+
+    // 1) Telemetry staf terapis: delay warning WAJIB dipublish
+    vi.mocked(prisma.reservation.findUnique).mockResolvedValueOnce({
+      ...reservationRow,
+      booking_date: pastBooking,
+      assigned_staff: { name: 'Bidan Dewi', phone: '08123456789', role: 'THERAPIST' },
+    } as any);
+
+    const resTherapist = await app.inject({
+      method: 'POST',
+      url: '/api/staff/telemetry',
+      headers: staffHeaders,
+      payload: { reservationId: RES_ID, lat: -7.35, lng: 112.70, speed: 10, accuracy: 15 },
+    });
+    expect(resTherapist.statusCode).toBe(200);
+
+    const warningCalls = publishSpy.mock.calls.filter(
+      (call) => (call[0] as any)?.type === 'staff.trip_delay_warning'
+    );
+    expect(warningCalls.length).toBeGreaterThanOrEqual(1);
+
+    // 2) Telemetry staf non-terapis (ADMIN_CS): delay warning DILARANG dipublish
+    publishSpy.mockClear();
+    staffTripTrackingService.clearAll();
+
+    vi.mocked(prisma.reservation.findUnique).mockResolvedValueOnce({
+      ...reservationRow,
+      booking_date: pastBooking,
+      assigned_staff: { name: 'Admin Maya', phone: '08123456789', role: 'ADMIN_CS' },
+    } as any);
+
+    const resAdmin = await app.inject({
+      method: 'POST',
+      url: '/api/staff/telemetry',
+      headers: staffHeaders,
+      payload: { reservationId: RES_ID, lat: -7.35, lng: 112.70, speed: 10, accuracy: 15 },
+    });
+    expect(resAdmin.statusCode).toBe(200);
+
+    const adminWarningCalls = publishSpy.mock.calls.filter(
+      (call) => (call[0] as any)?.type === 'staff.trip_delay_warning'
+    );
+    expect(adminWarningCalls.length).toBe(0);
+  });
+
+  it('GET /api/admin/dispatch/trip/:id membedakan evaluasi delayStatus terapis vs non-terapis', async () => {
+    staffTripTrackingService.recordTripPing(TENANT, RES_ID, STAFF_ID, {
+      lat: -7.28,
+      lng: 112.74,
+      speed: 4,
+      accuracy: 12,
+    });
+
+    // 1) Staf terapis -> delayStatus dihitung normal
+    vi.mocked(prisma.reservation.findUnique).mockResolvedValueOnce({
+      ...reservationRow,
+      assigned_staff: { name: 'Bidan Dewi', phone: '08123456789', role: 'THERAPIST' },
+    } as any);
+
+    const resTherapist = await app.inject({
+      method: 'GET',
+      url: `/api/admin/dispatch/trip/${RES_ID}`,
+      headers: ADMIN_HEADERS,
+    });
+    expect(resTherapist.statusCode).toBe(200);
+    const bodyTherapist = JSON.parse(resTherapist.body);
+    expect(bodyTherapist.data.delayStatus.reason).toBe('OK');
+    expect(typeof bodyTherapist.data.delayStatus.isDelayed).toBe('boolean');
+
+    // 2) Staf non-terapis (ADMIN_CS) -> delayStatus.reason === 'NON_THERAPIST'
+    vi.mocked(prisma.reservation.findUnique).mockResolvedValueOnce({
+      ...reservationRow,
+      assigned_staff: { name: 'Admin Doni', phone: '08123456789', role: 'ADMIN_CS' },
+    } as any);
+
+    const resAdmin = await app.inject({
+      method: 'GET',
+      url: `/api/admin/dispatch/trip/${RES_ID}`,
+      headers: ADMIN_HEADERS,
+    });
+    expect(resAdmin.statusCode).toBe(200);
+    const bodyAdmin = JSON.parse(resAdmin.body);
+    expect(bodyAdmin.data.delayStatus.reason).toBe('NON_THERAPIST');
+    expect(bodyAdmin.data.delayStatus.isDelayed).toBe(false);
+    expect(bodyAdmin.data.delayStatus.level).toBe('none');
   });
 });

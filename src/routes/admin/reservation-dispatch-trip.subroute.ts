@@ -11,6 +11,7 @@ import {
   calculateDelayStatus,
 } from '../../services/staff-trip-tracking.service';
 import { reservationArchiveService } from '../../services/reservation-archive.service';
+import { isStaffTherapistRole } from '../../domain/staff-role';
 
 export async function reservationDispatchTripRoutes(fastify: FastifyInstance) {
   /**
@@ -47,7 +48,7 @@ export async function reservationDispatchTripRoutes(fastify: FastifyInstance) {
                 children: true,
               },
             },
-            assigned_staff: { select: { name: true, phone: true } },
+            assigned_staff: { select: { name: true, phone: true, role: true } },
             children: true,
           },
         });
@@ -90,11 +91,21 @@ export async function reservationDispatchTripRoutes(fastify: FastifyInstance) {
         geofenceDistanceM = geo.distanceM;
       }
 
-      // Prediksi keterlambatan (ETA vs jadwal) — murni, tanpa I/O.
-      const delayStatus = calculateDelayStatus(
-        (reservation as any).booking_date ?? null,
-        etaMinutes
-      );
+      // Prediksi keterlambatan (ETA vs jadwal) — hanya untuk staff terapis lapangan.
+      const isTherapist = isStaffTherapistRole(reservation.assigned_staff?.role);
+      const delayStatus = isTherapist
+        ? calculateDelayStatus(
+            (reservation as any).booking_date ?? null,
+            etaMinutes
+          )
+        : {
+            reason: 'NON_THERAPIST' as const,
+            isDelayed: false,
+            level: 'none' as const,
+            delayMinutes: 0,
+            estimatedArrivalIso: null,
+            formattedArrivalWib: '',
+          };
 
       let readyText = '';
       try {
