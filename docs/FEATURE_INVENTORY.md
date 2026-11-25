@@ -228,7 +228,7 @@ Sistem menjalankan **26 interval cron** untuk **27 pekerja logis** mandiri (Morn
 | :--- | :--- | :--- |
 | **Google Sheets Outbox Sync** | Setiap 3 menit | Menguras antrean rekapan data reservasi dan keuangan ke spreadsheet Google Sheets klinik. |
 | **Frustration SLA Sweep** | Setiap 5 menit | Memeriksa percakapan yang terbengkalai melewati SLA waktu tunggu untuk memicu alarm peringatan CS. |
-| **Departure Watchdog Sweep** | Setiap 5 menit (flag `ENABLE_DELAY_WATCHDOG`) | Menghitung potensi keterlambatan keberangkatan bidan hari ini, menyiarkan `staff.delay_alert` ke Live Chat, dan mendeduplikasi alert 30 menit di KV. |
+| **Departure Watchdog Sweep** | Setiap 5 menit (flag `ENABLE_DELAY_WATCHDOG`) | Menghitung potensi keterlambatan keberangkatan khusus Staff Terapis lapangan (predikat kanonis `isStaffTherapistRole`: `THERAPIST`, `SENIOR_THERAPIST`, `TERAPIS`, `BIDAN`, dll.) hari ini, mengabaikan reservasi unassigned dan staf non-terapis (Admin CS, SPV, Advertiser), menyiarkan `staff.delay_alert` ke Live Chat, mendeduplikasi alert 30 menit di KV, dan auto-notify WA ke admin jika delay >= toleransi. |
 | **Assignment Notification Sweep** | Setiap 2 menit | Mengirimkan notifikasi penugasan terapis yang terkumpul dalam buffer 5 menit ke perangkat bidan. |
 | **Trip Auto-Close Sweep** | Setiap 15 menit | Menutup otomatis sesi pelacakan GPS bidan yang perjalanannya telah melewati jadwal kunjungan. |
 | **Slot Overlap Sweep** | Setiap 15 menit | Mendeteksi potensi bentrok jadwal antar-kunjungan dan memberi tahu admin. |

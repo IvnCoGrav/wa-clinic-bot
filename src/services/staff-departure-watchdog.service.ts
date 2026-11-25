@@ -13,6 +13,7 @@ import { prisma } from '../db/client';
 import { DEFAULT_TENANT_ID } from '../config/tenant';
 import { getClinicLocationAsync } from '../config/clinic-location';
 import { getDelayWatchdogSettings } from '../config/delay-watchdog-config';
+import { isStaffTherapistRole } from '../domain/staff-role';
 import {
   computeItineraryDelays,
   resolveLegOrigin,
@@ -101,12 +102,14 @@ export class StaffDepartureWatchdogService {
           booking_date: { gte: startOfDay, lte: endOfDay },
           status: { notIn: ['cancelled', 'rejected'] },
           customer: { is_sandbox_test: false },
+          assigned_staff_id: { not: null },
         },
         include: {
           assigned_staff: {
             select: {
               id: true,
               name: true,
+              role: true,
               base_lat: true,
               base_lng: true,
               base_address: true,
@@ -138,9 +141,14 @@ export class StaffDepartureWatchdogService {
 
     if (rows.length === 0) return [];
 
+    // Departure Watchdog dikhususkan eksklusif untuk Staff Terapis.
+    // Abaikan jadwal staf peran non-terapis (Admin CS, SPV, Advertiser, dll).
+    const therapistRows = rows.filter((r) => isStaffTherapistRole(r.assigned_staff?.role));
+    if (therapistRows.length === 0) return [];
+
     // Satu seam domain (sama dengan kartu tugas staf) — anti-divergensi angka.
     const predictions = computeItineraryDelays({
-      tasks: rows.map((r) => ({
+      tasks: therapistRows.map((r) => ({
         id: r.id,
         staffId: r.assigned_staff?.id || null,
         staffBase: r.assigned_staff
@@ -170,7 +178,7 @@ export class StaffDepartureWatchdogService {
 
     const alerts: DelayAlertItem[] = [];
 
-    for (const r of rows) {
+    for (const r of therapistRows) {
       const snapshot = predictions.get(r.id);
       if (!snapshot) continue;
 
@@ -291,6 +299,7 @@ export class StaffDepartureWatchdogService {
             select: {
               id: true,
               name: true,
+              role: true,
               base_lat: true,
               base_lng: true,
               base_address: true,
@@ -345,6 +354,16 @@ export class StaffDepartureWatchdogService {
         success: false,
         code: 'NOT_TODAY',
         error: 'Notifikasi keterlambatan hanya dapat dikirim untuk jadwal hari ini.',
+      };
+    }
+
+    // Guard peran: notifikasi keterlambatan hanya sah untuk staf terapis lapangan
+    if (!reservation.assigned_staff || !isStaffTherapistRole(reservation.assigned_staff.role)) {
+      await this.recordNotifyFailure(tenantId, staffId, reservationId, 'NOT_A_THERAPIST');
+      return {
+        success: false,
+        code: 'NOT_A_THERAPIST',
+        error: 'Notifikasi keterlambatan hanya dapat dikirim untuk staf terapis.',
       };
     }
 

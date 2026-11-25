@@ -25,6 +25,7 @@ describe('StaffDepartureWatchdogService', () => {
     assigned_staff: {
       id: staffId,
       name: 'Bidan Thabita',
+      role: 'THERAPIST',
       base_lat: -7.2496988,
       base_lng: 112.7201362,
       base_address: 'Demak Jaya, Surabaya',
@@ -277,6 +278,94 @@ describe('StaffDepartureWatchdogService', () => {
           recipientCount: 2,
         },
       });
+    });
+
+    it('menolak bila staf yang ditugaskan bukan peran terapis (NOT_A_THERAPIST)', async () => {
+      const auditSpy = vi.spyOn(auditService, 'logAdminAction').mockResolvedValue();
+      vi.spyOn(prisma.reservation, 'findUnique').mockResolvedValue(
+        baseReservation({
+          assigned_staff: {
+            id: staffId,
+            name: 'Admin Maya',
+            role: 'ADMIN_CS',
+            base_lat: -7.24,
+            base_lng: 112.72,
+            base_address: 'Surabaya',
+          },
+        }) as any
+      );
+
+      const res = await staffDepartureWatchdogService.notifyDelayToAdmin({
+        reservationId,
+        staffId,
+        tenantId,
+      });
+
+      expect(res.success).toBe(false);
+      expect(res.code).toBe('NOT_A_THERAPIST');
+      expect(auditSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'STAFF_DELAY_NOTIFY_FAILED',
+          payload: expect.objectContaining({ code: 'NOT_A_THERAPIST' }),
+        })
+      );
+    });
+  });
+
+  describe('listTodayDelayAlerts', () => {
+    it('hanya memproses reservasi staf terapis dan mengabaikan non-terapis serta unassigned', async () => {
+      vi.spyOn(delayWatchdogConfig, 'getDelayWatchdogSettings').mockResolvedValue(settings);
+
+      const { startOfDay } = StaffReservationService.getWibDateRange('today');
+      // Deterministic time: jam 12:00 WIB, dengan booking jam 08:00 WIB (4 jam lalu -> pasti telat)
+      const deterministicNow = new Date(startOfDay.getTime() + 12 * 3600 * 1000);
+      const pastBooking = new Date(startOfDay.getTime() + 8 * 3600 * 1000);
+
+      vi.spyOn(prisma.reservation, 'findMany').mockResolvedValue([
+        // 1. Staf terapis (wajib diproses)
+        baseReservation({
+          id: 'res-therapist',
+          booking_date: pastBooking,
+          assigned_staff: {
+            id: 'staff-1',
+            name: 'Bidan Thabita',
+            role: 'THERAPIST',
+            base_lat: -7.24,
+            base_lng: 112.72,
+            base_address: 'Demak Surabaya',
+          },
+        }),
+        // 2. Staf admin CS (wajib diabaikan)
+        baseReservation({
+          id: 'res-admin',
+          booking_date: pastBooking,
+          assigned_staff: {
+            id: 'staff-2',
+            name: 'Admin Doni',
+            role: 'ADMIN_CS',
+            base_lat: -7.24,
+            base_lng: 112.72,
+            base_address: 'Kantor',
+          },
+        }),
+        // 3. Staf tanpa role terapis (wajib diabaikan)
+        baseReservation({
+          id: 'res-unassigned',
+          booking_date: pastBooking,
+          assigned_staff: null,
+          assigned_staff_id: null,
+        }),
+      ] as any);
+
+      vi.spyOn(StaffReservationService, 'getTripDelayMessageText').mockResolvedValue('Bidan terlambat');
+
+      const alerts = await staffDepartureWatchdogService.listTodayDelayAlerts(tenantId, deterministicNow);
+
+      // Hanya res-therapist yang boleh muncul di alerts
+      const resIds = alerts.map((a) => a.reservationId);
+      expect(resIds).toContain('res-therapist');
+      expect(resIds).not.toContain('res-admin');
+      expect(resIds).not.toContain('res-unassigned');
     });
   });
 });
