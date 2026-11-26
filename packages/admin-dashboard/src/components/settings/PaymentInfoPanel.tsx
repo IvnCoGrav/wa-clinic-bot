@@ -304,7 +304,15 @@ export const PaymentInfoPanel: React.FC = () => {
         {activeQrisDisplay ? (
           <div className="flex flex-col sm:flex-row items-center gap-4 p-4 bg-surface-2 dark:bg-fill-1 rounded-2xl border border-divider">
             <div
+              role="button"
+              tabIndex={0}
               onClick={() => setLightboxOpen(true)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  setLightboxOpen(true);
+                }
+              }}
               className="relative w-36 h-36 bg-surface p-2 rounded-xl border border-divider shadow-xs cursor-pointer group flex-shrink-0 flex items-center justify-center hover:border-accent transition"
               title="Ketuk untuk memperbesar barcode"
             >
@@ -348,7 +356,15 @@ export const PaymentInfoPanel: React.FC = () => {
           </div>
         ) : (
           <div
+            role="button"
+            tabIndex={0}
             onClick={() => fileInputRef.current?.click()}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                fileInputRef.current?.click();
+              }
+            }}
             className="p-6 border-2 border-dashed border-divider hover:border-accent bg-surface-2 rounded-2xl flex flex-col items-center justify-center cursor-pointer transition group text-center space-y-2"
           >
             <div className="h-12 w-12 rounded-2xl bg-surface text-accent flex items-center justify-center border border-divider shadow-xs group-hover:scale-105 transition-transform">
@@ -598,16 +614,21 @@ export const PaymentInfoPanel: React.FC = () => {
       {/* Lightbox Modal */}
       {lightboxOpen && activeQrisDisplay && (
         <div
+          role="presentation"
           className="modal-backdrop fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/80 animate-fadeIn"
           onClick={() => setLightboxOpen(false)}
         >
           <div
+            role="dialog"
+            aria-modal="true"
+            aria-label="Pratinjau barcode QRIS"
             className="bg-surface rounded-3xl p-6 max-w-sm w-full shadow-2xl flex flex-col items-center space-y-4 animate-modalScaleUp text-center relative"
             onClick={(e) => e.stopPropagation()}
           >
             <button
               type="button"
               onClick={() => setLightboxOpen(false)}
+              aria-label="Tutup pratinjau barcode"
               className="absolute top-3 right-3 p-2 rounded-full bg-fill-1 hover:bg-fill-2 text-ink-2 transition"
             >
               <X size={18} />

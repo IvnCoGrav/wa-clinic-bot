@@ -325,9 +325,10 @@ export const ScorecardReportPanel: React.FC = () => {
             </div>
           </div>
           <div className="flex flex-wrap items-end gap-2">
-            <label className="text-[11px] font-bold text-ink-2">
+            <label htmlFor="scorecard-report-month" className="text-[11px] font-bold text-ink-2">
               Bulan
               <select
+                id="scorecard-report-month"
                 value={period.month}
                 onChange={(e) => setPeriod((prev) => ({ ...prev, month: Number(e.target.value) }))}
                 className="mt-1 block px-2.5 py-1.5 rounded-lg bg-surface border border-divider text-xs text-ink focus:outline-none focus:border-accent"
@@ -339,9 +340,10 @@ export const ScorecardReportPanel: React.FC = () => {
                 ))}
               </select>
             </label>
-            <label className="text-[11px] font-bold text-ink-2">
+            <label htmlFor="scorecard-report-year" className="text-[11px] font-bold text-ink-2">
               Tahun
               <select
+                id="scorecard-report-year"
                 value={period.year}
                 onChange={(e) => setPeriod((prev) => ({ ...prev, year: Number(e.target.value) }))}
                 className="mt-1 block px-2.5 py-1.5 rounded-lg bg-surface border border-divider text-xs text-ink focus:outline-none focus:border-accent"

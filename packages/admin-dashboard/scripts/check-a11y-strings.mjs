@@ -58,7 +58,13 @@ for (const file of walk(SRC)) {
   for (const m of text.matchAll(/<button\b[\s\S]*?<\/button>/g)) {
     const block = m[0];
     const hasIcon = /<[A-Z]\w*[^>]*\/>/.test(block);
-    const inner = block.replace(/<[^>]+>/g, ' ').replace(/\{[^{}]*\}/g, ' ').trim();
+    // Ekspresi JSX yang memuat teks literal (mis. `{saving ? 'Menyimpan...' : 'Simpan'}`)
+    // tetap dirender sebagai teks tombol, jadi bukan tombol ikon-saja. Ekspresi
+    // tanpa teks literal (mis. `{icon}`, `{children}`) tetap dibuang.
+    const inner = block
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/\{[^{}]*\}/g, (expr) => (/['"`][^'"`]*[A-Za-z]{2,}/.test(expr) ? ' teks ' : ' '))
+      .trim();
     const hasText = /[A-Za-z]{2,}/.test(inner);
     const named = /aria-label=|aria-labelledby=/.test(block);
     if (hasIcon && !hasText && !named) bump('tombol ikon tanpa nama');

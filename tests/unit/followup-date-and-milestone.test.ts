@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { followUpService } from '../../src/services/follow-up.service';
 import { prisma } from '../../src/db/client';
 import { DEFAULT_TENANT_ID } from '../../src/config/tenant';
@@ -7,8 +7,15 @@ import { DEFAULT_TENANT_ID } from '../../src/config/tenant';
 // dan memindai seluruh anak (bukan hanya children[0]).
 describe('M2: computeNextTreatment deterministik akhir bulan (25 hari)', () => {
   beforeEach(() => vi.restoreAllMocks());
+  afterEach(() => vi.useRealTimers());
 
   it('anchor 31 Okt + 25 hari → 25 Nov pada 09:00 WIB', async () => {
+    // Waktu dibekukan ke 31 Okt 2026 10:00 WIB. Tanpa ini, stage 1 (25 Nov
+    // 09:00 WIB) akan menjadi tanggal lampau begitu waktu riil melewatinya,
+    // dan service sengaja melewati jadwal masa lalu — test jadi bom waktu.
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date(Date.UTC(2026, 9, 31, 3, 0, 0)));
+
     vi.spyOn(prisma.customer, 'findUnique').mockResolvedValue(null as any);
     vi.spyOn(prisma.followUp, 'findFirst').mockResolvedValue(null as any);
     const createSpy = vi.spyOn(prisma.followUp, 'create').mockResolvedValue({} as any);

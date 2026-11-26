@@ -651,8 +651,9 @@ export const StaffManagement: React.FC = () => {
             </div>
 
             <div className="flex items-center space-x-2 w-full sm:w-auto">
-              <label className="text-xs text-ink-3 font-medium whitespace-nowrap">Filter Role:</label>
+              <label htmlFor="staff-filter-role" className="text-xs text-ink-3 font-medium whitespace-nowrap">Filter Role:</label>
               <select
+                id="staff-filter-role"
                 value={roleFilter}
                 onChange={(e) => setRoleFilter(e.target.value)}
                 className="px-3 py-1.5 rounded-xl bg-fill-1 border-0 text-ink text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-accent"
@@ -1202,8 +1203,9 @@ export const StaffManagement: React.FC = () => {
             <form onSubmit={handleCreateStaff} className="space-y-3.5">
               <FormErrorSummary issues={formIssues} />
               <div className="space-y-1.5">
-                <label className="text-xs font-bold text-ink">Nama Lengkap Staff</label>
+                <label htmlFor="staff-create-name" className="text-xs font-bold text-ink">Nama Lengkap Staff</label>
                 <input
+                  id="staff-create-name"
                   type="text"
                   required
                   value={name}
@@ -1214,12 +1216,13 @@ export const StaffManagement: React.FC = () => {
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-xs font-bold text-ink">Nomor WhatsApp / HP (Username Login)</label>
+                <label htmlFor="staff-create-phone" className="text-xs font-bold text-ink">Nomor WhatsApp / HP (Username Login)</label>
                 <div className="relative">
                   <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-ink-3">
                     <Phone size={14} />
                   </span>
                   <input
+                    id="staff-create-phone"
                     type="tel"
                     required
                     value={phone}
@@ -1232,7 +1235,7 @@ export const StaffManagement: React.FC = () => {
 
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between">
-                  <label className="text-xs font-bold text-ink">Peran / Hak Akses (Role)</label>
+                  <label htmlFor="staff-create-role" className="text-xs font-bold text-ink">Peran / Hak Akses (Role)</label>
                   <button
                     type="button"
                     onClick={() => {
@@ -1246,6 +1249,7 @@ export const StaffManagement: React.FC = () => {
                   </button>
                 </div>
                 <select
+                  id="staff-create-role"
                   value={role}
                   onChange={(e) => setRole(e.target.value)}
                   className="w-full px-3.5 py-2 rounded-xl bg-surface border border-divider text-ink text-xs focus:outline-none focus:border-accent shadow-xs font-medium"
@@ -1259,12 +1263,13 @@ export const StaffManagement: React.FC = () => {
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-xs font-bold text-ink">Password Awal</label>
+                <label htmlFor="staff-create-password" className="text-xs font-bold text-ink">Password Awal</label>
                 <div className="relative">
                   <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-ink-3">
                     <Lock size={14} />
                   </span>
                   <input
+                    id="staff-create-password"
                     type="password"
                     required
                     value={password}
@@ -1285,8 +1290,9 @@ export const StaffManagement: React.FC = () => {
                   <span className="text-[10px] text-ink-3">Opsional</span>
                 </div>
                 <div className="space-y-1">
-                  <label className="text-[11px] font-medium text-ink-2">Alamat / Patokan Base</label>
+                  <label htmlFor="staff-create-base-address" className="text-[11px] font-medium text-ink-2">Alamat / Patokan Base</label>
                   <input
+                    id="staff-create-base-address"
                     type="text"
                     value={baseAddress}
                     onChange={(e) => setBaseAddress(e.target.value)}
@@ -1296,8 +1302,9 @@ export const StaffManagement: React.FC = () => {
                 </div>
                 <div className="grid grid-cols-2 gap-2">
                   <div className="space-y-1">
-                    <label className="text-[11px] font-medium text-ink-2">Latitude</label>
+                    <label htmlFor="staff-create-base-lat" className="text-[11px] font-medium text-ink-2">Latitude</label>
                     <input
+                      id="staff-create-base-lat"
                       type="number"
                       step="any"
                       value={baseLat}
@@ -1307,8 +1314,9 @@ export const StaffManagement: React.FC = () => {
                     />
                   </div>
                   <div className="space-y-1">
-                    <label className="text-[11px] font-medium text-ink-2">Longitude</label>
+                    <label htmlFor="staff-create-base-lng" className="text-[11px] font-medium text-ink-2">Longitude</label>
                     <input
+                      id="staff-create-base-lng"
                       type="number"
                       step="any"
                       value={baseLng}
@@ -1373,8 +1381,9 @@ export const StaffManagement: React.FC = () => {
             <form onSubmit={handleSaveEditStaff} className="space-y-3.5">
               <FormErrorSummary issues={formIssues} />
               <div className="space-y-1.5">
-                <label className="text-xs font-bold text-ink">Nama Lengkap</label>
+                <label htmlFor="staff-edit-name" className="text-xs font-bold text-ink">Nama Lengkap</label>
                 <input
+                  id="staff-edit-name"
                   type="text"
                   required
                   value={editName}
@@ -1384,12 +1393,13 @@ export const StaffManagement: React.FC = () => {
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-xs font-bold text-ink">Nomor WhatsApp</label>
+                <label htmlFor="staff-edit-phone" className="text-xs font-bold text-ink">Nomor WhatsApp</label>
                 <div className="relative">
                   <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-ink-3">
                     <Phone size={14} />
                   </span>
                   <input
+                    id="staff-edit-phone"
                     type="tel"
                     required
                     value={editPhone}
@@ -1400,8 +1410,9 @@ export const StaffManagement: React.FC = () => {
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-xs font-bold text-ink">Peran / Hak Akses (Role)</label>
+                <label htmlFor="staff-edit-role" className="text-xs font-bold text-ink">Peran / Hak Akses (Role)</label>
                 <select
+                  id="staff-edit-role"
                   value={editRole}
                   onChange={(e) => setEditRole(e.target.value)}
                   className="w-full px-3.5 py-2 rounded-xl bg-surface border border-divider text-ink text-xs focus:outline-none focus:border-accent shadow-xs font-medium"
@@ -1415,7 +1426,7 @@ export const StaffManagement: React.FC = () => {
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-xs font-bold text-ink">
+                <label htmlFor="staff-edit-password" className="text-xs font-bold text-ink">
                   Password Baru <span className="text-ink-3 font-normal">(Kosongkan jika tidak diubah)</span>
                 </label>
                 <div className="relative">
@@ -1423,6 +1434,7 @@ export const StaffManagement: React.FC = () => {
                     <Lock size={14} />
                   </span>
                   <input
+                    id="staff-edit-password"
                     type="password"
                     value={editPassword}
                     onChange={(e) => setEditPassword(e.target.value)}
@@ -1442,8 +1454,9 @@ export const StaffManagement: React.FC = () => {
                   <span className="text-[10px] text-ink-3">Departure Watchdog</span>
                 </div>
                 <div className="space-y-1">
-                  <label className="text-[11px] font-medium text-ink-2">Alamat / Patokan Base</label>
+                  <label htmlFor="staff-edit-base-address" className="text-[11px] font-medium text-ink-2">Alamat / Patokan Base</label>
                   <input
+                    id="staff-edit-base-address"
                     type="text"
                     value={editBaseAddress}
                     onChange={(e) => setEditBaseAddress(e.target.value)}
@@ -1453,8 +1466,9 @@ export const StaffManagement: React.FC = () => {
                 </div>
                 <div className="grid grid-cols-2 gap-2">
                   <div className="space-y-1">
-                    <label className="text-[11px] font-medium text-ink-2">Latitude</label>
+                    <label htmlFor="staff-edit-base-lat" className="text-[11px] font-medium text-ink-2">Latitude</label>
                     <input
+                      id="staff-edit-base-lat"
                       type="number"
                       step="any"
                       value={editBaseLat}
@@ -1464,8 +1478,9 @@ export const StaffManagement: React.FC = () => {
                     />
                   </div>
                   <div className="space-y-1">
-                    <label className="text-[11px] font-medium text-ink-2">Longitude</label>
+                    <label htmlFor="staff-edit-base-lng" className="text-[11px] font-medium text-ink-2">Longitude</label>
                     <input
+                      id="staff-edit-base-lng"
                       type="number"
                       step="any"
                       value={editBaseLng}

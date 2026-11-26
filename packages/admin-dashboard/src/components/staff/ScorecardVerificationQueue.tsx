@@ -389,9 +389,10 @@ export const ScorecardVerificationQueue: React.FC = () => {
       </div>
 
       <div className="flex flex-wrap items-end gap-2 pb-3 border-b border-divider">
-        <label className="text-[11px] font-bold text-ink-2">
+        <label htmlFor="scorecard-verify-staff" className="text-[11px] font-bold text-ink-2">
           Bidan
           <select
+            id="scorecard-verify-staff"
             value={staffId}
             onChange={(e) => setStaffId(e.target.value)}
             className="mt-1 block min-w-[10rem] px-2.5 py-1.5 rounded-lg bg-surface border border-divider text-xs text-ink focus:outline-none focus:border-accent"
@@ -405,9 +406,10 @@ export const ScorecardVerificationQueue: React.FC = () => {
           </select>
         </label>
 
-        <label className="text-[11px] font-bold text-ink-2">
+        <label htmlFor="scorecard-verify-month" className="text-[11px] font-bold text-ink-2">
           Bulan
           <select
+            id="scorecard-verify-month"
             value={period.month}
             onChange={(e) => setPeriod((prev) => ({ ...prev, month: Number(e.target.value) }))}
             className="mt-1 block px-2.5 py-1.5 rounded-lg bg-surface border border-divider text-xs text-ink focus:outline-none focus:border-accent"
@@ -420,9 +422,10 @@ export const ScorecardVerificationQueue: React.FC = () => {
           </select>
         </label>
 
-        <label className="text-[11px] font-bold text-ink-2">
+        <label htmlFor="scorecard-verify-year" className="text-[11px] font-bold text-ink-2">
           Tahun
           <select
+            id="scorecard-verify-year"
             value={period.year}
             onChange={(e) => setPeriod((prev) => ({ ...prev, year: Number(e.target.value) }))}
             className="mt-1 block px-2.5 py-1.5 rounded-lg bg-surface border border-divider text-xs text-ink focus:outline-none focus:border-accent"
@@ -435,8 +438,9 @@ export const ScorecardVerificationQueue: React.FC = () => {
           </select>
         </label>
 
-        <label className="flex items-center gap-2 text-[11px] text-ink-2 select-none pb-1.5">
+        <label htmlFor="scorecard-verify-show-unscored" className="flex items-center gap-2 text-[11px] text-ink-2 select-none pb-1.5">
           <input
+            id="scorecard-verify-show-unscored"
             type="checkbox"
             checked={!onlyScored}
             onChange={(e) => setOnlyScored(!e.target.checked)}
@@ -643,9 +647,10 @@ export const ScorecardVerificationQueue: React.FC = () => {
           </p>
 
           {pending?.action === 'APPROVE' && (
-            <label className="text-xs font-bold text-ink block">
+            <label htmlFor="scorecard-verify-minutes" className="text-xs font-bold text-ink block">
               Selisih waktu (menit)
               <input
+                id="scorecard-verify-minutes"
                 type="number"
                 min={0}
                 max={1440}
@@ -690,9 +695,10 @@ export const ScorecardVerificationQueue: React.FC = () => {
             </div>
           </div>
 
-          <label className="text-xs font-bold text-ink block">
+          <label htmlFor="scorecard-verify-note" className="text-xs font-bold text-ink block">
             Catatan {pending?.action === 'REJECT' ? '(wajib)' : '(opsional)'}
             <textarea
+              id="scorecard-verify-note"
               value={note}
               onChange={(e) => setNote(e.target.value)}
               rows={3}
