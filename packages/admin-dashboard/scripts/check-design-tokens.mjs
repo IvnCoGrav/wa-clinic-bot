@@ -1,14 +1,20 @@
 #!/usr/bin/env node
 // Gerbang anti-regresi warna hardcode. Zero dependency (node:fs saja).
 import { readdirSync, readFileSync, writeFileSync, existsSync, statSync } from 'node:fs';
-import { join, relative, extname } from 'node:path';
+import { join, relative, extname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const PKG = fileURLToPath(new URL('..', import.meta.url));
+const PKG = process.env.DESIGN_TOKEN_PKG
+  ? resolve(process.env.DESIGN_TOKEN_PKG)
+  : fileURLToPath(new URL('..', import.meta.url));
 const SCAN_ROOTS = [join(PKG, 'src'), join(PKG, 'index.html')];
 const SKIP_DIRS = new Set(['node_modules', 'dist', '.git']);
 const SCAN_EXT = new Set(['.ts', '.tsx', '.js', '.jsx', '.html', '.css']);
-const HEX_RE = /#[0-9a-fA-F]{3,8}\b/g;
+// Warna CSS selalu mengakhiri sebuah nilai: diikuti kutip, kurung, `]`, `;`, `,`,
+// `}` (atau akhir baris). Token yang diikuti spasi adalah bagian kalimat — mis.
+// referensi audit `KNOWN #358 A-004` — bukan warna. Tanpa pembeda ini, nomor
+// issue 3 digit terhitung sebagai hex hardcode dan memblokir CI.
+const HEX_RE = /#[0-9a-fA-F]{3,8}\b(?=["'\]\);,}`]|$)/gm;
 const BASELINE_FILE = join(PKG, 'scripts', 'design-token-baseline.json');
 
 function collect(target, acc = []) {
