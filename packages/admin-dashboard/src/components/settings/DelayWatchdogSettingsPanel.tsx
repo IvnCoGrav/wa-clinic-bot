@@ -160,7 +160,7 @@ export const DelayWatchdogSettingsPanel: React.FC = () => {
       <div className="flex items-start justify-between gap-4 border-b border-divider pb-4">
         <div>
           <h2 className="text-sm font-bold text-ink flex items-center gap-2">
-            <Clock size={16} className="text-amber-500" />
+            <Clock size={16} className="text-warning" />
             <span>Peringatan Dini Keterlambatan Bidan (Departure Watchdog)</span>
           </h2>
           <p className="text-xs text-ink-2 mt-0.5 leading-relaxed">

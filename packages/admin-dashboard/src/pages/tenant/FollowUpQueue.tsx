@@ -641,12 +641,12 @@ export const FollowUpQueue: React.FC = () => {
             onClick={() => setHolidayModalOpen(true)}
             className={`px-3.5 py-2 rounded-xl transition shadow-xs flex items-center space-x-1.5 text-xs font-bold active:scale-95 ${
               isHolidayActive
-                ? 'bg-amber-600 hover:bg-amber-700 text-white ring-2 ring-amber-300/60'
+                ? 'bg-warning hover:bg-warning-hover text-on-solid ring-2 ring-warning-line/60'
                 : 'bg-surface hover:bg-fill-1 border border-divider text-ink'
             }`}
             title="Pengaturan Mode Libur Follow-Up (jeda kirim & proteksi antrean)"
           >
-            <Coffee size={14} className={isHolidayActive ? 'text-white' : 'text-warning'} />
+            <Coffee size={14} className={isHolidayActive ? 'text-on-solid' : 'text-warning'} />
             <span>{isHolidayActive ? 'Mode Libur: AKTIF' : 'Mode Libur'}</span>
           </button>
 

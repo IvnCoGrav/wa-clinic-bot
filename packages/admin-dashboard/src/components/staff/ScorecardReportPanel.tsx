@@ -16,7 +16,7 @@ import { apiRequest } from '../../services/api';
 import { useAuth } from '../../contexts/AuthContext';
 import { useUiFeedback } from '../common/UiFeedback';
 import { Button } from '../ui/Button';
-import { formatMonthYearWib, formatWibDate } from '../../utils/dateWib';
+import { formatMonthYearWib, formatWibClock, formatWibDate } from '../../utils/dateWib';
 
 /**
  * ScorecardReportPanel (F9)
@@ -487,8 +487,11 @@ export const ScorecardReportPanel: React.FC = () => {
 
       <div className="flex flex-wrap items-center justify-between gap-2 text-[10px] text-ink-3 px-1">
         <span>
-          Dihitung {report ? new Date().toLocaleString('id-ID') : '—'} · sumber: reservasi selesai,
-          bukti kedatangan, policy retensi kanonis.
+          Dihitung{' '}
+          {report
+            ? `${formatWibDate(new Date(), { day: '2-digit', month: '2-digit', year: 'numeric' })} ${formatWibClock(new Date())}`
+            : '—'}{' '}
+          · sumber: reservasi selesai, bukti kedatangan, policy retensi kanonis.
         </span>
         {report && <span>Snapshot FINAL tidak dihitung ulang.</span>}
       </div>
