@@ -213,10 +213,11 @@ export const FollowUpHolidayModal: React.FC<FollowUpHolidayModalProps> = ({
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="text-xs font-semibold text-ink-2 block mb-1">
+                  <label htmlFor="holiday-start-date" className="text-xs font-semibold text-ink-2 block mb-1">
                     Tanggal Mulai Libur
                   </label>
                   <input
+                    id="holiday-start-date"
                     type="date"
                     value={startDate}
                     onChange={(e) => setStartDate(e.target.value)}
@@ -224,10 +225,11 @@ export const FollowUpHolidayModal: React.FC<FollowUpHolidayModalProps> = ({
                   />
                 </div>
                 <div>
-                  <label className="text-xs font-semibold text-ink-2 block mb-1">
+                  <label htmlFor="holiday-end-date" className="text-xs font-semibold text-ink-2 block mb-1">
                     Tanggal Selesai Libur
                   </label>
                   <input
+                    id="holiday-end-date"
                     type="date"
                     value={endDate}
                     onChange={(e) => setEndDate(e.target.value)}
@@ -243,10 +245,11 @@ export const FollowUpHolidayModal: React.FC<FollowUpHolidayModalProps> = ({
 
             {/* Catatan / Alasan */}
             <div className="p-4 bg-surface rounded-xl border border-divider space-y-1.5">
-              <label className="text-xs font-bold text-ink-2 block">
+              <label htmlFor="holiday-reason" className="text-xs font-bold text-ink-2 block">
                 Alasan / Catatan Libur (Opsional)
               </label>
               <input
+                id="holiday-reason"
                 type="text"
                 maxLength={200}
                 placeholder="Contoh: Cuti Bersama Hari Raya Idul Fitri"
@@ -258,8 +261,9 @@ export const FollowUpHolidayModal: React.FC<FollowUpHolidayModalProps> = ({
 
             {/* Pencicilan Otomatis Pasca Libur (Anti-Blasting) */}
             <div className="p-4 bg-emerald-50/60 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800/40 rounded-xl space-y-2">
-              <label className="flex items-center gap-2 cursor-pointer">
+              <label htmlFor="holiday-auto-reschedule" className="flex items-center gap-2 cursor-pointer">
                 <input
+                  id="holiday-auto-reschedule"
                   type="checkbox"
                   checked={autoRescheduleOnExit}
                   onChange={(e) => setAutoRescheduleOnExit(e.target.checked)}

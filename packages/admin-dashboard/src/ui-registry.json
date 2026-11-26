@@ -403,6 +403,28 @@
         "disabled"
       ],
       "reviewed": false
+    },
+    {
+      "name": "CumulativeTrendChart",
+      "layer": "domain",
+      "path": "src/components/analytics/CumulativeTrendChart.tsx",
+      "whenToUse": "Grafik akumulasi Month-to-Date (MTD) monoton naik dengan perbandingan Bulan Ini, Bulan Lalu, Baseline Rata-rata (3/6/12 bulan), dan garis putus-putus proyeksi akhir bulan.",
+      "states": [
+        "default",
+        "loading",
+        "empty"
+      ],
+      "reviewed": false
+    },
+    {
+      "name": "CumulativeComparisonTooltip",
+      "layer": "domain",
+      "path": "src/components/analytics/CumulativeComparisonTooltip.tsx",
+      "whenToUse": "Tooltip hover interaktif untuk grafik akumulasi MTD yang menyajikan total running sum, breakdown Pasien Baru vs Repeat, % MoM, % vs Baseline, dan estimasi target akhir bulan.",
+      "states": [
+        "default"
+      ],
+      "reviewed": false
     }
   ],
   "pages": [

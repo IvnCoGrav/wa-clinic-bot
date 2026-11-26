@@ -4,6 +4,34 @@ import { setCustomerRepository, InMemoryCustomerRepository } from '../src/reposi
 import { setConversationRepository, InMemoryConversationRepository } from '../src/repositories/conversation.repository';
 import { setMessageRepository, InMemoryMessageRepository } from '../src/repositories/message.repository';
 
+// Isolasi environment antar-file test.
+//
+// process.env dipakai bersama oleh semua file test yang berjalan di worker yang
+// sama. Tanpa pemulihan, file yang mengubah variabel (mis. mengosongkan
+// KENARI_API_KEY atau FB_PIXEL_ID) dapat menggagalkan file berikutnya hanya
+// karena urutan distribusi file — persis yang membuat hasil lokal berbeda dari
+// CI. Snapshot diambil sekali per worker; setiap file berikutnya memulihkan
+// variabel ke kondisi awal. Bila worker memang baru per file, blok ini menjadi
+// no-op yang tidak berbahaya.
+const ENV_SNAPSHOT_KEY = '__VITEST_ENV_SNAPSHOT__';
+const existingSnapshot = process.env[ENV_SNAPSHOT_KEY];
+if (!existingSnapshot) {
+  process.env[ENV_SNAPSHOT_KEY] = JSON.stringify(process.env);
+} else {
+  try {
+    const snapshot = JSON.parse(existingSnapshot) as Record<string, string>;
+    for (const key of Object.keys(process.env)) {
+      if (key !== ENV_SNAPSHOT_KEY && !(key in snapshot)) delete process.env[key];
+    }
+    for (const [key, value] of Object.entries(snapshot)) {
+      if (key === ENV_SNAPSHOT_KEY) continue;
+      process.env[key] = value;
+    }
+  } catch {
+    // Snapshot rusak: jangan gagalkan seluruh suite, cukup mulai dari env apa adanya.
+  }
+}
+
 // PLAN 8 FASE 5a/5b/5c: inject test double persistensi secara EKSPLISIT.
 // - Level modul (di bawah): aktif sebelum beforeAll mana pun — karena beforeAll
 //   berjalan SEBELUM beforeEach pertama, tanpa ini service fail-closed akan
@@ -43,13 +71,30 @@ process.env.WAHA_WEBHOOK_SECRET = '';
 // Ar-008: route kini fail-closed tanpa secret; test perlu izin eksplisit.
 process.env.WAHA_ALLOW_UNSIGNED_WEBHOOK = 'true';
 
+// buildApp() fail-closed bila ADMIN_API_KEY kosong. Nilai ini WAJIB ditetapkan
+// di sini, bukan diwarisi dari .env lokal: di CI tidak ada .env, sehingga file
+// test yang memanggil buildApp() di beforeAll hanya lolos bila kebetulan satu
+// worker sudah diisi file lain lebih dulu. Akibatnya hasil berbeda antara mesin
+// lokal dan CI, dan urutan distribusi file antar-worker menentukan lulus/gagal.
+// Test yang memang menguji perilaku fail-closed mengosongkan nilai ini sendiri
+// lalu memulihkannya (tests/unit/production_edge_cases.test.ts).
+process.env.ADMIN_API_KEY = 'test-admin-api-key';
+
 // Test environment label mocks
 process.env.ENABLE_WAHA_HOLD_LABEL = 'true';
 process.env.ENABLE_LIFECYCLE_LABELS = 'true';
 process.env.BACKUP_ENCRYPTION_KEY = 'a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2';
 
-// Blank LLM keys so the AI Router (default ON) never hits the network during tests.
-// rawLlmCall() throws when apiKey is empty/mock, so the CircuitBreaker falls back to
+// Kredensial Meta CAPI deterministik. Beberapa file test lama (capi-action-source,
+// purchase-event-id-stability, meta-capi-guard-and-dedup, dst.) tidak menyetel
+// FB_PIXEL_ID/FB_CAPI_ACCESS_TOKEN sendiri sehingga hanya lolos bila .env lokal
+// menyediakannya — dan gagal di CI. Nilai dummy membuat hasil sama di mana pun.
+// File yang menguji jalur fail-closed tetap menghapus/mengosongkannya sendiri
+// (tests/integration/capi-config-admin.test.ts, meta-attribution-debug.test.ts).
+process.env.FB_PIXEL_ID = 'test-pixel-id';
+process.env.FB_CAPI_ACCESS_TOKEN = 'test-capi-access-token';
+
+// Blank LLM keys so the AI Router (default ON) never hits the network during tests.// rawLlmCall() throws when apiKey is empty/mock, so the CircuitBreaker falls back to
 // rule-based classification (deterministic, offline). Tests that exercise the LLM path
 // set a mock key explicitly.
 process.env.LLM_API_KEY = '';

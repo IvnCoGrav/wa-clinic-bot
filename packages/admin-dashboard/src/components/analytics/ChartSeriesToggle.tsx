@@ -41,7 +41,7 @@ export const ChartSeriesToggle: React.FC<ChartSeriesToggleProps> = ({
             disabled={isDisabled}
             title={isDisabled ? it.disabledReason : `Klik untuk ${isVisible ? 'sembunyikan' : 'tampilkan'} ${it.label}`}
             onClick={() => onToggle(it.key)}
-            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold transition-all select-none border cursor-pointer ${
+            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold transition select-none border cursor-pointer ${
               isDisabled
                 ? 'opacity-40 cursor-not-allowed bg-surface-2 border-divider text-ink-3'
                 : isVisible
@@ -66,6 +66,14 @@ export const ChartSeriesToggle: React.FC<ChartSeriesToggleProps> = ({
                   className="w-2.5 h-2.5 rounded-xs"
                   style={{
                     backgroundColor: isVisible && !isDisabled ? it.color : 'rgb(var(--c-ink-3))',
+                  }}
+                />
+              ) : it.shape === 'area' ? (
+                <span
+                  className="w-2.5 h-2.5 rounded-xs"
+                  style={{
+                    backgroundColor: isVisible && !isDisabled ? it.color : 'rgb(var(--c-ink-3))',
+                    opacity: 0.55,
                   }}
                 />
               ) : (

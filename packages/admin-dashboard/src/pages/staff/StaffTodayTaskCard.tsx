@@ -116,13 +116,13 @@ export const StaffTodayTaskCard: React.FC<StaffTodayTaskCardProps> = ({
     task.status !== 'completed' &&
     !task.delay?.missedDeparture;
   const delayBorderClass = isSevereDelay
-    ? 'border-red-600 border-l-red-600 ring-1 ring-red-500/40 animate-delay-pulse'
+    ? 'border-danger border-l-danger ring-1 ring-danger/40 animate-delay-pulse'
     : isDelayActive
-      ? 'border-amber-500 border-l-amber-500'
+      ? 'border-warning border-l-warning'
       : '';
   const selectionClass = isDelayActive
     ? isSelected
-      ? 'ring-2 ring-red-500/30 shadow-md'
+      ? 'ring-2 ring-danger/30 shadow-md'
       : 'hover:shadow-sm active:scale-[0.98]'
     : isSelected
       ? 'border-accent ring-2 ring-accent/30 shadow-md'
@@ -230,7 +230,7 @@ export const StaffTodayTaskCard: React.FC<StaffTodayTaskCardProps> = ({
             }`}
           >
             <span className="font-semibold flex items-center gap-1.5 min-w-0 truncate">
-              <AlertCircle size={13} className={`shrink-0 ${isSevereDelay ? 'text-red-500' : 'text-amber-500'}`} />
+              <AlertCircle size={13} className={`shrink-0 ${isSevereDelay ? 'text-danger' : 'text-warning'}`} />
               <span className="truncate">
                 {delayMinutes > 0 ? `Potensi Terlambat ±${delayMinutes} menit` : 'Waktu keberangkatan terlewat'}
               </span>

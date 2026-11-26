@@ -160,7 +160,7 @@ export const DelayWatchdogSettingsPanel: React.FC = () => {
       <div className="flex items-start justify-between gap-4 border-b border-divider pb-4">
         <div>
           <h2 className="text-sm font-bold text-ink flex items-center gap-2">
-            <Clock size={16} className="text-amber-500" />
+            <Clock size={16} className="text-warning" />
             <span>Peringatan Dini Keterlambatan Bidan (Departure Watchdog)</span>
           </h2>
           <p className="text-xs text-ink-2 mt-0.5 leading-relaxed">
@@ -194,10 +194,11 @@ export const DelayWatchdogSettingsPanel: React.FC = () => {
       {/* Ambang & Parameter */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div className="space-y-1.5">
-          <label className="text-xs font-semibold text-ink flex items-center gap-1">
+          <label htmlFor="delay-tolerance-minutes" className="text-xs font-semibold text-ink flex items-center gap-1">
             <span>Toleransi Keterlambatan (Menit)</span>
           </label>
           <input
+            id="delay-tolerance-minutes"
             type="number"
             min={1}
             max={180}
@@ -216,10 +217,11 @@ export const DelayWatchdogSettingsPanel: React.FC = () => {
         </div>
 
         <div className="space-y-1.5">
-          <label className="text-xs font-semibold text-ink flex items-center gap-1">
+          <label htmlFor="delay-critical-extra-minutes" className="text-xs font-semibold text-ink flex items-center gap-1">
             <span>Tambahan Critical (Menit)</span>
           </label>
           <input
+            id="delay-critical-extra-minutes"
             type="number"
             min={0}
             max={120}
@@ -239,10 +241,11 @@ export const DelayWatchdogSettingsPanel: React.FC = () => {
         </div>
 
         <div className="space-y-1.5">
-          <label className="text-xs font-semibold text-ink flex items-center gap-1">
+          <label htmlFor="delay-prev-origin-gap-hours" className="text-xs font-semibold text-ink flex items-center gap-1">
             <span>Batas Jeda Pasien (Jam)</span>
           </label>
           <input
+            id="delay-prev-origin-gap-hours"
             type="number"
             min={1}
             max={12}

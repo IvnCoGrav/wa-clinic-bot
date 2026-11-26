@@ -2,14 +2,42 @@ import { prisma } from '../db/client';
 import { DEFAULT_TENANT_ID } from '../config/tenant';
 import { responseCacheService } from './response-cache.service';
 import { resolveReservationBilling, type CatalogPriceCache } from './reservation-billing.service';
-import { wibMonthBoundsUtc, shiftWibMonth } from '../utils/wib-time';
+import { wibMonthBoundsUtc, shiftWibMonth, WIB_OFFSET_MS } from '../utils/wib-time';
 import { getPaymentDisplayStatus, type PaymentDisplayStatus } from '../domain/reservation-payment';
-import { getAnalyticsBaselineSettings, type BaselineMode } from '../config/analytics-baseline';
+import {
+  getAnalyticsBaselineSettings,
+  resolveBaselineSettingsForRequest,
+  ALLOWED_BASELINE_MONTHS,
+  type AnalyticsBaselineSettings,
+  type BaselineMode,
+} from '../config/analytics-baseline';
 import {
   buildDailyBaseline,
+  computeCumulativeAndForecast,
   type BaselineReservationInput,
+  type CumulativeTrendPoint,
   type DailyBaselineResult,
+  type ForecastSummary,
+  type MonthPosition,
 } from '../domain/daily-baseline';
+function buildMonthlyAnalyticsCacheKey(
+  tenantId: string,
+  year: number,
+  month: number,
+  baselineMonths: number,
+  includeBaseline: boolean
+): string {
+  return `analytics:monthly:${tenantId}:${year}:${month}:${baselineMonths}:${includeBaseline ? 1 : 0}`;
+}
+
+function buildBaselineCacheKey(
+  tenantId: string,
+  year: number,
+  month: number,
+  settings: AnalyticsBaselineSettings
+): string {
+  return `analytics:baseline:${tenantId}:${year}:${month}:${settings.months}:${settings.mode}:${settings.smoothingWindowDays}:${settings.minMonths}`;
+}
 
 const REVENUE_EXCLUDED_STATUSES = ['cancelled', 'CANCELLED'] as const;
 function isCancelledStatus(status: unknown): boolean {
@@ -54,6 +82,11 @@ export interface DailyRevenuePoint {
   lunasRevenue: number;
   pendingRevenue: number;
   bookingsCount: number;
+  repeatRevenue: number;
+  newRevenue: number;
+  repeatBookings: number;
+  newBookings: number;
+  scheduledRevenue: number;
   isPastOrToday: boolean;
   lastMonthRevenue: number | null;
   lastMonthBookings: number | null;
@@ -113,7 +146,7 @@ export interface TransactionLedgerItem {
 
 export interface BaselineMeta {
   available: boolean;
-  reason?: 'INSUFFICIENT_HISTORY' | 'NO_HISTORY' | 'QUERY_FAILED';
+  reason?: 'INSUFFICIENT_HISTORY' | 'NO_HISTORY' | 'QUERY_FAILED' | 'DISABLED';
   mode: BaselineMode;
   smoothingWindowDays: number;
   monthsRequested: number;
@@ -128,6 +161,8 @@ export interface MonthlyAnalyticsResponse {
   monthName: string;
   kpi: MonthlyKpiSummary;
   dailyTrend: DailyRevenuePoint[];
+  cumulativeTrend: CumulativeTrendPoint[];
+  forecastSummary: ForecastSummary;
   categoryBreakdown: CategoryRevenueItem[];
   paymentBreakdown: PaymentMethodItem[];
   staffPerformance: StaffPerformanceItem[];
@@ -160,10 +195,10 @@ export class FinancialAnalyticsService {
   private static async loadDailyBaseline(
     tenantId: string,
     year: number,
-    month: number
-  ): Promise<{ result: DailyBaselineResult | null; settings: any }> {
-    const settings = await getAnalyticsBaselineSettings(tenantId);
-    const key = `analytics:baseline:${tenantId}:${year}:${month}:${settings.months}:${settings.mode}:${settings.smoothingWindowDays}`;
+    month: number,
+    settings: AnalyticsBaselineSettings
+  ): Promise<{ result: DailyBaselineResult | null; settings: AnalyticsBaselineSettings }> {
+    const key = buildBaselineCacheKey(tenantId, year, month, settings);
     const cached = responseCacheService.get<DailyBaselineResult>(key);
     if (cached) {
       return { result: cached, settings };
@@ -228,9 +263,9 @@ export class FinancialAnalyticsService {
     tenantId = DEFAULT_TENANT_ID,
     targetYear?: number,
     targetMonth?: number,
-    options?: { includeBaseline?: boolean }
+    options?: { includeBaseline?: boolean; baselineMonths?: number }
   ): Promise<MonthlyAnalyticsResponse> {
-    const nowWib = new Date(Date.now() + 7 * 3600 * 1000);
+    const nowWib = new Date(Date.now() + WIB_OFFSET_MS);
     const fallbackYear = nowWib.getUTCFullYear();
     const fallbackMonth = nowWib.getUTCMonth() + 1;
     // Input tahun/bulan parsial atau di luar rentang jangan menghasilkan rentang sampah.
@@ -240,16 +275,29 @@ export class FinancialAnalyticsService {
     const month =
       Number.isInteger(monthInput) && monthInput >= 1 && monthInput <= 12 ? monthInput : fallbackMonth;
 
-    const cacheKey = `analytics:monthly:${tenantId}:${year}:${month}`;
+    const tenantSettings = await getAnalyticsBaselineSettings(tenantId);
+    const validBaselineMonths =
+      options?.baselineMonths !== undefined && (ALLOWED_BASELINE_MONTHS as readonly number[]).includes(options.baselineMonths)
+        ? options.baselineMonths
+        : undefined;
+    const effectiveSettings = resolveBaselineSettingsForRequest(tenantSettings, validBaselineMonths);
+    const includeBaseline = options?.includeBaseline !== false;
+    const cacheKey = buildMonthlyAnalyticsCacheKey(
+      tenantId,
+      year,
+      month,
+      effectiveSettings.months,
+      includeBaseline
+    );
     const cached = responseCacheService.get<MonthlyAnalyticsResponse>(cacheKey);
     if (cached) return cached;
 
     const { startOfMonth, endOfMonth, daysInMonth, monthName } = this.getMonthDateRange(year, month);
 
     // R-07: Jalankan loadDailyBaseline dan query transaksi bulanan secara paralel via Promise.all
-    const baselinePromise = options?.includeBaseline !== false
-      ? this.loadDailyBaseline(tenantId, year, month)
-      : Promise.resolve({ result: null, settings: null });
+    const baselinePromise = includeBaseline
+      ? this.loadDailyBaseline(tenantId, year, month, effectiveSettings)
+      : Promise.resolve({ result: null as DailyBaselineResult | null, settings: effectiveSettings });
 
     const rowsPromise = (async () => {
       try {
@@ -292,7 +340,7 @@ export class FinancialAnalyticsService {
       }
     })();
 
-    const [{ result: baselineResult, settings: baselineSettings }, rows] = await Promise.all([
+    const [{ result: baselineResult }, rows] = await Promise.all([
       baselinePromise,
       rowsPromise,
     ]);
@@ -303,10 +351,23 @@ export class FinancialAnalyticsService {
       lunasRevenue: number;
       pendingRevenue: number;
       bookingsCount: number;
+      repeatRevenue: number;
+      newRevenue: number;
+      repeatBookings: number;
+      newBookings: number;
     }>();
 
     for (let d = 1; d <= daysInMonth; d++) {
-      dailyMap.set(d, { revenue: 0, lunasRevenue: 0, pendingRevenue: 0, bookingsCount: 0 });
+      dailyMap.set(d, {
+        revenue: 0,
+        lunasRevenue: 0,
+        pendingRevenue: 0,
+        bookingsCount: 0,
+        repeatRevenue: 0,
+        newRevenue: 0,
+        repeatBookings: 0,
+        newBookings: 0,
+      });
     }
 
     let totalRevenue = 0;
@@ -325,6 +386,7 @@ export class FinancialAnalyticsService {
     const transactions: TransactionLedgerItem[] = [];
 
     const nowMs = Date.now();
+    const nowWibMs = nowMs + WIB_OFFSET_MS;
     // Satu cache per-batch: treatment_detail berulang tidak resolve katalog berkali-kali.
     const catalogPriceCache: CatalogPriceCache = new Map();
 
@@ -372,6 +434,13 @@ export class FinancialAnalyticsService {
           if (bucket) {
             bucket.revenue += totalFee;
             bucket.bookingsCount += 1;
+            if (r.is_repeat_order) {
+              bucket.repeatRevenue += totalFee;
+              bucket.repeatBookings += 1;
+            } else {
+              bucket.newRevenue += totalFee;
+              bucket.newBookings += 1;
+            }
             if (isLunas) {
               bucket.lunasRevenue += totalFee;
             } else {
@@ -463,13 +532,23 @@ export class FinancialAnalyticsService {
     // Format daily trend points
     const dailyTrend: DailyRevenuePoint[] = [];
     for (let d = 1; d <= daysInMonth; d++) {
-      const bucket = dailyMap.get(d) || { revenue: 0, lunasRevenue: 0, pendingRevenue: 0, bookingsCount: 0 };
+      const bucket = dailyMap.get(d) || {
+        revenue: 0,
+        lunasRevenue: 0,
+        pendingRevenue: 0,
+        bookingsCount: 0,
+        repeatRevenue: 0,
+        newRevenue: 0,
+        repeatBookings: 0,
+        newBookings: 0,
+      };
       const dObj = new Date(Date.UTC(year, month - 1, d));
       const dayName = dObj.toLocaleDateString('id-ID', { weekday: 'short', timeZone: 'UTC' });
       const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
       
-      const currentDayMs = new Date(Date.UTC(year, month - 1, d, 23, 59, 59)).getTime();
-      const isPastOrToday = currentDayMs <= Date.now() + 7 * 3600 * 1000;
+      // F0.1: hari ini (WIB) true sejak 00:00 WIB, bukan setelah 07:00 WIB besok.
+      const dayStartWibMs = Date.UTC(year, month - 1, d);
+      const isPastOrToday = dayStartWibMs <= nowWibMs;
 
       const baselinePoint = baselineResult?.byDay.get(d);
       const prevPoint = baselineResult?.previousMonth.byDay.get(d);
@@ -482,6 +561,11 @@ export class FinancialAnalyticsService {
         lunasRevenue: bucket.lunasRevenue,
         pendingRevenue: bucket.pendingRevenue,
         bookingsCount: bucket.bookingsCount,
+        repeatRevenue: bucket.repeatRevenue,
+        newRevenue: bucket.newRevenue,
+        repeatBookings: bucket.repeatBookings,
+        newBookings: bucket.newBookings,
+        scheduledRevenue: isPastOrToday ? 0 : bucket.revenue,
         isPastOrToday,
         lastMonthRevenue: prevPoint !== undefined ? prevPoint.revenue : null,
         lastMonthBookings: prevPoint !== undefined ? prevPoint.bookings : null,
@@ -490,6 +574,31 @@ export class FinancialAnalyticsService {
         baselineSamples: baselineResult?.available ? (baselinePoint?.samples ?? 0) : 0,
       });
     }
+
+    const currentYearWib = nowWib.getUTCFullYear();
+    const currentMonthWib = nowWib.getUTCMonth() + 1;
+
+    const monthPosition: MonthPosition =
+      year < currentYearWib || (year === currentYearWib && month < currentMonthWib)
+        ? 'past'
+        : year === currentYearWib && month === currentMonthWib
+        ? 'current'
+        : 'future';
+
+    const asOfDay =
+      monthPosition === 'past'
+        ? daysInMonth
+        : monthPosition === 'current'
+        ? nowWib.getUTCDate()
+        : 0;
+
+    const { points: cumulativeTrend, summary: forecastSummary } =
+      computeCumulativeAndForecast({
+        dailyPoints: dailyTrend,
+        baseline: baselineResult,
+        daysInMonth,
+        context: { monthPosition, asOfDay },
+      });
 
     // Format category breakdown
     const categoryLabels: Record<string, string> = {
@@ -559,12 +668,12 @@ export class FinancialAnalyticsService {
         }
       : {
           available: false,
-          reason: 'QUERY_FAILED',
-          mode: baselineSettings.mode,
-          smoothingWindowDays: baselineSettings.smoothingWindowDays,
-          monthsRequested: baselineSettings.months,
+          reason: includeBaseline ? 'QUERY_FAILED' : 'DISABLED',
+          mode: effectiveSettings.mode,
+          smoothingWindowDays: effectiveSettings.smoothingWindowDays,
+          monthsRequested: effectiveSettings.months,
           monthsUsed: 0,
-          windowStart: shiftWibMonth(year, month, -baselineSettings.months),
+          windowStart: shiftWibMonth(year, month, -effectiveSettings.months),
           windowEnd: shiftWibMonth(year, month, -1),
         };
 
@@ -587,6 +696,8 @@ export class FinancialAnalyticsService {
         totalDeliveryFee,
       },
       dailyTrend,
+      cumulativeTrend,
+      forecastSummary,
       categoryBreakdown,
       paymentBreakdown,
       staffPerformance,
@@ -595,7 +706,9 @@ export class FinancialAnalyticsService {
       baseline: baselineMeta,
     };
 
-    responseCacheService.set(cacheKey, result, 30); // Cache 30 detik
+    if (includeBaseline) {
+      responseCacheService.set(cacheKey, result, 30); // Cache 30 detik
+    }
     return result;
   }
 

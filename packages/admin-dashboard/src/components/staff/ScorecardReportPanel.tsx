@@ -16,7 +16,7 @@ import { apiRequest } from '../../services/api';
 import { useAuth } from '../../contexts/AuthContext';
 import { useUiFeedback } from '../common/UiFeedback';
 import { Button } from '../ui/Button';
-import { formatMonthYearWib, formatWibDate } from '../../utils/dateWib';
+import { formatMonthYearWib, formatWibClock, formatWibDate } from '../../utils/dateWib';
 
 /**
  * ScorecardReportPanel (F9)
@@ -325,9 +325,10 @@ export const ScorecardReportPanel: React.FC = () => {
             </div>
           </div>
           <div className="flex flex-wrap items-end gap-2">
-            <label className="text-[11px] font-bold text-ink-2">
+            <label htmlFor="scorecard-report-month" className="text-[11px] font-bold text-ink-2">
               Bulan
               <select
+                id="scorecard-report-month"
                 value={period.month}
                 onChange={(e) => setPeriod((prev) => ({ ...prev, month: Number(e.target.value) }))}
                 className="mt-1 block px-2.5 py-1.5 rounded-lg bg-surface border border-divider text-xs text-ink focus:outline-none focus:border-accent"
@@ -339,9 +340,10 @@ export const ScorecardReportPanel: React.FC = () => {
                 ))}
               </select>
             </label>
-            <label className="text-[11px] font-bold text-ink-2">
+            <label htmlFor="scorecard-report-year" className="text-[11px] font-bold text-ink-2">
               Tahun
               <select
+                id="scorecard-report-year"
                 value={period.year}
                 onChange={(e) => setPeriod((prev) => ({ ...prev, year: Number(e.target.value) }))}
                 className="mt-1 block px-2.5 py-1.5 rounded-lg bg-surface border border-divider text-xs text-ink focus:outline-none focus:border-accent"
@@ -487,8 +489,11 @@ export const ScorecardReportPanel: React.FC = () => {
 
       <div className="flex flex-wrap items-center justify-between gap-2 text-[10px] text-ink-3 px-1">
         <span>
-          Dihitung {report ? new Date().toLocaleString('id-ID') : '—'} · sumber: reservasi selesai,
-          bukti kedatangan, policy retensi kanonis.
+          Dihitung{' '}
+          {report
+            ? `${formatWibDate(new Date(), { day: '2-digit', month: '2-digit', year: 'numeric' })} ${formatWibClock(new Date())}`
+            : '—'}{' '}
+          · sumber: reservasi selesai, bukti kedatangan, policy retensi kanonis.
         </span>
         {report && <span>Snapshot FINAL tidak dihitung ulang.</span>}
       </div>

@@ -34,6 +34,60 @@ export interface DailyBaselineResult {
   previousMonth: PreviousMonthSummary;
 }
 
+export type MonthPosition = 'past' | 'current' | 'future';
+
+export interface CumulativeTrendInputPoint {
+  day: number;
+  dateStr: string;
+  dayName: string;
+  isPastOrToday: boolean;
+  revenue: number;
+  bookingsCount: number;
+  repeatRevenue: number;
+  newRevenue: number;
+  repeatBookings: number;
+  newBookings: number;
+}
+
+export interface CumulativeTrendPoint {
+  day: number;
+  dateStr: string;
+  dayName: string;
+  isPastOrToday: boolean;
+  isForecast: boolean;
+  scheduledRevenue: number;
+
+  cumulativeRevenue: number | null;
+  cumulativeRepeatRevenue: number | null;
+  cumulativeNewRevenue: number | null;
+  cumulativeBookings: number | null;
+  cumulativeRepeatBookings: number | null;
+  cumulativeNewBookings: number | null;
+
+  cumulativeLastMonthRevenue: number | null;
+  cumulativeLastMonthBookings: number | null;
+  cumulativeAvgRevenue: number | null;
+  cumulativeAvgBookings: number | null;
+
+  cumulativeForecastRevenue: number | null;
+  cumulativeForecastBookings: number | null;
+}
+
+export interface ForecastSummary {
+  method: 'BASELINE_PACED' | 'BASELINE_ONLY' | 'RUN_RATE_FLAT' | 'HISTORICAL' | 'NOT_APPLICABLE';
+  asOfDay: number;
+  daysRemaining: number;
+  pacingFactor: number | null;
+  projectedEndRevenue: number | null;
+  projectedEndBookings: number | null;
+  scheduledFutureRevenue: number;
+}
+
+export interface CumulativeForecastContext {
+  monthPosition: MonthPosition;
+  asOfDay: number; // 0 = bulan masa depan, 1..D = bulan berjalan, D = bulan historis
+}
+
 /**
  * Ekstraksi komponen tanggal zona waktu WIB (UTC+7) tanpa toISOString().
  */
@@ -307,5 +361,208 @@ export function buildDailyBaseline(input: {
     windowEnd,
     byDay,
     previousMonth,
+  };
+}
+
+export function computeCumulativeAndForecast(input: {
+  dailyPoints: CumulativeTrendInputPoint[];
+  baseline: DailyBaselineResult | null;
+  daysInMonth: number;
+  context: CumulativeForecastContext;
+}): { points: CumulativeTrendPoint[]; summary: ForecastSummary } {
+  const { dailyPoints, baseline, daysInMonth, context } = input;
+  const { monthPosition } = context;
+  const isPast = monthPosition === 'past';
+  const isFuture = monthPosition === 'future';
+  const asOfDay = isPast
+    ? daysInMonth
+    : isFuture
+    ? 0
+    : Math.max(0, Math.min(context.asOfDay, daysInMonth));
+
+  const byDay = new Map<number, CumulativeTrendInputPoint>();
+  for (const p of dailyPoints) byDay.set(p.day, p);
+
+  const baselineAvailable = Boolean(baseline?.available);
+  const baselineByDay = baselineAvailable ? baseline!.byDay : null;
+  const prevHasData = Boolean(baseline?.previousMonth && baseline.previousMonth.byDay.size > 0);
+  const prevByDay = prevHasData ? baseline!.previousMonth.byDay : null;
+  const prevDays = baseline?.previousMonth.daysInMonth ?? 0;
+
+  // Prefix akumulasi realisasi
+  const revPrefix = new Array<number>(daysInMonth + 1).fill(0);
+  const repeatRevPrefix = new Array<number>(daysInMonth + 1).fill(0);
+  const newRevPrefix = new Array<number>(daysInMonth + 1).fill(0);
+  const bookPrefix = new Array<number>(daysInMonth + 1).fill(0);
+  const repeatBookPrefix = new Array<number>(daysInMonth + 1).fill(0);
+  const newBookPrefix = new Array<number>(daysInMonth + 1).fill(0);
+
+  for (let d = 1; d <= daysInMonth; d++) {
+    const p = byDay.get(d);
+    revPrefix[d] = revPrefix[d - 1] + (p?.revenue ?? 0);
+    repeatRevPrefix[d] = repeatRevPrefix[d - 1] + (p?.repeatRevenue ?? 0);
+    newRevPrefix[d] = newRevPrefix[d - 1] + (p?.newRevenue ?? 0);
+    bookPrefix[d] = bookPrefix[d - 1] + (p?.bookingsCount ?? 0);
+    repeatBookPrefix[d] = repeatBookPrefix[d - 1] + (p?.repeatBookings ?? 0);
+    newBookPrefix[d] = newBookPrefix[d - 1] + (p?.newBookings ?? 0);
+  }
+
+  // Prefix bulan lalu & baseline (null bila hari itu tidak punya data)
+  const lastRev = new Array<number | null>(daysInMonth + 1).fill(null);
+  const lastBook = new Array<number | null>(daysInMonth + 1).fill(null);
+  const avgRev = new Array<number | null>(daysInMonth + 1).fill(null);
+  const avgBook = new Array<number | null>(daysInMonth + 1).fill(null);
+
+  let cumLastRev = 0;
+  let cumLastBook = 0;
+  let cumAvgRev = 0;
+  let cumAvgBook = 0;
+
+  for (let d = 1; d <= daysInMonth; d++) {
+    if (prevByDay && d <= prevDays) {
+      const prev = prevByDay.get(d);
+      if (prev !== undefined) {
+        cumLastRev += prev.revenue;
+        cumLastBook += prev.bookings;
+        lastRev[d] = cumLastRev;
+        lastBook[d] = cumLastBook;
+      }
+    }
+    if (baselineByDay) {
+      const b = baselineByDay.get(d);
+      if (b?.avg6mRevenue != null) {
+        cumAvgRev += b.avg6mRevenue;
+        cumAvgBook += b.avg6mBookings ?? 0;
+        avgRev[d] = cumAvgRev;
+        avgBook[d] = cumAvgBook;
+      }
+    }
+  }
+
+  // Pacing baseline s/d hari ini
+  let baselineCumRevT = 0;
+  let baselineCumBookT = 0;
+  if (baselineByDay) {
+    for (let d = 1; d <= asOfDay; d++) {
+      const b = baselineByDay.get(d);
+      if (b?.avg6mRevenue != null) baselineCumRevT += b.avg6mRevenue;
+      if (b?.avg6mBookings != null) baselineCumBookT += b.avg6mBookings;
+    }
+  }
+
+  const actualRevT = revPrefix[asOfDay];
+  const actualBookT = bookPrefix[asOfDay];
+  const flatRevRate = asOfDay > 0 ? actualRevT / asOfDay : 0;
+  const flatBookRate = asOfDay > 0 ? actualBookT / asOfDay : 0;
+
+  let pacingRev: number | null = null;
+  let pacingBook: number | null = null;
+  let method: ForecastSummary['method'];
+
+  if (isFuture) {
+    method = 'NOT_APPLICABLE';
+  } else if (isPast) {
+    method = 'HISTORICAL';
+  } else if (baselineAvailable && baselineCumRevT > 0) {
+    pacingRev = actualRevT > 0 ? actualRevT / baselineCumRevT : 1;
+    pacingBook = baselineCumBookT > 0 ? actualBookT / baselineCumBookT : 1;
+    method = actualRevT > 0 ? 'BASELINE_PACED' : 'BASELINE_ONLY';
+  } else {
+    method = 'RUN_RATE_FLAT';
+  }
+
+  // Proyeksi kumulatif untuk d > asOfDay
+  const forecastRev = new Array<number | null>(daysInMonth + 1).fill(null);
+  const forecastBook = new Array<number | null>(daysInMonth + 1).fill(null);
+
+  if (monthPosition === 'current' && asOfDay < daysInMonth) {
+    let cumRev = actualRevT;
+    let cumBook = actualBookT;
+    if (asOfDay >= 0) {
+      forecastRev[asOfDay] = cumRev;
+      forecastBook[asOfDay] = cumBook;
+    }
+
+    for (let d = asOfDay + 1; d <= daysInMonth; d++) {
+      const p = byDay.get(d);
+      const bookedRev = p?.revenue ?? 0;
+      const bookedBook = p?.bookingsCount ?? 0;
+      const b = baselineByDay?.get(d);
+
+      const expectedRev =
+        pacingRev != null && b?.avg6mRevenue != null
+          ? Math.round(b.avg6mRevenue * pacingRev)
+          : Math.round(flatRevRate);
+      const expectedBook =
+        pacingBook != null && b?.avg6mBookings != null
+          ? Math.round(b.avg6mBookings * pacingBook * 10) / 10
+          : Math.round(flatBookRate * 10) / 10;
+
+      cumRev += Math.max(bookedRev, expectedRev);
+      cumBook += Math.max(bookedBook, expectedBook);
+      forecastRev[d] = cumRev;
+      forecastBook[d] = cumBook;
+    }
+  }
+
+  const points: CumulativeTrendPoint[] = [];
+  let scheduledFutureRevenue = 0;
+
+  for (let d = 1; d <= daysInMonth; d++) {
+    const p = byDay.get(d);
+    const realized = isPast ? true : isFuture ? false : d <= asOfDay;
+    const scheduled = !realized ? (p?.revenue ?? 0) : 0;
+    scheduledFutureRevenue += scheduled;
+
+    points.push({
+      day: d,
+      dateStr: p?.dateStr ?? '',
+      dayName: p?.dayName ?? '',
+      isPastOrToday: realized,
+      isForecast: monthPosition === 'current' && d > asOfDay,
+      scheduledRevenue: scheduled,
+
+      cumulativeRevenue: realized ? revPrefix[d] : null,
+      cumulativeRepeatRevenue: realized ? repeatRevPrefix[d] : null,
+      cumulativeNewRevenue: realized ? newRevPrefix[d] : null,
+      cumulativeBookings: realized ? bookPrefix[d] : null,
+      cumulativeRepeatBookings: realized ? repeatBookPrefix[d] : null,
+      cumulativeNewBookings: realized ? newBookPrefix[d] : null,
+
+      cumulativeLastMonthRevenue: lastRev[d],
+      cumulativeLastMonthBookings: lastBook[d],
+      cumulativeAvgRevenue: avgRev[d],
+      cumulativeAvgBookings: avgBook[d],
+
+      cumulativeForecastRevenue: forecastRev[d],
+      cumulativeForecastBookings: forecastBook[d],
+    });
+  }
+
+  const projectedEndRevenue =
+    monthPosition === 'past'
+      ? revPrefix[daysInMonth]
+      : monthPosition === 'current'
+      ? forecastRev[daysInMonth] ?? actualRevT
+      : null;
+
+  const projectedEndBookings =
+    monthPosition === 'past'
+      ? bookPrefix[daysInMonth]
+      : monthPosition === 'current'
+      ? forecastBook[daysInMonth] ?? actualBookT
+      : null;
+
+  return {
+    points,
+    summary: {
+      method,
+      asOfDay,
+      daysRemaining: Math.max(0, daysInMonth - asOfDay),
+      pacingFactor: pacingRev,
+      projectedEndRevenue,
+      projectedEndBookings,
+      scheduledFutureRevenue,
+    },
   };
 }

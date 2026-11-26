@@ -3,6 +3,14 @@
 Catatan temuan yang sengaja dipisah dari fitur aktif, supaya tidak hilang dan
 tidak disalahartikan sebagai bug dari perubahan terbaru.
 
+## 378. [Financial Analytics MTD & Forecasting] Fondasi & Akumulasi MTD (2026-11-26)
+
+- **Status:** PARTIALLY RESOLVED / ACCEPTED
+  - (a) isPastOrToday off-by-7-jam: **RESOLVED** di src/services/financial-analytics.service.ts. Evaluasi hari berjalan WIB kini true sejak 00:00 WIB tanpa delay 7 jam, diverifikasi di tests/unit/analytics-daily-baseline-service.test.ts.
+  - (b) CSV export includeBaseline:false null dereference: **RESOLVED** di src/services/financial-analytics.service.ts. Nilai fallback reason: "DISABLED" dan effectiveSettings mencegah crash saat baseline dimatikan.
+  - (c) Akurasi is_repeat_order historis: **OPEN / ACCEPTED**. Label visual menggunakan "Reservasi Repeat"; backfill ordinal repeat berbasis urutan riil direncanakan sebagai task terpisah.
+  - (d) Batasan forecasting statistik: **DOCUMENTED**. Garis proyeksi adalah estimasi trajektori matematis berbasis bobot musiman baseline dan komitmen booking, bukan jaminan omset pasti.
+
 ## 370. [Live Chat Mobile / iOS Viewport] Celah Hitam & Kolom Ketik Tertinggal Saat Keyboard Muncul di iPhone Safari / PWA (2026-11-24, FIXED — SMOKE TEST PENDING)
 
 - **Status:** FIXED — SMOKE TEST PENDING. Core fix terverifikasi pada iPhone fisik Safari & PWA standalone; 4 smoke test interaksi + matriks regresi Android/iPad/desktop belum dijalankan. **Deploy produksi 2026-11-24 11:37 WIB:** app container di-rebuild dari commit `7c730356` (termasuk `65cdbd62`), healthy; WAHA/worker/DB tidak disentuh.

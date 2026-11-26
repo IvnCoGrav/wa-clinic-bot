@@ -94,4 +94,14 @@ jobs:
       - name: Run Unit Tests (Baseline-Diff Gate)
         run: |
           npx vitest run --reporter=json --outputFile=ci-results.json || true
+          node scripts/report-test-failures.mjs ci-results.json
           node scripts/audit-baseline-diff.mjs docs/audit/2026-11-10/after-f3-6.json ci-results.json
+
+      # Artefak hasil test membantu penelusuran tanpa perlu membuka log job
+      # (log Actions hanya bisa dibaca setelah login).
+      - name: Upload Test Results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ci-test-results
+          path: ci-results.json

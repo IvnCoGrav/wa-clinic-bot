@@ -487,7 +487,7 @@ function ComponentCard(props: {
       </div>
       <div className="mt-2 h-1.5 rounded-full bg-fill-1 overflow-hidden">
         <div
-          className={`h-full rounded-full transition-all duration-500 ${TONE_BAR[props.tone]}`}
+          className={`h-full rounded-full transition-[width] duration-500 ${TONE_BAR[props.tone]}`}
           style={{ width: `${width}%` }}
         />
       </div>

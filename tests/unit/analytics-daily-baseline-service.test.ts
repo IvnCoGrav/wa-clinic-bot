@@ -4,6 +4,14 @@ import { prisma } from '../../src/db/client';
 import { responseCacheService } from '../../src/services/response-cache.service';
 import { clearAnalyticsBaselineSettingsCache } from '../../src/config/analytics-baseline';
 
+function clearCacheByPrefix(prefix: string) {
+  const cache = (responseCacheService as any).cache;
+  if (!cache?.keys) return;
+  for (const key of Array.from(cache.keys())) {
+    if (typeof key === 'string' && key.startsWith(prefix)) cache.delete(key);
+  }
+}
+
 describe('Analytics Daily Baseline Service Wiring (Fase 3)', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
@@ -55,8 +63,7 @@ describe('Analytics Daily Baseline Service Wiring (Fase 3)', () => {
     expect(res1.dailyTrend[0].avg6mRevenue).toBeNull();
 
     // Hapus cache bulanan agar memicu pemanggilan getMonthlyAnalytics lagi
-    const monthlyKey = `analytics:monthly:tenant-b:2026:11`;
-    (responseCacheService as any).cache?.delete?.(monthlyKey);
+    clearCacheByPrefix('analytics:monthly:tenant-b:');
 
     // Panggil kedua kalinya: karena hasil gagal tidak di-cache di baseline, findMany baseline harus tetap dipanggil ulang
     const res2 = await FinancialAnalyticsService.getMonthlyAnalytics('tenant-b', 2026, 11);
@@ -73,8 +80,7 @@ describe('Analytics Daily Baseline Service Wiring (Fase 3)', () => {
     expect(findManySpy).toHaveBeenCalledTimes(2); // 1 baseline + 1 current month
 
     // Hapus cache bulanan agar memicu getMonthlyAnalytics lagi, namun cache baseline tetap hidup
-    const monthlyKey = `analytics:monthly:tenant-c:2026:10`;
-    (responseCacheService as any).cache?.delete?.(monthlyKey);
+    clearCacheByPrefix('analytics:monthly:tenant-c:');
 
     // Request 2
     await FinancialAnalyticsService.getMonthlyAnalytics('tenant-c', 2026, 10);
@@ -124,5 +130,108 @@ describe('Analytics Daily Baseline Service Wiring (Fase 3)', () => {
       expect(point.avg6mBookings).toBeNull();
       expect(point.baselineSamples).toBe(0);
     }
+  });
+
+  describe('Fase 0 - Fondasi Tests', () => {
+    it('0.1: isPastOrToday akurat di jam-jam perbatasan WIB', async () => {
+      vi.spyOn(prisma.reservation, 'findMany').mockResolvedValue([]);
+
+      // 2026-11-26T00:01+07:00 -> 2026-11-25T17:01:00Z
+      vi.setSystemTime(new Date('2026-11-25T17:01:00.000Z'));
+      const res1 = await FinancialAnalyticsService.getMonthlyAnalytics('tenant-f01', 2026, 11);
+      expect(res1.dailyTrend[25].isPastOrToday).toBe(true); // hari ke-26
+      expect(res1.dailyTrend[26].isPastOrToday).toBe(false); // hari ke-27
+
+      // 2026-11-26T12:00+07:00 -> 2026-11-26T05:00:00Z
+      clearCacheByPrefix('analytics:monthly:tenant-f01:');
+      vi.setSystemTime(new Date('2026-11-26T05:00:00.000Z'));
+      const res2 = await FinancialAnalyticsService.getMonthlyAnalytics('tenant-f01', 2026, 11);
+      expect(res2.dailyTrend[25].isPastOrToday).toBe(true);
+
+      // 2026-11-26T23:59+07:00 -> 2026-11-26T16:59:00Z
+      clearCacheByPrefix('analytics:monthly:tenant-f01:');
+      vi.setSystemTime(new Date('2026-11-26T16:59:00.000Z'));
+      const res3 = await FinancialAnalyticsService.getMonthlyAnalytics('tenant-f01', 2026, 11);
+      expect(res3.dailyTrend[25].isPastOrToday).toBe(true);
+      expect(res3.dailyTrend[26].isPastOrToday).toBe(false);
+
+      // 2026-11-27T00:01+07:00 -> 2026-11-26T17:01:00Z
+      clearCacheByPrefix('analytics:monthly:tenant-f01:');
+      vi.setSystemTime(new Date('2026-11-26T17:01:00.000Z'));
+      const res4 = await FinancialAnalyticsService.getMonthlyAnalytics('tenant-f01', 2026, 11);
+      expect(res4.dailyTrend[25].isPastOrToday).toBe(true);
+      expect(res4.dailyTrend[26].isPastOrToday).toBe(true);
+
+      vi.useRealTimers();
+    });
+
+    it('0.2: DailyRevenuePoint memiliki repeatRevenue, newRevenue, scheduledRevenue dan konsisten', async () => {
+      vi.spyOn(prisma.reservation, 'findMany').mockImplementation(async (args?: any) => {
+        if (!args?.where?.status) {
+          // Current month rows
+          return [
+            {
+              id: 'res-repeat',
+              booking_date: new Date('2026-11-10T03:00:00Z'), // Tgl 10 WIB
+              status: 'completed',
+              purchase_value: 200000,
+              discount_amount: 0,
+              delivery_fee: 20000,
+              treatment_detail: 'Kids Spa',
+              is_repeat_order: true,
+              customer: { ongkir: 20000 },
+              items: [{ price: 200000 }],
+            },
+            {
+              id: 'res-new',
+              booking_date: new Date('2026-11-10T05:00:00Z'), // Tgl 10 WIB
+              status: 'completed',
+              purchase_value: 150000,
+              discount_amount: 0,
+              delivery_fee: 10000,
+              treatment_detail: 'Baby Massage',
+              is_repeat_order: false,
+              customer: { ongkir: 10000 },
+              items: [{ price: 150000 }],
+            },
+          ] as any[];
+        }
+        return [];
+      });
+
+      const res = await FinancialAnalyticsService.getMonthlyAnalytics('tenant-f02', 2026, 11);
+      const day10 = res.dailyTrend[9]; // Tgl 10
+
+      expect(day10.repeatRevenue).toBe(220000);
+      expect(day10.repeatBookings).toBe(1);
+      expect(day10.newRevenue).toBe(160000);
+      expect(day10.newBookings).toBe(1);
+      expect(day10.repeatRevenue + day10.newRevenue).toBe(day10.revenue);
+      expect(day10.repeatBookings + day10.newBookings).toBe(day10.bookingsCount);
+    });
+
+    it('0.3: CSV export tidak throw saat includeBaseline:false', async () => {
+      vi.spyOn(prisma.reservation, 'findMany').mockResolvedValue([]);
+      const csv = await FinancialAnalyticsService.generateMonthlyTransactionsCsv('tenant-f03', 2026, 11);
+      expect(csv).toContain('No. Transaksi');
+    });
+
+    it('0.4: Cache isolation antara baselineMonths=3, 6, dan 12', async () => {
+      const findManySpy = vi.spyOn(prisma.reservation, 'findMany').mockResolvedValue([]);
+
+      const res3 = await FinancialAnalyticsService.getMonthlyAnalytics('tenant-f04', 2026, 11, { baselineMonths: 3 });
+      expect(res3.baseline.monthsRequested).toBe(3);
+
+      const res6 = await FinancialAnalyticsService.getMonthlyAnalytics('tenant-f04', 2026, 11, { baselineMonths: 6 });
+      expect(res6.baseline.monthsRequested).toBe(6);
+
+      const res12 = await FinancialAnalyticsService.getMonthlyAnalytics('tenant-f04', 2026, 11, { baselineMonths: 12 });
+      expect(res12.baseline.monthsRequested).toBe(12);
+
+      // Pastikan ketiganya tidak saling menimpa
+      expect(res3.baseline.monthsRequested).toBe(3);
+      expect(res6.baseline.monthsRequested).toBe(6);
+      expect(res12.baseline.monthsRequested).toBe(12);
+    });
   });
 });

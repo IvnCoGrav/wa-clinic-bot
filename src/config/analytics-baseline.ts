@@ -74,6 +74,31 @@ export function normalizeAnalyticsBaselineSettings(raw: unknown): AnalyticsBasel
   };
 }
 
+export const ALLOWED_BASELINE_MONTHS = [3, 6, 12] as const;
+export type BaselineMonthsOverride = (typeof ALLOWED_BASELINE_MONTHS)[number];
+
+/**
+ * Terapkan override jendela baseline dari request TANPA memutasi settings tenant.
+ * Nilai di luar 3/6/12 diabaikan (fallback ke konfigurasi tenant).
+ */
+export function resolveBaselineSettingsForRequest(
+  settings: AnalyticsBaselineSettings,
+  overrideMonths?: number | null
+): AnalyticsBaselineSettings {
+  if (overrideMonths === undefined || overrideMonths === null) {
+    return { ...settings };
+  }
+  const months = Number(overrideMonths);
+  if (!Number.isInteger(months) || !ALLOWED_BASELINE_MONTHS.includes(months as BaselineMonthsOverride)) {
+    return { ...settings };
+  }
+  return {
+    ...settings,
+    months,
+    minMonths: Math.min(settings.minMonths, months),
+  };
+}
+
 /**
  * Mengambil konfigurasi baseline analitik untuk tenant tertentu.
  * Menggunakan in-memory cache dengan TTL 5 menit dan graceful fallback saat DB offline.
