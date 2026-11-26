@@ -55,4 +55,48 @@ describe('Security Audit — scan-secrets.ts', () => {
     expect(findings.length).toBeGreaterThan(0);
     expect(findings[0].ruleName).toContain('.env');
   });
+
+  it('tidak menandai frasa konfirmasi CLI sebagai kredensial (konstanta simbolik)', () => {
+    const testFile = path.join(tmpDir, 'test_confirm_phrase.ts');
+    // Kasus nyata src/scripts/reconcile-payment-proof-rows.ts:41 yang membuat
+    // gerbang security:scan CI merah sejak 2026-11-19.
+    fs.writeFileSync(
+      testFile,
+      "const CONFIRM_TOKEN = 'RECONCILE_PAYMENT_PROOFS_CONFIRMED';",
+      'utf-8'
+    );
+
+    expect(scanFile(testFile)).toHaveLength(0);
+  });
+
+  it('tetap menandai kunci riil meski nama variabelnya berakhiran TOKEN/SECRET', () => {
+    const testFile = path.join(tmpDir, 'test_real_looking_secret.ts');
+    // Fixture dirakit dinamis agar file test ini sendiri tidak memicu scanner.
+    const apiKeyName = ['ADMIN', 'API', 'KEY'].join('_');
+    const mixedValue = ['aB3d', 'E5fG', '7hJ9', 'kL1m'].join('');
+    const tokenName = ['SESSION', 'TOKEN'].join('_');
+    const tokenValue = ['tk', 'live', '9f8e7d6c5b4a'].join('_');
+    fs.writeFileSync(
+      testFile,
+      `const ${apiKeyName} = "${mixedValue}";\nconst ${tokenName} = "${tokenValue}";`,
+      'utf-8'
+    );
+
+    const findings = scanFile(testFile);
+    expect(findings).toHaveLength(2);
+    expect(findings.every((f) => f.ruleName.includes('Generic API Key'))).toBe(true);
+    // Nilai tidak boleh bocor utuh di laporan.
+    expect(findings.every((f) => !f.snippet.includes(mixedValue))).toBe(true);
+  });
+
+  it('tidak melonggar sampai kata tunggal ALL_CAPS (mis. PASSWORD123456)', () => {
+    const testFile = path.join(tmpDir, 'test_single_word_secret.ts');
+    const passName = ['DB', 'PASSWORD'].join('_');
+    const passValue = ['PASSWORD', '123456'].join('');
+    fs.writeFileSync(testFile, `const ${passName} = "${passValue}";`, 'utf-8');
+
+    const findings = scanFile(testFile);
+    expect(findings).toHaveLength(1);
+    expect(findings[0].ruleName).toContain('Generic API Key');
+  });
 });

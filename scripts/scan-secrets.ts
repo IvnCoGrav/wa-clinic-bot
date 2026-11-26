@@ -13,6 +13,26 @@ export interface SecretRule {
   name: string;
   pattern: RegExp;
   allowlist?: RegExp[];
+  /**
+   * Bila true, nilai hasil tangkapan grup pertama yang berbentuk konstanta
+   * simbolik (SCREAMING_SNAKE_CASE) tidak dianggap kredensial.
+   */
+  allowSymbolicConstant?: boolean;
+}
+
+/**
+ * Konstanta simbolik, mis. `CONFIRM_TOKEN = 'RECONCILE_PAYMENT_PROOFS_CONFIRMED'`
+ * atau `RESET_FLAG = 'HAPUS_SEMUA'`. Ciri: minimal dua kata ALL_CAPS yang
+ * dirangkai garis bawah — bentuk frasa/pengenal yang dibaca manusia dan tidak
+ * pernah menjadi format kunci API. Kunci acak (sk-, kn-, AIza, EAAR, JWT ORS,
+ * PEM) tetap tertangkap rule spesifik; kata tunggal seperti `PASSWORD123456`
+ * juga tetap ditandai karena tidak berpola frasa.
+ */
+const SYMBOLIC_CONSTANT_VALUE = /^[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+$/;
+
+export function isSymbolicConstantValue(value: string): boolean {
+  const v = value.trim();
+  return v.length >= 12 && SYMBOLIC_CONSTANT_VALUE.test(v);
 }
 
 export const SECRET_RULES: SecretRule[] = [
@@ -70,6 +90,7 @@ export const SECRET_RULES: SecretRule[] = [
   {
     name: 'Generic API Key / Secret Assignment',
     pattern: /\b[A-Za-z0-9_]*(?:API_KEY|SECRET|TOKEN|PASSWORD|PRIVATE_KEY)\s*[:=]\s*["']([A-Za-z0-9_\-]{12,})["']/i,
+    allowSymbolicConstant: true,
     allowlist: [
       /your[-_]/i,
       /my_secure_random_/i,
@@ -205,6 +226,12 @@ export function scanFile(filePath: string): { ruleName: string; line: number; sn
         const normalizedRel = relPath.replace(/\\/g, '/');
         const isTestFile = (normalizedRel.startsWith('tests/') || normalizedRel.startsWith('test/')) && !normalizedRel.includes('__fixtures_secret_scan__');
         if (isTestFile && (/mock|test|dummy|fake|sample|123|abc|password|token|real_media_token|integration/i.test(line))) {
+          continue;
+        }
+
+        // Nilai simbolik (nama konstanta) bukan kredensial — lihat
+        // SYMBOLIC_CONSTANT_VALUE di atas.
+        if (rule.allowSymbolicConstant && isSymbolicConstantValue(match[1] ?? '')) {
           continue;
         }
 
