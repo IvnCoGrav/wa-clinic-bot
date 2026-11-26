@@ -1,6 +1,7 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { FinancialAnalyticsService } from '../../services/financial-analytics.service';
 import { TreatmentHeatmapService } from '../../services/treatment-heatmap.service';
+import { ALLOWED_BASELINE_MONTHS } from '../../config/analytics-baseline';
 import { tenantOf } from './route-helpers';
 
 const financialExportCooldown = new Map<string, number>();
@@ -18,19 +19,31 @@ export async function analyticsAdminRoutes(fastify: FastifyInstance) {
         Querystring: {
           year?: string;
           month?: string;
+          baselineMonths?: string;
         };
       }>,
       reply: FastifyReply
     ) => {
       const year = request.query.year ? parseInt(request.query.year, 10) : undefined;
       const month = request.query.month ? parseInt(request.query.month, 10) : undefined;
+      const rawBaselineMonths = request.query.baselineMonths;
+      const baselineMonths =
+        rawBaselineMonths === undefined ? undefined : parseInt(rawBaselineMonths, 10);
+
+      if (baselineMonths !== undefined && !(ALLOWED_BASELINE_MONTHS as readonly number[]).includes(baselineMonths)) {
+        return reply.status(400).send({
+          success: false,
+          error: 'Parameter baselineMonths harus 3, 6, atau 12.',
+        });
+      }
 
       try {
         const tenantId = tenantOf(request);
         const data = await FinancialAnalyticsService.getMonthlyAnalytics(
           tenantId,
           year,
-          month
+          month,
+          { baselineMonths }
         );
 
         return reply

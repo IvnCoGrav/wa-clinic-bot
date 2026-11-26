@@ -68,6 +68,14 @@ export const ChartSeriesToggle: React.FC<ChartSeriesToggleProps> = ({
                     backgroundColor: isVisible && !isDisabled ? it.color : 'rgb(var(--c-ink-3))',
                   }}
                 />
+              ) : it.shape === 'area' ? (
+                <span
+                  className="w-2.5 h-2.5 rounded-xs"
+                  style={{
+                    backgroundColor: isVisible && !isDisabled ? it.color : 'rgb(var(--c-ink-3))',
+                    opacity: 0.55,
+                  }}
+                />
               ) : (
                 <span
                   className="w-3 h-0.5 rounded-full"

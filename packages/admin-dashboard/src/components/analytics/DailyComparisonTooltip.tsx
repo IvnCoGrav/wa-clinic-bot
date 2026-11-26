@@ -13,6 +13,7 @@ export interface DailyComparisonTooltipProps {
   labels: DailyComparisonTooltipLabels;
   baselineAvailable?: boolean;
   showBookings?: boolean;
+  metricType?: 'revenue' | 'bookings';
 }
 
 export const DailyComparisonTooltip: React.FC<DailyComparisonTooltipProps> = ({
@@ -21,6 +22,7 @@ export const DailyComparisonTooltip: React.FC<DailyComparisonTooltipProps> = ({
   labels,
   baselineAvailable = true,
   showBookings = true,
+  metricType = 'revenue',
 }) => {
   if (!active || !payload || !payload.length) return null;
 
@@ -51,10 +53,20 @@ export const DailyComparisonTooltip: React.FC<DailyComparisonTooltipProps> = ({
     : null;
   const samples = Number.isFinite(item.baselineSamples) ? Number(item.baselineSamples) : 0;
 
-  // Hitung deviasi terhadap baseline 6 bulan (A-018: baseline null atau 0 -> jangan tampilkan persen)
+  const isBookings = metricType === 'bookings';
+  const currentValue = isBookings ? currentBookings : currentRevenue;
+  const prevValue = isBookings ? prevBookings : prevRevenue;
+  const avgValue = isBookings ? avgBookings : avgRevenue;
+
+  const formatValue = (v: number | null): string => {
+    if (v === null) return '-';
+    return isBookings ? `${Math.round(v * 10) / 10} Pasien` : formatRupiah(v);
+  };
+
+  // Hitung deviasi terhadap baseline (A-018: baseline null atau 0 -> jangan tampilkan persen)
   const deviation =
-    currentRevenue !== null && avgRevenue !== null && avgRevenue > 0
-      ? Math.round(((currentRevenue - avgRevenue) / avgRevenue) * 100)
+    currentValue !== null && avgValue !== null && avgValue > 0
+      ? Math.round(((currentValue - avgValue) / avgValue) * 100)
       : null;
 
   return (
@@ -86,19 +98,19 @@ export const DailyComparisonTooltip: React.FC<DailyComparisonTooltipProps> = ({
             <span>{labels.current}:</span>
           </span>
           <span className="font-bold text-accent">
-            {currentRevenue !== null ? formatRupiah(currentRevenue) : '-'}
+            {formatValue(currentValue)}
           </span>
         </div>
 
         {/* Rincian lunas & tagih di tempat jika ada */}
-        {lunasRevenue > 0 && pendingRevenue > 0 && (
+        {!isBookings && lunasRevenue > 0 && pendingRevenue > 0 && (
           <div className="pl-3.5 text-[11px] text-ink-3 flex items-center justify-between">
             <span>✓ Lunas: {formatRupiah(lunasRevenue)}</span>
             <span className="text-warning">⏳ Tagih: {formatRupiah(pendingRevenue)}</span>
           </div>
         )}
 
-        {showBookings && currentRevenue !== null && (
+        {!isBookings && showBookings && currentRevenue !== null && (
           <div className="pl-3.5 text-[11px] text-ink-3">
             {currentBookings} Pasien/Reservasi
           </div>
@@ -113,10 +125,10 @@ export const DailyComparisonTooltip: React.FC<DailyComparisonTooltipProps> = ({
             <span>{labels.previous}:</span>
           </span>
           <span className="font-semibold text-info">
-            {prevRevenue !== null ? formatRupiah(prevRevenue) : '-'}
+            {formatValue(prevValue)}
           </span>
         </div>
-        {showBookings && prevBookings !== null && (
+        {!isBookings && showBookings && prevBookings !== null && (
           <div className="pl-3.5 text-[11px] text-ink-3">
             {prevBookings} Pasien
           </div>
@@ -131,10 +143,10 @@ export const DailyComparisonTooltip: React.FC<DailyComparisonTooltipProps> = ({
             <span>{labels.baseline}:</span>
           </span>
           <span className="font-semibold text-warning">
-            {baselineAvailable && avgRevenue !== null ? formatRupiah(avgRevenue) : 'Data belum cukup'}
+            {baselineAvailable && avgValue !== null ? formatValue(avgValue) : 'Data belum cukup'}
           </span>
         </div>
-        {baselineAvailable && showBookings && avgBookings !== null && (
+        {!isBookings && baselineAvailable && showBookings && avgBookings !== null && (
           <div className="pl-3.5 text-[11px] text-ink-3">
             Rata-rata {avgBookings} Pasien
             {samples > 0 && <span className="text-ink-3"> · n={samples}</span>}

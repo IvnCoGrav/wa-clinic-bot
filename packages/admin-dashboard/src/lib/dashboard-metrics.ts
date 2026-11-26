@@ -62,6 +62,63 @@ export function mapDailyTrendToChart(dailyTrend: any[]): DailyChartPoint[] {
   });
 }
 
+export interface ForecastSummaryDto {
+  method: 'BASELINE_PACED' | 'BASELINE_ONLY' | 'RUN_RATE_FLAT' | 'HISTORICAL' | 'NOT_APPLICABLE';
+  asOfDay: number;
+  daysRemaining: number;
+  pacingFactor: number | null;
+  projectedEndRevenue: number | null;
+  projectedEndBookings: number | null;
+  scheduledFutureRevenue: number;
+}
+
+export interface CumulativeChartPoint {
+  name: string;
+  day: number;
+  dateStr?: string;
+  dayName?: string;
+  hasHappened: boolean;
+  isForecast: boolean;
+  scheduledRevenue: number;
+  cumulativeRevenue: number | null;
+  cumulativeRepeatRevenue: number | null;
+  cumulativeNewRevenue: number | null;
+  cumulativeBookings: number | null;
+  cumulativeRepeatBookings: number | null;
+  cumulativeNewBookings: number | null;
+  cumulativeLastMonthRevenue: number | null;
+  cumulativeLastMonthBookings: number | null;
+  cumulativeAvgRevenue: number | null;
+  cumulativeAvgBookings: number | null;
+  cumulativeForecastRevenue: number | null;
+  cumulativeForecastBookings: number | null;
+}
+
+export function mapCumulativeTrendToChart(cumulativeTrend: any[]): CumulativeChartPoint[] {
+  if (!Array.isArray(cumulativeTrend)) return [];
+  return cumulativeTrend.map((p: any) => ({
+    name: String(p?.day ?? ''),
+    day: Number(p?.day ?? 0),
+    dateStr: p?.dateStr,
+    dayName: p?.dayName,
+    hasHappened: p?.isPastOrToday !== false,
+    isForecast: Boolean(p?.isForecast),
+    scheduledRevenue: pickNumber(p?.scheduledRevenue, 0) ?? 0,
+    cumulativeRevenue: pickNumber(p?.cumulativeRevenue),
+    cumulativeRepeatRevenue: pickNumber(p?.cumulativeRepeatRevenue),
+    cumulativeNewRevenue: pickNumber(p?.cumulativeNewRevenue),
+    cumulativeBookings: pickNumber(p?.cumulativeBookings),
+    cumulativeRepeatBookings: pickNumber(p?.cumulativeRepeatBookings),
+    cumulativeNewBookings: pickNumber(p?.cumulativeNewBookings),
+    cumulativeLastMonthRevenue: pickNumber(p?.cumulativeLastMonthRevenue),
+    cumulativeLastMonthBookings: pickNumber(p?.cumulativeLastMonthBookings),
+    cumulativeAvgRevenue: pickNumber(p?.cumulativeAvgRevenue),
+    cumulativeAvgBookings: pickNumber(p?.cumulativeAvgBookings),
+    cumulativeForecastRevenue: pickNumber(p?.cumulativeForecastRevenue),
+    cumulativeForecastBookings: pickNumber(p?.cumulativeForecastBookings),
+  }));
+}
+
 /**
  * Label mode baseline yang dipakai bersama oleh Overview & Financial Analytics.
  * Menghindari duplikasi string di dua halaman (dan label "MA 7-hari" yang salah

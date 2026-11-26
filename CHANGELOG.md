@@ -4,6 +4,24 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### 2026-11-26 - Feat: Grafik Akumulasi MTD, Forecasting Runway & Breakdown Repeat (#378)
+
+- **Konteks:** Menjawab kebutuhan visualisasi performa kumulatif Month-to-Date (MTD) dengan kurva akumulasi berjalan (S-curve non-decreasing), perbandingan langsung terhadap garis bulan lalu dan baseline rata-rata historis (3, 6, 12 bulan), runway forecasting akhir bulan berbasis pace historis + komitmen booking terjadwal, serta visualisasi breakdown pasien baru vs reservasi repeat.
+- **Perbaikan Fondasional & Bugfix (Fase 0):**
+  1. **Timezone Bugfix `isPastOrToday` (`src/services/financial-analytics.service.ts`):** Mengoreksi off-by-7-jam tanggal berjalan WIB yang sebelumnya membandingkan UTC end-of-day dengan `now + 7h`, kini menggunakan `dayStartWibMs <= nowWibMs` sehingga tanggal hari ini aktif tepat sejak 00:00 WIB.
+  2. **CSV Export Crash Fix (`src/services/financial-analytics.service.ts`):** Memperbaiki crash `TypeError` dereferensi null saat export CSV transaksi bulanan (`includeBaseline: false`), dengan menyematkan alasan `DISABLED` dan `effectiveSettings` yang aman.
+  3. **Multi-Tenant Baseline Window Resolver (`src/config/analytics-baseline.ts`):** Fungsi kanonis `resolveBaselineSettingsForRequest` untuk mendukung jendela baseline 3, 6, dan 12 bulan tanpa memutasi konfigurasi tenant di database.
+  4. **Metrik Repeat & Breakdown Harian (`src/services/financial-analytics.service.ts`):** Memperluas kontrak harian `DailyRevenuePoint` dengan `repeatRevenue`, `newRevenue`, `repeatBookings`, `newBookings`, dan `scheduledRevenue`.
+- **Domain Engine & Forecasting (Fase 1 & Fase 2):**
+  1. **Pure Function `computeCumulativeAndForecast` (`src/domain/daily-baseline.ts`):** Menghitung running total akumulasi bulan berjalan, bulan lalu, dan baseline historis. Menggaransi invarian non-decreasing ($y_d \ge y_{d-1}$), anchor mulus pada hari $T$, komitmen lantai booking terjadwal, dan kalkulasi forecasting pacing berbasis rata-rata profil harian baseline.
+  2. **API Endpoint Subroute (`src/routes/admin/analytics.subroute.ts`):** Menambahkan query parameter `baselineMonths` (`3`, `6`, `12`) dengan validasi deterministik dan integrasi cache key multi-parameter.
+- **Visualisasi & Frontend Dashboard (Fase 3 & Fase 4):**
+  1. **Mapper & Adaptor Data (`packages/admin-dashboard/src/lib/dashboard-metrics.ts`):** `mapCumulativeTrendToChart` mentransformasikan DTO backend ke format chart Recharts dengan normalisasi nilai `null` untuk mencegah garis interpolasi palsu.
+  2. **Komponen `CumulativeTrendChart.tsx`:** Visualisasi Recharts ComposedChart dengan area gradient untuk bulan berjalan, garis putus-putus untuk forecasting, garis baseline dan bulan lalu, serta stacked area untuk Pasien Baru vs Reservasi Repeat.
+  3. **Tooltip Interaktif `CumulativeComparisonTooltip.tsx`:** Kartu perbandingan lengkap menyajikan capaian MTD, perbandingan MoM %, varians terhadap Baseline %, breakdown Baru vs Repeat, serta proyeksi akhir bulan.
+  4. **Kontrol Interaktif (`FinancialAnalytics.tsx`):** Segmented control mode (Akumulasi MTD vs Harian, tersimpan di `localStorage`), toggle metrik (Omset vs Reservasi), selector jendela baseline (`Auto`, `3 Bln`, `6 Bln`, `12 Bln`), dan integrasi `ChartSeriesToggle`.
+- **Pengujian & Kualitas:** 45 tes targeted hijau (domain baseline kumulatif, service baseline, config baseline, admin analytics subroute, mapper dashboard metrics), typecheck & dashboard build sukses, `check:reuse` bersih.
+
 #### 2026-11-25 - Feat: Spesialisasi Notifikasi Keterlambatan Khusus Staff Terapis (#376)
 
 - **Konteks:** Menindaklanjuti audit operasional bahwa Departure Watchdog sebelumnya menyerap seluruh jadwal tanpa filter peran, memicu alarm palsu "Bidan Belum Ditugaskan terlambat" dan menghitung keterlambatan untuk staf kantor non-lapangan (Admin CS, Advertiser, SPV).

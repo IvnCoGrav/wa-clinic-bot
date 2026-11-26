@@ -51,9 +51,16 @@ import { chartTheme } from '../../lib/chartTheme';
 import { RetentionTab } from '../../components/analytics/RetentionTab';
 import { TreatmentHeatmapTab } from '../../components/analytics/TreatmentHeatmapTab';
 import { ChartSeriesToggle, type ChartSeriesToggleItem } from '../../components/analytics/ChartSeriesToggle';
+import { CumulativeTrendChart } from '../../components/analytics/CumulativeTrendChart';
 import { DailyComparisonTooltip } from '../../components/analytics/DailyComparisonTooltip';
 import { useChartSeriesToggles } from '../../hooks/useChartSeriesToggles';
-import { mapDailyTrendToChart, describeBaselineMode } from '../../lib/dashboard-metrics';
+import {
+  mapDailyTrendToChart,
+  mapCumulativeTrendToChart,
+  describeBaselineMode,
+  type CumulativeChartPoint,
+  type ForecastSummaryDto,
+} from '../../lib/dashboard-metrics';
 import { formatRupiah } from '../../utils/money';
 import { formatMonthYearWib, formatWib, formatWibDate } from '../../utils/dateWib';
 
@@ -80,6 +87,11 @@ interface DailyRevenuePoint {
   lunasRevenue: number;
   pendingRevenue: number;
   bookingsCount: number;
+  repeatRevenue?: number;
+  newRevenue?: number;
+  repeatBookings?: number;
+  newBookings?: number;
+  scheduledRevenue?: number;
   isPastOrToday: boolean;
   lastMonthRevenue?: number | null;
   lastMonthBookings?: number | null;
@@ -90,7 +102,7 @@ interface DailyRevenuePoint {
 
 interface BaselineMeta {
   available: boolean;
-  reason?: 'INSUFFICIENT_HISTORY' | 'NO_HISTORY' | 'QUERY_FAILED';
+  reason?: 'INSUFFICIENT_HISTORY' | 'NO_HISTORY' | 'QUERY_FAILED' | 'DISABLED';
   mode: 'weekday' | 'calendar';
   smoothingWindowDays: number;
   monthsRequested: number;
@@ -154,6 +166,8 @@ interface MonthlyAnalyticsData {
   monthName: string;
   kpi: MonthlyKpiSummary;
   dailyTrend: DailyRevenuePoint[];
+  cumulativeTrend?: CumulativeChartPoint[];
+  forecastSummary?: ForecastSummaryDto;
   categoryBreakdown: CategoryRevenueItem[];
   paymentBreakdown: PaymentMethodItem[];
   staffPerformance: StaffPerformanceItem[];
@@ -213,13 +227,41 @@ export const FinancialAnalytics: React.FC = () => {
   const [selectedTx, setSelectedTx] = useState<TransactionLedgerItem | null>(null);
   const [activeTab, setActiveTab] = useState<'keuangan' | 'retensi' | 'heatmap'>('keuangan');
 
-  // Series visibility toggles with localStorage persistence
+  // Chart view mode (cumulative vs daily) with localStorage persistence (Default: cumulative - Q1)
+  const [chartMode, setChartMode] = useState<'cumulative' | 'daily'>(() => {
+    try {
+      return localStorage.getItem('fin-analytics:chart-mode') === 'daily' ? 'daily' : 'cumulative';
+    } catch {
+      return 'cumulative';
+    }
+  });
+
+  const [baselineMonths, setBaselineMonths] = useState<3 | 6 | 12 | 'auto'>('auto');
+  const [metricType, setMetricType] = useState<'revenue' | 'bookings'>('revenue');
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('fin-analytics:chart-mode', chartMode);
+    } catch {}
+  }, [chartMode]);
+
+  // Series visibility toggles for daily chart
   const { visible: chartVisible, toggle: toggleChartSeries } = useChartSeriesToggles(
     'fin-analytics:daily-series',
     { current: true, lastMonth: true, baseline: true }
   );
 
+  // Series visibility toggles for cumulative chart (Q6)
+  const { visible: cumulativeVisible, toggle: toggleCumulativeSeries } = useChartSeriesToggles(
+    'fin-analytics:cumulative-series',
+    { total: true, new: false, repeat: false, last: true, avg: true, forecast: true }
+  );
+
   const chartDaily = useMemo(() => mapDailyTrendToChart(data?.dailyTrend || []), [data?.dailyTrend]);
+  const chartCumulative = useMemo(
+    () => mapCumulativeTrendToChart(data?.cumulativeTrend || []),
+    [data?.cumulativeTrend]
+  );
 
   const baselineAvailable = Boolean(data?.baseline?.available);
 
@@ -236,7 +278,7 @@ export const FinancialAnalytics: React.FC = () => {
     : '';
   const baselineLabel = windowStartInfo && prevMonthInfo
     ? `Rata-rata (${startMonthName}–${prevMonthName})`
-    : 'Rata-rata 6 Bln';
+    : `Rata-rata ${data?.baseline?.monthsUsed ?? 6} Bln`;
 
   const chartLabels = useMemo(
     () => ({
@@ -272,19 +314,80 @@ export const FinancialAnalytics: React.FC = () => {
           data?.baseline?.reason === 'INSUFFICIENT_HISTORY'
             ? `Riwayat data belum mencukupi (tersedia ${data.baseline.monthsUsed} dari minimal 3 bulan)`
             : data?.baseline?.reason === 'NO_HISTORY'
-            ? 'Belum ada riwayat transaksi 6 bulan sebelumnya'
+            ? 'Belum ada riwayat transaksi historis'
             : 'Data baseline tidak tersedia',
       },
     ],
     [currentMonthLabel, prevMonthLabel, baselineLabel, baselineAvailable, data?.baseline]
   );
 
+  const cumulativeToggleItems: ChartSeriesToggleItem[] = useMemo(
+    () => [
+      {
+        key: 'total',
+        label: `${currentMonthLabel} (Total)`,
+        color: chartTheme.accent,
+        shape: 'area',
+      },
+      {
+        key: 'new',
+        label: 'Pasien Baru',
+        color: 'rgb(var(--c-info))',
+        shape: 'area',
+      },
+      {
+        key: 'repeat',
+        label: 'Reservasi Repeat',
+        color: chartTheme.accent,
+        shape: 'area',
+      },
+      {
+        key: 'last',
+        label: prevMonthLabel,
+        color: 'rgb(var(--c-info))',
+        dashed: true,
+        shape: 'line',
+      },
+      {
+        key: 'avg',
+        label: data?.baseline
+          ? `Rata-rata ${data.baseline.monthsUsed} Bln`
+          : 'Rata-rata Historis',
+        color: 'rgb(var(--c-warning))',
+        shape: 'line',
+        disabled: !baselineAvailable,
+        disabledReason:
+          data?.baseline?.reason === 'INSUFFICIENT_HISTORY'
+            ? `Riwayat data belum mencukupi (tersedia ${data.baseline.monthsUsed} dari minimal 3 bulan)`
+            : data?.baseline?.reason === 'NO_HISTORY'
+            ? 'Belum ada riwayat transaksi historis'
+            : 'Data baseline tidak tersedia',
+      },
+      {
+        key: 'forecast',
+        label: 'Proyeksi Akhir Bulan',
+        color: chartTheme.accent,
+        dashed: true,
+        shape: 'line',
+      },
+    ],
+    [currentMonthLabel, prevMonthLabel, baselineAvailable, data?.baseline]
+  );
+
   // Fetch monthly analytics data
   const fetchAnalytics = useCallback(async () => {
     setLoading(true);
     try {
+      const params = new URLSearchParams({
+        year: String(selectedYear),
+        month: String(selectedMonth),
+      });
+      if (baselineMonths !== 'auto') {
+        params.set('baselineMonths', String(baselineMonths));
+      }
+
       const res = await apiRequest<{ success: boolean; data: MonthlyAnalyticsData }>(
-        `/api/admin/financial-analytics?year=${selectedYear}&month=${selectedMonth}`
+        `/api/admin/financial-analytics?${params.toString()}`
       );
       if (res.success && res.data) {
         setData(res.data);
@@ -294,7 +397,7 @@ export const FinancialAnalytics: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [selectedYear, selectedMonth, toast]);
+  }, [selectedYear, selectedMonth, baselineMonths, toast]);
 
   useEffect(() => {
     fetchAnalytics();
@@ -621,96 +724,241 @@ export const FinancialAnalytics: React.FC = () => {
         </div>
       </div>
 
-      {/* Daily Revenue History Chart */}
+      {/* Daily / Cumulative Revenue & Bookings Analytics Chart Block */}
       <div className="bg-surface p-4 sm:p-6 rounded-2xl border border-divider shadow-xs space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
           <div>
             <h2 className="text-base font-bold text-ink flex items-center gap-2">
               <BarChart2 size={18} className="text-accent" />
-              <span>Histori Pendapatan Harian ({data?.monthName} {selectedYear})</span>
+              <span>
+                {chartMode === 'cumulative'
+                  ? `Akumulasi MTD & Proyeksi (${data?.monthName} ${selectedYear})`
+                  : `Histori Pendapatan Harian (${data?.monthName} ${selectedYear})`}
+              </span>
             </h2>
             <p className="text-xs text-ink-2 mt-0.5">
-              Grafik persebaran omset harian (Tgl 1 s/d {data?.dailyTrend?.length || 30})
+              {chartMode === 'cumulative'
+                ? 'Kurva trajektori akumulasi berjalan (running total) s/d akhir bulan dengan pembanding historis & proyeksi'
+                : `Grafik persebaran harian diskrit (Tgl 1 s/d ${data?.dailyTrend?.length || 30})`}
             </p>
           </div>
-          <ChartSeriesToggle
-            items={toggleItems}
-            visible={chartVisible}
-            onToggle={toggleChartSeries}
+
+          {/* Mode & Filter Controls */}
+          <div className="flex flex-wrap items-center gap-2">
+            {/* 1. Mode Switcher (Akumulasi vs Harian) */}
+            <div className="inline-flex p-0.5 rounded-xl bg-fill-1 border border-divider text-xs">
+              <button
+                type="button"
+                onClick={() => setChartMode('cumulative')}
+                aria-pressed={chartMode === 'cumulative'}
+                className={`px-3 py-1.5 rounded-lg font-bold transition cursor-pointer ${
+                  chartMode === 'cumulative'
+                    ? 'bg-surface text-accent shadow-xs ring-1 ring-accent/20'
+                    : 'text-ink-2 hover:text-ink'
+                }`}
+              >
+                Akumulasi MTD
+              </button>
+              <button
+                type="button"
+                onClick={() => setChartMode('daily')}
+                aria-pressed={chartMode === 'daily'}
+                className={`px-3 py-1.5 rounded-lg font-bold transition cursor-pointer ${
+                  chartMode === 'daily'
+                    ? 'bg-surface text-accent shadow-xs ring-1 ring-accent/20'
+                    : 'text-ink-2 hover:text-ink'
+                }`}
+              >
+                Tren Harian
+              </button>
+            </div>
+
+            {/* 2. Metric Switcher (Omset vs Reservasi) */}
+            <div className="inline-flex p-0.5 rounded-xl bg-fill-1 border border-divider text-xs">
+              <button
+                type="button"
+                onClick={() => setMetricType('revenue')}
+                aria-pressed={metricType === 'revenue'}
+                className={`px-2.5 py-1.5 rounded-lg font-bold transition cursor-pointer ${
+                  metricType === 'revenue'
+                    ? 'bg-surface text-accent shadow-xs ring-1 ring-accent/20'
+                    : 'text-ink-2 hover:text-ink'
+                }`}
+              >
+                Omset (Rp)
+              </button>
+              <button
+                type="button"
+                onClick={() => setMetricType('bookings')}
+                aria-pressed={metricType === 'bookings'}
+                className={`px-2.5 py-1.5 rounded-lg font-bold transition cursor-pointer ${
+                  metricType === 'bookings'
+                    ? 'bg-surface text-accent shadow-xs ring-1 ring-accent/20'
+                    : 'text-ink-2 hover:text-ink'
+                }`}
+              >
+                Reservasi (Pax)
+              </button>
+            </div>
+
+            {/* 3. Baseline Months Selector (Auto/3/6/12) */}
+            <div className="inline-flex p-0.5 rounded-xl bg-fill-1 border border-divider text-xs items-center gap-1">
+              <span className="text-[11px] font-semibold text-ink-3 px-1.5">Baseline:</span>
+              <button
+                type="button"
+                onClick={() => setBaselineMonths('auto')}
+                aria-pressed={baselineMonths === 'auto'}
+                className={`px-2 py-1 rounded-lg font-bold transition cursor-pointer text-[11px] ${
+                  baselineMonths === 'auto'
+                    ? 'bg-surface text-accent shadow-xs ring-1 ring-accent/20'
+                    : 'text-ink-2 hover:text-ink'
+                }`}
+                title={`Konfigurasi otomatis klinik (${data?.baseline?.monthsRequested ?? 6} bulan)`}
+              >
+                {baselineMonths === 'auto' ? `Auto (${data?.baseline?.monthsRequested ?? 6} Bln)` : 'Auto'}
+              </button>
+              <button
+                type="button"
+                onClick={() => setBaselineMonths(3)}
+                aria-pressed={baselineMonths === 3}
+                className={`px-2 py-1 rounded-lg font-bold transition cursor-pointer text-[11px] ${
+                  baselineMonths === 3
+                    ? 'bg-surface text-accent shadow-xs ring-1 ring-accent/20'
+                    : 'text-ink-2 hover:text-ink'
+                }`}
+              >
+                3 Bln
+              </button>
+              <button
+                type="button"
+                onClick={() => setBaselineMonths(6)}
+                aria-pressed={baselineMonths === 6}
+                className={`px-2 py-1 rounded-lg font-bold transition cursor-pointer text-[11px] ${
+                  baselineMonths === 6
+                    ? 'bg-surface text-accent shadow-xs ring-1 ring-accent/20'
+                    : 'text-ink-2 hover:text-ink'
+                }`}
+              >
+                6 Bln
+              </button>
+              <button
+                type="button"
+                onClick={() => setBaselineMonths(12)}
+                aria-pressed={baselineMonths === 12}
+                className={`px-2 py-1 rounded-lg font-bold transition cursor-pointer text-[11px] ${
+                  baselineMonths === 12
+                    ? 'bg-surface text-accent shadow-xs ring-1 ring-accent/20'
+                    : 'text-ink-2 hover:text-ink'
+                }`}
+              >
+                12 Bln
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Chart Rendering: Cumulative vs Daily */}
+        {chartMode === 'cumulative' ? (
+          <CumulativeTrendChart
+            data={chartCumulative}
+            metricType={metricType}
+            visible={cumulativeVisible}
+            toggleItems={cumulativeToggleItems}
+            onToggle={toggleCumulativeSeries}
+            labels={chartLabels}
+            baselineAvailable={baselineAvailable}
+            monthsUsed={data?.baseline?.monthsUsed ?? 0}
+            monthsRequested={data?.baseline?.monthsRequested ?? 0}
+            forecastSummary={data?.forecastSummary}
           />
-        </div>
+        ) : (
+          <div className="space-y-4">
+            <div className="flex items-center justify-end">
+              <ChartSeriesToggle
+                items={toggleItems}
+                visible={chartVisible}
+                onToggle={toggleChartSeries}
+              />
+            </div>
 
-        <div className="h-72 w-full pt-2">
-          <ResponsiveContainer width="100%" height="100%">
-            <ComposedChart data={chartDaily} margin={{ top: 10, right: 10, left: 0, bottom: 20 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} vertical={false} />
-              <XAxis
-                dataKey="day"
-                tickLine={false}
-                stroke={chartTheme.axis.stroke}
-                fontSize={11}
-                tickFormatter={(d) => `Tgl ${d}`}
-              />
-              <YAxis
-                tickLine={false}
-                stroke={chartTheme.axis.stroke}
-                fontSize={11}
-                tickFormatter={(val) => formatCompactRupiah(val)}
-              />
-              <Tooltip
-                content={
-                  <DailyComparisonTooltip
-                    labels={chartLabels}
-                    baselineAvailable={baselineAvailable}
-                    showBookings={true}
+            <div className="h-72 w-full pt-2">
+              <ResponsiveContainer width="100%" height="100%">
+                <ComposedChart data={chartDaily} margin={{ top: 10, right: 10, left: 0, bottom: 20 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} vertical={false} />
+                  <XAxis
+                    dataKey="day"
+                    tickLine={false}
+                    stroke={chartTheme.axis.stroke}
+                    fontSize={11}
+                    tickFormatter={(d) => `Tgl ${d}`}
                   />
-                }
-              />
-              {chartVisible.current && (
-                <>
-                  <Bar dataKey="lunasRevenue" stackId="a" fill={chartTheme.accent} radius={[0, 0, 0, 0]} />
-                  <Bar dataKey="pendingRevenue" stackId="a" fill={chartTheme.series[3]} radius={[4, 4, 0, 0]} />
-                </>
-              )}
-              {chartVisible.lastMonth && (
-                <Line
-                  type="monotone"
-                  dataKey="lastMonthRevenue"
-                  name="Bulan Lalu"
-                  stroke="rgb(var(--c-info))"
-                  strokeWidth={2}
-                  strokeDasharray="4 4"
-                  dot={false}
-                  connectNulls={false}
-                />
-              )}
-              {chartVisible.baseline && baselineAvailable && (
-                <Line
-                  type="monotone"
-                  dataKey="avg6mRevenue"
-                  name="Rata-rata 6 Bln"
-                  stroke="rgb(var(--c-warning))"
-                  strokeWidth={2.5}
-                  dot={false}
-                  connectNulls={false}
-                />
-              )}
-            </ComposedChart>
-          </ResponsiveContainer>
-        </div>
+                  <YAxis
+                    tickLine={false}
+                    stroke={chartTheme.axis.stroke}
+                    fontSize={11}
+                    tickFormatter={(val) => (metricType === 'revenue' ? formatCompactRupiah(val) : `${Math.round(val)}`)}
+                  />
+                  <Tooltip
+                    content={
+                      <DailyComparisonTooltip
+                        labels={chartLabels}
+                        baselineAvailable={baselineAvailable}
+                        showBookings={true}
+                        metricType={metricType}
+                      />
+                    }
+                  />
+                  {chartVisible.current && (
+                    metricType === 'revenue' ? (
+                      <>
+                        <Bar dataKey="lunasRevenue" stackId="a" fill={chartTheme.accent} radius={[0, 0, 0, 0]} />
+                        <Bar dataKey="pendingRevenue" stackId="a" fill={chartTheme.series[3]} radius={[4, 4, 0, 0]} />
+                      </>
+                    ) : (
+                      <Bar dataKey="bookings" fill={chartTheme.accent} radius={[4, 4, 0, 0]} />
+                    )
+                  )}
+                  {chartVisible.lastMonth && (
+                    <Line
+                      type="monotone"
+                      dataKey={metricType === 'revenue' ? 'lastMonthRevenue' : 'lastMonthBookings'}
+                      name="Bulan Lalu"
+                      stroke="rgb(var(--c-info))"
+                      strokeWidth={2}
+                      strokeDasharray="4 4"
+                      dot={false}
+                      connectNulls={false}
+                    />
+                  )}
+                  {chartVisible.baseline && baselineAvailable && (
+                    <Line
+                      type="monotone"
+                      dataKey={metricType === 'revenue' ? 'avg6mRevenue' : 'avg6mBookings'}
+                      name="Rata-rata Baseline"
+                      stroke="rgb(var(--c-warning))"
+                      strokeWidth={2.5}
+                      dot={false}
+                      connectNulls={false}
+                    />
+                  )}
+                </ComposedChart>
+              </ResponsiveContainer>
+            </div>
 
-        {/* Catatan Kaki Chart & Konteks Baseline */}
-        <div className="pt-2 flex flex-col sm:flex-row sm:items-center justify-between text-[11px] text-ink-3 border-t border-divider gap-1">
-          <span>
-            * Mode{' '}
-            {describeBaselineMode(data?.baseline?.mode, data?.baseline?.smoothingWindowDays)}{' '}
-            ·{' '}
-            {data?.baseline?.available
-              ? `Basis data ${data.baseline.monthsUsed} dari ${data.baseline.monthsRequested} bulan historis`
-              : 'Baseline dinonaktifkan (riwayat belum mencukupi)'}
-          </span>
-          <span className="italic">Garis putus-putus & kurva adalah pembanding historis, bukan target mutlak.</span>
-        </div>
+            {/* Catatan Kaki Chart & Konteks Baseline */}
+            <div className="pt-2 flex flex-col sm:flex-row sm:items-center justify-between text-[11px] text-ink-3 border-t border-divider gap-1">
+              <span>
+                * Mode{' '}
+                {describeBaselineMode(data?.baseline?.mode, data?.baseline?.smoothingWindowDays)}{' '}
+                ·{' '}
+                {data?.baseline?.available
+                  ? `Basis data ${data.baseline.monthsUsed} dari ${data.baseline.monthsRequested} bulan historis`
+                  : 'Baseline dinonaktifkan (riwayat belum mencukupi)'}
+              </span>
+              <span className="italic">Garis putus-putus & kurva adalah pembanding historis, bukan target mutlak.</span>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Grid 2 Columns: Breakdowns & Leaderboards */}

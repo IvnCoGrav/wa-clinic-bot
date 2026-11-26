@@ -30,10 +30,48 @@ describe('Admin Financial Analytics — Tenant Isolation (SEC-AUDIT)', () => {
     });
 
     expect(res.statusCode).toBe(200);
-    expect(spy).toHaveBeenCalledWith('tenant-klinik-a', 2026, 10);
+    expect(spy).toHaveBeenCalledWith('tenant-klinik-a', 2026, 10, { baselineMonths: undefined });
     const body = JSON.parse(res.payload);
     expect(body.success).toBe(true);
     expect(body.data.monthName).toBe('Oktober');
+  });
+
+  it('rejects invalid baselineMonths with 400', async () => {
+    const app = buildApp();
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/admin/financial-analytics?year=2026&month=10&baselineMonths=5',
+      headers: {
+        'x-api-key': ADMIN_KEY,
+        'x-tenant-id': 'tenant-klinik-a',
+      },
+    });
+
+    expect(res.statusCode).toBe(400);
+    const body = JSON.parse(res.payload);
+    expect(body.success).toBe(false);
+    expect(body.error).toContain('3, 6, atau 12');
+  });
+
+  it('passes valid baselineMonths to service', async () => {
+    const spy = vi.spyOn(FinancialAnalyticsService, 'getMonthlyAnalytics').mockResolvedValueOnce({
+      monthName: 'Oktober',
+      year: 2026,
+      kpi: {},
+    } as any);
+
+    const app = buildApp();
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/admin/financial-analytics?year=2026&month=10&baselineMonths=3',
+      headers: {
+        'x-api-key': ADMIN_KEY,
+        'x-tenant-id': 'tenant-klinik-a',
+      },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(spy).toHaveBeenCalledWith('tenant-klinik-a', 2026, 10, { baselineMonths: 3 });
   });
 
   it('rejects with 401 when credentials/session is missing', async () => {

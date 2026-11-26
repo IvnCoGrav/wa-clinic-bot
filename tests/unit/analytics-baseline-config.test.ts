@@ -4,6 +4,7 @@ import {
   normalizeAnalyticsBaselineSettings,
   getAnalyticsBaselineSettings,
   clearAnalyticsBaselineSettingsCache,
+  resolveBaselineSettingsForRequest,
 } from '../../src/config/analytics-baseline';
 import { prisma } from '../../src/db/client';
 
@@ -124,6 +125,49 @@ describe('Analytics Baseline Settings (Fase 1)', () => {
 
       const settings = await getAnalyticsBaselineSettings('tenant-error');
       expect(settings).toEqual(DEFAULT_ANALYTICS_BASELINE_SETTINGS);
+    });
+  });
+
+  describe('resolveBaselineSettingsForRequest (Fase 0.5)', () => {
+    const baseSettings = {
+      months: 6,
+      mode: 'weekday' as const,
+      smoothingWindowDays: 0,
+      minMonths: 3,
+    };
+
+    it('resolves valid 3, 6, 12 overrides without mutating baseSettings', () => {
+      const res3 = resolveBaselineSettingsForRequest(baseSettings, 3);
+      expect(res3.months).toBe(3);
+      expect(res3.minMonths).toBe(3);
+      expect(baseSettings.months).toBe(6); // Tidak termutasi
+
+      const res12 = resolveBaselineSettingsForRequest(baseSettings, 12);
+      expect(res12.months).toBe(12);
+      expect(res12.minMonths).toBe(3);
+
+      const res6 = resolveBaselineSettingsForRequest(baseSettings, 6);
+      expect(res6.months).toBe(6);
+    });
+
+    it('ignores invalid overrides (0, 5, 9, NaN, negative) and returns copy of settings', () => {
+      expect(resolveBaselineSettingsForRequest(baseSettings, 5)).toEqual(baseSettings);
+      expect(resolveBaselineSettingsForRequest(baseSettings, 0)).toEqual(baseSettings);
+      expect(resolveBaselineSettingsForRequest(baseSettings, -1)).toEqual(baseSettings);
+      expect(resolveBaselineSettingsForRequest(baseSettings, null)).toEqual(baseSettings);
+      expect(resolveBaselineSettingsForRequest(baseSettings, undefined)).toEqual(baseSettings);
+    });
+
+    it('caps minMonths to not exceed overridden months', () => {
+      const highMin = {
+        months: 6,
+        mode: 'weekday' as const,
+        smoothingWindowDays: 0,
+        minMonths: 5,
+      };
+      const res = resolveBaselineSettingsForRequest(highMin, 3);
+      expect(res.months).toBe(3);
+      expect(res.minMonths).toBe(3); // capped to 3
     });
   });
 });

@@ -772,6 +772,7 @@
       "canonical": "src/domain/daily-baseline.ts",
       "exports": [
         "buildDailyBaseline",
+        "computeCumulativeAndForecast",
         "daysInMonth",
         "wibDateParts"
       ],
@@ -790,7 +791,9 @@
       "canonical": "src/config/analytics-baseline.ts",
       "exports": [
         "getAnalyticsBaselineSettings",
-        "normalizeAnalyticsBaselineSettings"
+        "normalizeAnalyticsBaselineSettings",
+        "resolveBaselineSettingsForRequest",
+        "ALLOWED_BASELINE_MONTHS"
       ],
       "forbiddenDeclarations": [
         "getAnalyticsBaselineSettings"
