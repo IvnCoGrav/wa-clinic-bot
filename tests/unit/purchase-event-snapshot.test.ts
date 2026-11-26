@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { prisma } from '../../src/db/client';
+import { capiBreaker } from '../../src/services/capi.service';
 
 /**
  * Task 0.8 — Kontrak Snapshot Nilai & Event ID Purchase (Fase 2 Contract)
@@ -34,6 +35,14 @@ describe('Task 0.8: Purchase Event Snapshot & Delivery Truth (Fase 2)', () => {
   });
 
   it('2. sendCapiEvent mengembalikan sentEventId dan deliveryConfirmed', async () => {
+    // Uji kontrak, bukan jaringan: breaker di-mock agar Meta tidak pernah
+    // dihubungi (tanpa mock, panggilan nyata dengan token dummy dibalas 400
+    // sehingga sentEventId tidak pernah terbentuk).
+    vi.spyOn(capiBreaker, 'execute').mockResolvedValue({
+      status: 200,
+      data: { events_received: 1, fbtrace_id: 'trace-test' },
+    } as any);
+
     const { capiService } = await import('../../src/services/capi.service');
     const result = await capiService.sendCapiEvent({
       eventName: 'Purchase',

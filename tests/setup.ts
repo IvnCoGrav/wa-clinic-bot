@@ -85,8 +85,16 @@ process.env.ENABLE_WAHA_HOLD_LABEL = 'true';
 process.env.ENABLE_LIFECYCLE_LABELS = 'true';
 process.env.BACKUP_ENCRYPTION_KEY = 'a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2';
 
-// Blank LLM keys so the AI Router (default ON) never hits the network during tests.
-// rawLlmCall() throws when apiKey is empty/mock, so the CircuitBreaker falls back to
+// Kredensial Meta CAPI deterministik. Beberapa file test lama (capi-action-source,
+// purchase-event-id-stability, meta-capi-guard-and-dedup, dst.) tidak menyetel
+// FB_PIXEL_ID/FB_CAPI_ACCESS_TOKEN sendiri sehingga hanya lolos bila .env lokal
+// menyediakannya — dan gagal di CI. Nilai dummy membuat hasil sama di mana pun.
+// File yang menguji jalur fail-closed tetap menghapus/mengosongkannya sendiri
+// (tests/integration/capi-config-admin.test.ts, meta-attribution-debug.test.ts).
+process.env.FB_PIXEL_ID = 'test-pixel-id';
+process.env.FB_CAPI_ACCESS_TOKEN = 'test-capi-access-token';
+
+// Blank LLM keys so the AI Router (default ON) never hits the network during tests.// rawLlmCall() throws when apiKey is empty/mock, so the CircuitBreaker falls back to
 // rule-based classification (deterministic, offline). Tests that exercise the LLM path
 // set a mock key explicitly.
 process.env.LLM_API_KEY = '';
