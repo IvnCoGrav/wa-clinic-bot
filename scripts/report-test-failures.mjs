@@ -26,7 +26,8 @@ if (!fs.existsSync(FILE)) {
 
 let report;
 try {
-  report = JSON.parse(fs.readFileSync(FILE, 'utf8'));
+  // Toleransi BOM: beberapa penulis JSON di Windows menyertakannya.
+  report = JSON.parse(fs.readFileSync(FILE, 'utf8').replace(/^\uFEFF/, ''));
 } catch (err) {
   console.error(`::warning::${escData(`Gagal membaca ${FILE}: ${err.message}`)}`);
   process.exit(0);
@@ -54,6 +55,12 @@ if (failed.length === 0) {
 }
 
 console.log(`Test gagal: ${failed.length} (menampilkan maksimal ${LIMIT} annotation)`);
+// Ringkasan tunggal berisi SEMUA test gagal. GitHub membatasi ~10 annotation
+// per step, tetapi isi pesan satu annotation tidak dipotong oleh API, sehingga
+// daftar lengkap tetap bisa dibaca tanpa membuka log job. Diterbitkan lebih
+// dulu supaya tidak terbuang oleh batas annotation.
+console.log(`::error::${escData(`RINGKASAN ${failed.length} test gagal: ${failed.map((f) => `${f.file} :: ${f.title}`).join(' || ')}`)}`);
+
 for (const item of failed.slice(0, LIMIT)) {
   console.log(`- ${item.file} :: ${item.title}`);
 }
@@ -63,12 +70,6 @@ for (const item of failed.slice(0, LIMIT)) {
     `::error file=${escProp(item.file)},title=${escProp(item.title.slice(0, 200))}::${escData(
       `${item.title} — ${item.message}`.slice(0, 400)
     )}`
-  );
-}
-
-if (failed.length > LIMIT) {
-  console.error(
-    `::error::${escData(`Masih ada ${failed.length - LIMIT} test gagal lain di luar batas ${LIMIT} annotation.`)}`
   );
 }
 

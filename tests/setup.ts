@@ -4,6 +4,34 @@ import { setCustomerRepository, InMemoryCustomerRepository } from '../src/reposi
 import { setConversationRepository, InMemoryConversationRepository } from '../src/repositories/conversation.repository';
 import { setMessageRepository, InMemoryMessageRepository } from '../src/repositories/message.repository';
 
+// Isolasi environment antar-file test.
+//
+// process.env dipakai bersama oleh semua file test yang berjalan di worker yang
+// sama. Tanpa pemulihan, file yang mengubah variabel (mis. mengosongkan
+// KENARI_API_KEY atau FB_PIXEL_ID) dapat menggagalkan file berikutnya hanya
+// karena urutan distribusi file — persis yang membuat hasil lokal berbeda dari
+// CI. Snapshot diambil sekali per worker; setiap file berikutnya memulihkan
+// variabel ke kondisi awal. Bila worker memang baru per file, blok ini menjadi
+// no-op yang tidak berbahaya.
+const ENV_SNAPSHOT_KEY = '__VITEST_ENV_SNAPSHOT__';
+const existingSnapshot = process.env[ENV_SNAPSHOT_KEY];
+if (!existingSnapshot) {
+  process.env[ENV_SNAPSHOT_KEY] = JSON.stringify(process.env);
+} else {
+  try {
+    const snapshot = JSON.parse(existingSnapshot) as Record<string, string>;
+    for (const key of Object.keys(process.env)) {
+      if (key !== ENV_SNAPSHOT_KEY && !(key in snapshot)) delete process.env[key];
+    }
+    for (const [key, value] of Object.entries(snapshot)) {
+      if (key === ENV_SNAPSHOT_KEY) continue;
+      process.env[key] = value;
+    }
+  } catch {
+    // Snapshot rusak: jangan gagalkan seluruh suite, cukup mulai dari env apa adanya.
+  }
+}
+
 // PLAN 8 FASE 5a/5b/5c: inject test double persistensi secara EKSPLISIT.
 // - Level modul (di bawah): aktif sebelum beforeAll mana pun — karena beforeAll
 //   berjalan SEBELUM beforeEach pertama, tanpa ini service fail-closed akan
