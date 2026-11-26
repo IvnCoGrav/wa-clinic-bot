@@ -43,6 +43,15 @@ process.env.WAHA_WEBHOOK_SECRET = '';
 // Ar-008: route kini fail-closed tanpa secret; test perlu izin eksplisit.
 process.env.WAHA_ALLOW_UNSIGNED_WEBHOOK = 'true';
 
+// buildApp() fail-closed bila ADMIN_API_KEY kosong. Nilai ini WAJIB ditetapkan
+// di sini, bukan diwarisi dari .env lokal: di CI tidak ada .env, sehingga file
+// test yang memanggil buildApp() di beforeAll hanya lolos bila kebetulan satu
+// worker sudah diisi file lain lebih dulu. Akibatnya hasil berbeda antara mesin
+// lokal dan CI, dan urutan distribusi file antar-worker menentukan lulus/gagal.
+// Test yang memang menguji perilaku fail-closed mengosongkan nilai ini sendiri
+// lalu memulihkannya (tests/unit/production_edge_cases.test.ts).
+process.env.ADMIN_API_KEY = 'test-admin-api-key';
+
 // Test environment label mocks
 process.env.ENABLE_WAHA_HOLD_LABEL = 'true';
 process.env.ENABLE_LIFECYCLE_LABELS = 'true';
