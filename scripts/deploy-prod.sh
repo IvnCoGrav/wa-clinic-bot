@@ -66,9 +66,19 @@ fi
 echo "  OK: ADMIN_API_KEY ✓ WAHA_WEBHOOK_SECRET ✓ TRACKING_API_KEY ✓ WAHA_API_KEY ✓ WAHA_BASE_URL ✓"
 
 # G11(a): turunkan .env.worker (tanpa secret inbound webhook) + gerbang kontrak.
+# Host produksi belum tentu punya Node; jalankan lewat one-shot container bila perlu.
+run_node_script() {
+  if command -v node >/dev/null 2>&1; then
+    node "$@"
+  else
+    docker run --rm --user "$(id -u):$(id -g)" -v "$PWD:/app" -w /app \
+      node:20-slim@sha256:2cf067cfed83d5ea958367df9f966191a942351a2df77d6f0193e162b5febfc0 \
+      node "$@"
+  fi
+}
 echo "  Menyiapkan .env.worker (worker tanpa secret inbound) ..."
-node scripts/generate-worker-env.mjs
-node scripts/check-env-contract.mjs
+run_node_script scripts/generate-worker-env.mjs
+run_node_script scripts/check-env-contract.mjs
 
 # Pastikan Docker network eksternal hermes-net (docker-compose.yml) sudah ada
 if ! docker network inspect hermes-net >/dev/null 2>&1; then
