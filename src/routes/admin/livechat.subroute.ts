@@ -11,6 +11,7 @@ import { staffDepartureWatchdogService } from '../../services/staff-departure-wa
 import { responseCacheService } from '../../services/response-cache.service';
 import { ConversationState } from '@prisma/client';
 import { createMonotonicSseSequencer } from '../../utils/sse-sequence';
+import { sanitizeStaffHubPayload } from '../../utils/pii-masker';
 import { encodeMessageCursor } from '../../utils/message-cursor';
 import { resolveSessionTenantId } from './route-helpers';
 
@@ -803,11 +804,8 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
     const { id, messageId } = request.params;
     const { isPinned } = request.body || {};
     const tenantId = resolveSessionTenantId(request);
-    const adminName =
-      (request.headers['x-admin-name'] as string) ||
-      (request.body as any)?.adminName ||
-      (request as any).adminIdentity ||
-      'Admin';
+    // Identitas audit WAJIB dari sesi server-side; header/body tidak boleh memalsukan.
+    const adminName = (request as any).adminIdentity || 'Admin';
     const apiKey = (request as any).adminKeyUsed || 'ADMIN_API';
     const ip = request.ip;
 
@@ -854,11 +852,8 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
     const { id, messageId } = request.params;
     const { isHidden } = request.body || {};
     const tenantId = resolveSessionTenantId(request);
-    const adminName =
-      (request.headers['x-admin-name'] as string) ||
-      (request.body as any)?.adminName ||
-      (request as any).adminIdentity ||
-      'Admin';
+    // Identitas audit WAJIB dari sesi server-side; header/body tidak boleh memalsukan.
+    const adminName = (request as any).adminIdentity || 'Admin';
     const apiKey = (request as any).adminKeyUsed || 'ADMIN_API';
     const ip = request.ip;
 
@@ -937,11 +932,22 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
     let closed = false;
     let unsubscribe: (() => void) | null = null;
 
+    // Event staf (GPS/nama+alamat pasien) hanya untuk peran operasional.
+    const STAFF_OPS_EVENTS = new Set(['staff.telemetry_updated', 'staff.task_assigned', 'staff.delay_alert']);
+    const role = String((request as any).staffRole || '').toUpperCase();
+    const canSeeStaffOps = !role || role === 'SUPER_ADMIN' || role === 'SPV_CS';
+    const seesFullPhone = !role || role === 'SUPER_ADMIN' || role === 'SPV_CS' || role === 'ADMIN_CS';
+
     const sendEvent = (event: any) => {
       if (closed) return;
+      if (STAFF_OPS_EVENTS.has(event.type) && !canSeeStaffOps) return;
       try {
         const eventId = liveChatSseSeq.next();
-        const data = JSON.stringify(event.payload || {});
+        let payload = event.payload || {};
+        if (event.type === 'message.created' || event.type === 'message.updated' || event.type === 'message.status_updated') {
+          payload = sanitizeStaffHubPayload(payload, event.type, { maskPhone: !seesFullPhone });
+        }
+        const data = JSON.stringify(payload);
         reply.raw.write(`id: ${eventId}\nevent: ${event.type}\ndata: ${data}\n\n`);
       } catch (err: any) {
         console.error('[LIVE CHAT SSE] Failed to serialize event:', err.message);

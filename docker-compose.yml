@@ -3,9 +3,10 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-      # Build-time var untuk Admin Dashboard (Vite inline). Sumber: .env server.
+      # Build-time var untuk Admin Dashboard (Vite inline).
+      # M17-11: kunci peta CARTO TIDAK lagi lewat build-arg — diambil runtime dari
+      # GET /api/config/public (env CARTO_API_KEY di server, rotasi tanpa rebuild).
       args:
-        VITE_CARTO_API_KEY: ${VITE_CARTO_API_KEY:-}
         VITE_SCORECARD_STAFF_UI_ENABLED: ${SCORECARD_STAFF_UI_ENABLED:-false}
     expose:
       - "3000"
@@ -95,8 +96,12 @@ services:
     volumes:
       - ./storage:/app/storage
       - ./logs:/app/logs
+    # G11(a): worker memakai `.env.worker` (turunan `.env` tanpa secret inbound
+    # webhook). File dibuat oleh `node scripts/generate-worker-env.mjs` saat deploy;
+    # bila tidak ada, `docker compose up` gagal (fail-closed) — bukan diam-diam
+    # memakai `.env` penuh.
     env_file:
-      - .env
+      - .env.worker
     environment:
       - TZ=Asia/Jakarta
       - NODE_ENV=production
@@ -127,7 +132,7 @@ services:
       - hermes-net
 
   redis:
-    image: redis:7-alpine
+    image: redis:7-alpine@sha256:7f7d30b7fdd09467bac58198a1f166dd69789d348d4fe859cccb20e0cf287fbe
     restart: always
     command: redis-server --appendonly yes --maxmemory 128mb --maxmemory-policy noeviction
     volumes:
@@ -144,7 +149,7 @@ services:
           memory: 256M
 
   postgres:
-    image: postgres:16-alpine
+    image: postgres:16-alpine@sha256:f2f98726820d0342055351c6e9d36e705f5bfffb3dd53ff556325114b08afb6d
     command: postgres -c shared_buffers=256MB -c work_mem=16MB -c max_connections=100
     restart: always
     environment:
@@ -166,7 +171,7 @@ services:
           memory: 512M
 
   caddy:
-    image: caddy:2
+    image: caddy:2@sha256:4851e54a46b206517c574821bb5cc67f170d2156041e9fbc4c9193b45e84a75b
     restart: always
     environment:
       # Domain publik deployment WAJIB eksplisit (tenant-aware, tanpa brand hardcoded).
@@ -187,7 +192,7 @@ services:
       - hermes-net
 
   waha:
-    image: devlikeapro/waha:noweb-2026.7.2
+    image: devlikeapro/waha:noweb-2026.7.2@sha256:33ecd1b782b2708db2ff1d366f51608889a036e76332dceae3fbbe3f10f2d75e
     restart: always
     volumes:
       - waha_sessions:/app/.sessions

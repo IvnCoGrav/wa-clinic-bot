@@ -22,7 +22,7 @@ import { normalizeWahaJid, extractRealPhoneFromWahaPayload, parseJidType } from 
 import { extractWahaLocation } from '../utils/waha-location-parser';
 import { parseCanonicalInboundMessage } from '../utils/canonical-message-normalizer';
 import { extractWahaAdReferral } from '../integrations/whatsapp/waha-ctwa-referral';
-import { invalidateCachedLabels } from '../integrations/waha/label-cache';
+import { inboundEventDedup } from '../services/inbound-event-dedup.service';
 import { extractWahaEventMessageId, parseWahaRevokePayload } from '../integrations/waha/message-candidates';
 export { extractWahaEventMessageId };
 import { safeCompare } from '../utils/auth';
@@ -35,50 +35,10 @@ import {
 } from '../services/ingress/inbound-guard.service';
 dotenv.config();
 
-/**
- * Handler event label.chat.added / label.chat.deleted dari WAHA.
- * Meng-update kolom Customer.is_admin_labeled / is_hold_labeled (best-effort)
- * supaya jalur pesan masuk bisa membaca status label dari DB tanpa HTTP call
- * ke WAHA. Label lain di-cache-invalidate supaya fallback getChatLabels segar.
- * Event dengan payload.label null (mis. baru selesai scan QR) dilewati —
- * LabelReconciliationService tetap menjadi safety-net periodik.
- */
-export async function handleLabelChatEvent(event: WahaWebhookEvent, tenantId: string): Promise<void> {
-  try {
-    const payload: any = event.payload;
-    const chatId: string | undefined = payload?.chatId;
-    const labelName: string | undefined = payload?.label?.name || payload?.labelName;
-    if (!chatId || !labelName) return;
-
-    const phone = normalizeWahaJid(chatId);
-    if (!phone) return;
-
-    const lower = labelName.toLowerCase();
-    if (lower !== 'admin' && lower !== 'hold') {
-      invalidateCachedLabels(chatId);
-      return;
-    }
-
-    const isAdded = event.event === 'label.chat.added';
-    let attempts = 0;
-    while (attempts < 3) {
-      try {
-        await customerService.setLabelFlags(phone, {
-          isAdminLabeled: lower === 'admin' ? isAdded : undefined,
-          isHoldLabeled: lower === 'hold' ? isAdded : undefined,
-        }, tenantId);
-        break;
-      } catch (e: any) {
-        attempts++;
-        if (attempts >= 3) throw e;
-        await new Promise((r) => setTimeout(r, 100 * attempts));
-      }
-    }
-    invalidateCachedLabels(chatId);
-  } catch (err: any) {
-    console.warn(`[LABEL EVENT] Failed to process label event ${event.event}:`, err.message);
-  }
-}
+// M01-08: handler label dipindah ke service ingress agar route tidak membengkak
+// dan logika identitas JID punya seam sendiri. Re-export menjaga kontrak lama.
+export { handleLabelChatEvent } from '../services/ingress/label-event.service';
+import { handleLabelChatEvent } from '../services/ingress/label-event.service';
 
 
 /**
@@ -284,6 +244,18 @@ export async function webhookRoutes(fastify: FastifyInstance) {
         const senderName = reactPayload._data?.notifyName || reactPayload.notifyName || reactPayload.pushName || reactPayload._data?.pushName || (fromMe ? 'Admin' : undefined);
 
         if (targetMsgId) {
+          // M02-11: dedup SEBELUM mutasi. Kunci memuat target, aktor, emoji, dan
+          // timestamp/ID event agar retry WAHA tidak menulis ulang & broadcast ganda.
+          const actor = reactPayload.from ? normalizeWahaJid(reactPayload.from) : (fromMe ? 'ME' : 'CUSTOMER');
+          const eventStamp = String(
+            reactPayload.timestamp || reactPayload.id || reactionObj?.id || (reactPayload as any)?._data?.id || ''
+          );
+          const reactionKey = `waha:reaction:${resolvedTenantId}:${targetMsgId}:${actor}:${emoji}:${eventStamp}`;
+          const firstDelivery = await inboundEventDedup.claimOnce(reactionKey);
+          if (!firstDelivery) {
+            console.log(`[MESSAGE REACTION WEBHOOK] duplikat diabaikan (${targetMsgId}).`);
+            return reply.status(200).send({ status: 'REACTION_DUPLICATE' });
+          }
           console.log(`[MESSAGE REACTION WEBHOOK] targetMsgId=${targetMsgId}, emoji="${emoji}", fromMe=${fromMe}`);
           await messageService.addOrUpdateReaction(String(targetMsgId), resolvedTenantId, {
             emoji: emoji || '',

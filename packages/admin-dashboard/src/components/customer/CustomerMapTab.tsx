@@ -46,20 +46,57 @@ const REGIONAL_MAX_BOUNDS: [[number, number], [number, number]] = [
 ];
 const RING_COLORS = ['rgb(var(--c-accent))', 'rgb(var(--c-info))', 'rgb(var(--c-danger))'];
 
-// Basemap Peta Jalan: CARTO light_nolabels (OSM data, tanpa label/POI) via API key dari .env,
-// filter grayscale — sangat simple, hanya jalan. Tanpa key, fallback otomatis ke
-// Esri World Light Gray Base (netral, minim label, gratis tanpa key).
-const CARTO_KEY: string = (import.meta.env.VITE_CARTO_API_KEY as string) || '';
-const BASEMAP_URL = CARTO_KEY
-  ? `https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png?key=${encodeURIComponent(CARTO_KEY)}`
-  : 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}';
-const BASEMAP_ATTR = CARTO_KEY
-  ? '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>'
-  : '&copy; Esri, HERE, Garmin, &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors, and the GIS User Community';
-// Esri World Light Gray Base di Indonesia hanya memiliki tile sampai zoom 16.
-// Set maxNativeZoom: 16 agar Leaflet melakukan stretching di zoom 17-18 tanpa me-request tile 404.
-const BASEMAP_MAX_NATIVE_ZOOM = CARTO_KEY ? 20 : 16;
-const BASEMAP_SUBDOMAINS: string | undefined = CARTO_KEY ? 'abcd' : undefined;
+// Basemap Peta Jalan. M17-11: konfigurasi (URL + kunci peta + atribusi) diambil
+// RUNTIME dari `GET /api/config/public`, BUKAN dari build-arg Vite. Bundle tidak
+// memuat nama provider/kunci sama sekali, sehingga rotasi kunci atau ganti
+// provider cukup lewat env server (tanpa rebuild image).
+interface BasemapConfig {
+  url: string;
+  attribution: string;
+  maxNativeZoom: number;
+  subdomains: string | undefined;
+}
+
+// Fallback lokal bila endpoint config tidak tersedia: Esri World Light Gray Base.
+// Esri hanya punya tile sampai zoom 16; maxNativeZoom 16 membuat Leaflet melakukan
+// stretching di zoom 17-18 tanpa me-request tile 404.
+const FALLBACK_BASEMAP: BasemapConfig = {
+  url: 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}',
+  attribution:
+    '&copy; Esri, HERE, Garmin, &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors, and the GIS User Community',
+  maxNativeZoom: 16,
+  subdomains: undefined,
+};
+
+let publicBasemapPromise: Promise<BasemapConfig> | null = null;
+
+function loadPublicBasemap(): Promise<BasemapConfig> {
+  if (!publicBasemapPromise) {
+    publicBasemapPromise = fetch('/api/config/public', {
+      headers: { Accept: 'application/json' },
+    })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((json: any) => {
+        const map = json?.map;
+        // Tolak skema selain https (defense-in-depth terhadap respons cacat).
+        if (!map || typeof map.basemapUrl !== 'string' || !/^https:\/\//i.test(map.basemapUrl)) {
+          return FALLBACK_BASEMAP;
+        }
+        return {
+          url: map.basemapUrl,
+          attribution:
+            typeof map.attribution === 'string' && map.attribution
+              ? map.attribution
+              : FALLBACK_BASEMAP.attribution,
+          maxNativeZoom:
+            typeof map.maxNativeZoom === 'number' ? map.maxNativeZoom : FALLBACK_BASEMAP.maxNativeZoom,
+          subdomains: typeof map.subdomains === 'string' ? map.subdomains : undefined,
+        };
+      })
+      .catch(() => FALLBACK_BASEMAP);
+  }
+  return publicBasemapPromise;
+}
 
 function escapeHtml(str: string): string {
   return String(str ?? '')
@@ -78,6 +115,7 @@ export const CustomerMapTab: React.FC<CustomerMapTabProps> = ({ onSelectCustomer
   const basecampLayerRef = useRef<any>(null);
   const tileLayerRef = useRef<any>(null);
   const boundaryLayerRef = useRef<any>(null);
+  const basemapRef = useRef<BasemapConfig>(FALLBACK_BASEMAP);
   const hasInitialFittedRef = useRef(false);
   const abortControllerRef = useRef<AbortController | null>(null);
   const onSelectCustomerRef = useRef(onSelectCustomer);
@@ -191,6 +229,10 @@ export const CustomerMapTab: React.FC<CustomerMapTabProps> = ({ onSelectCustomer
         return;
       }
 
+      // Konfigurasi basemap diambil runtime (kunci/provider tidak ditanam di bundle).
+      const basemap = await loadPublicBasemap();
+      basemapRef.current = basemap;
+
       if (mapContainerRef.current) {
         if ((mapContainerRef.current as any)._leaflet_id) {
           delete (mapContainerRef.current as any)._leaflet_id;
@@ -233,12 +275,12 @@ export const CustomerMapTab: React.FC<CustomerMapTabProps> = ({ onSelectCustomer
       }
 
       // Basemap Peta Jalan (CARTO light_nolabels + grayscale, atau fallback Esri) — sangat simple, hanya jalan
-      const tileLayer = L.tileLayer(BASEMAP_URL, {
+      const tileLayer = L.tileLayer(basemap.url, {
         minZoom: 4,
         maxZoom: 18,
-        maxNativeZoom: BASEMAP_MAX_NATIVE_ZOOM,
-        attribution: BASEMAP_ATTR,
-        subdomains: BASEMAP_SUBDOMAINS as any,
+        maxNativeZoom: basemap.maxNativeZoom,
+        attribution: basemap.attribution,
+        subdomains: basemap.subdomains as any,
         className: 'customer-map-osm-gray',
       });
       tileLayer.addTo(map);
@@ -344,12 +386,13 @@ export const CustomerMapTab: React.FC<CustomerMapTabProps> = ({ onSelectCustomer
         } catch {}
       }
       if (!tileLayerRef.current) {
-        tileLayerRef.current = L.tileLayer(BASEMAP_URL, {
+        const basemap = basemapRef.current;
+        tileLayerRef.current = L.tileLayer(basemap.url, {
           minZoom: 4,
           maxZoom: 18,
-          maxNativeZoom: BASEMAP_MAX_NATIVE_ZOOM,
-          attribution: BASEMAP_ATTR,
-          subdomains: BASEMAP_SUBDOMAINS as any,
+          maxNativeZoom: basemap.maxNativeZoom,
+          attribution: basemap.attribution,
+          subdomains: basemap.subdomains as any,
           className: 'customer-map-osm-gray',
         });
       }

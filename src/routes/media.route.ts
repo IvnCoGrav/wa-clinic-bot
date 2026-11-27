@@ -2,6 +2,21 @@ import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import fs from 'fs';
 import path from 'path';
 import { safeCompare } from '../utils/auth';
+import { assertValidTenantId } from '../utils/tenant-id';
+
+/** Avatar inisial lokal — pengganti ui-avatars tanpa egress nama pelanggan. */
+function renderInitialsAvatar(name?: string | null): Buffer {
+  const safeName = String(name || 'Pelanggan').trim();
+  const initials =
+    safeName
+      .split(/\s+/)
+      .slice(0, 2)
+      .map((word) => word.charAt(0).toUpperCase())
+      .join('') || '?';
+  const text = initials.replace(/[<>&"']/g, '');
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256" role="img" aria-label="Avatar"><rect width="256" height="256" fill="#008069"/><text x="50%" y="50%" dominant-baseline="central" text-anchor="middle" font-family="Arial, sans-serif" font-size="96" font-weight="700" fill="#ffffff">${text}</text></svg>`;
+  return Buffer.from(svg, 'utf8');
+}
 
 const MIME_MAP: Record<string, string> = {
   jpg: 'image/jpeg',
@@ -19,6 +34,26 @@ const MIME_MAP: Record<string, string> = {
   mp4: 'video/mp4',
   pdf: 'application/pdf',
 };
+
+/**
+ * MIME yang boleh diteruskan dari upstream ke browser. Selain ini, jatuh ke
+ * MIME_MAP berbasis ekstensi (atau octet-stream) — mencegah media kiriman
+ * WhatsApp dirender sebagai HTML di origin aplikasi.
+ */
+const ALLOWED_FILE_MIME = new Set([
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+  'image/gif',
+  'audio/ogg',
+  'audio/opus',
+  'audio/mpeg',
+  'audio/mp4',
+  'audio/wav',
+  'video/mp4',
+  'application/pdf',
+  'application/octet-stream',
+]);
 
 // Folder outbound → publik (dibutuhkan Meta/WABA & WAHA utk mengambil file).
 // Folder inbound → privat, hanya dapat diakses dashboard ber-login (via cookie admin_session / staff_session).
@@ -364,9 +399,13 @@ export async function mediaRoutes(fastify: FastifyInstance) {
 
     const totalSize = result.data.length;
     const ext = (path.extname(file) || '').replace(/^\./, '').toLowerCase();
-    const contentType = result.contentType || MIME_MAP[ext] || 'image/jpeg';
+    const upstreamMime = String(result.contentType || '').split(';')[0].trim().toLowerCase();
+    const fallbackMime = MIME_MAP[ext] || 'application/octet-stream';
+    const contentType = ALLOWED_FILE_MIME.has(upstreamMime) ? upstreamMime : fallbackMime;
+    const downloadName = path.basename(file).replace(/[\r\n"\\]/g, '_') || 'file';
 
-    reply.header('Access-Control-Allow-Origin', '*');
+    reply.header('X-Content-Type-Options', 'nosniff');
+    reply.header('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(downloadName)}`);
     reply.header('Cache-Control', 'private, max-age=86400');
     reply.header('Accept-Ranges', 'bytes');
     reply.type(contentType);
@@ -408,11 +447,14 @@ export async function mediaRoutes(fastify: FastifyInstance) {
   }>, reply: FastifyReply) => {
     const { filename } = request.params;
     const sanitized = path.basename(filename);
+    const ext = (path.extname(sanitized) || '').replace(/^\./, '').toLowerCase();
+    if (!['jpg', 'jpeg', 'png', 'webp', 'gif', 'svg'].includes(ext)) {
+      return reply.status(404).send({ error: 'Asset Not Found' });
+    }
     const assetPath = path.join(process.cwd(), 'assets', sanitized);
     if (!fs.existsSync(assetPath) || !fs.statSync(assetPath).isFile()) {
       return reply.status(404).send({ error: 'Asset Not Found' });
     }
-    const ext = (path.extname(sanitized) || '').replace(/^\./, '').toLowerCase();
     reply.header('Access-Control-Allow-Origin', '*');
     reply.header('Cache-Control', 'public, max-age=86400');
     reply.type(MIME_MAP[ext] || 'image/jpeg');
@@ -421,54 +463,63 @@ export async function mediaRoutes(fastify: FastifyInstance) {
 
   /**
    * GET /media/avatar/:customerId
-   * Endpoint publik foto profil customer (atau avatar inisial) dengan proteksi SSRF (SEC-06 Fix).
+   * Foto profil customer — WAJIB sesi admin/staf dan terikat tenant.
+   * Fallback avatar dibuat lokal (inisial) tanpa mengirim nama ke pihak ketiga.
    */
   fastify.get('/media/avatar/:customerId', async (request: FastifyRequest<{
     Params: { customerId: string };
   }>, reply: FastifyReply) => {
-    // SEC-AUDIT-05: kunci path traversal di level path resolver (stdlib path,
-    // bukan pencocokan string). basename membuang segmen direktori; resolve+
-    // startsWith memastikan file tetap di dalam avatarDir apa pun inputnya.
+    const auth = await getMediaAuthorizedTenant(request);
+    if (!auth) {
+      return reply.status(401).send({ error: 'Unauthorized: Authentication required.' });
+    }
+
     const rawParam = request.params.customerId.replace(/\.(jpg|jpeg|png|webp|svg)$/i, '');
     const rawId = path.basename(rawParam);
-    const { prisma } = await import('../db/client');
     const { customerService } = await import('../services/customer.service');
     const axios = (await import('axios')).default;
 
     let customer: any = null;
     try {
-      customer = await prisma.customer.findUnique({ where: { id: rawId } });
-      if (!customer) {
-        const queryTenant = (request.query as any)?.tenantId;
-        if (queryTenant && typeof queryTenant === 'string' && queryTenant.trim()) {
-          customer = await customerService.getCustomerById(rawId, queryTenant.trim());
-        }
-      }
-    } catch {}
+      customer =
+        auth.tenantId === '*'
+          ? await customerService.getCustomerByIdAnyTenant(rawId)
+          : await customerService.getCustomerById(rawId, auth.tenantId);
+    } catch {
+      customer = null;
+    }
+    if (!customer) {
+      return reply.status(404).send({ error: 'Not Found' });
+    }
 
-    const avatarDir = path.join(process.cwd(), 'storage', 'media', 'avatars');
+    let tenantFolder: string;
+    try {
+      tenantFolder = assertValidTenantId(customer.tenant_id || auth.tenantId);
+    } catch {
+      return reply.status(404).send({ error: 'Not Found' });
+    }
+
+    const avatarDir = path.join(process.cwd(), 'storage', 'media', 'avatars', tenantFolder);
     const resolvedDir = path.resolve(avatarDir);
     const localAvatarPath = path.resolve(avatarDir, `${rawId}.jpg`);
     if (!localAvatarPath.startsWith(resolvedDir + path.sep)) {
       return reply.status(404).send({ error: 'Not Found' });
     }
 
-    // 1. Ambil dari cache lokal jika sudah ada
+    // 1. Cache lokal (per tenant).
     if (fs.existsSync(localAvatarPath) && fs.statSync(localAvatarPath).isFile()) {
-      reply.header('Access-Control-Allow-Origin', '*');
-      reply.header('Cache-Control', 'public, max-age=86400');
+      reply.header('Cache-Control', 'private, max-age=86400');
       reply.type('image/jpeg');
       return reply.send(fs.createReadStream(localAvatarPath));
     }
 
-    // 2. Unduh dari customer.profile_picture_url jika ada & valid (SSRF Protected)
+    // 2. Unduh dari customer.profile_picture_url (SSRF protected).
     if (customer?.profile_picture_url && (await isSafeUrlForFetch(customer.profile_picture_url))) {
       try {
         const picRes = await axios.get(customer.profile_picture_url, {
           responseType: 'arraybuffer',
           timeout: 4000,
           maxContentLength: 2 * 1024 * 1024, // Max 2MB
-          // SEC-AUDIT-08: jangan ikuti redirect — server penyerang bisa 302 ke IP internal.
           maxRedirects: 0,
           headers: {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -476,11 +527,10 @@ export async function mediaRoutes(fastify: FastifyInstance) {
         });
         if (picRes.status === 200 && picRes.data && picRes.data.length > 0) {
           try {
-            if (!fs.existsSync(avatarDir)) fs.mkdirSync(avatarDir, { recursive: true });
+            fs.mkdirSync(avatarDir, { recursive: true });
             fs.writeFileSync(localAvatarPath, Buffer.from(picRes.data));
           } catch {}
-          reply.header('Access-Control-Allow-Origin', '*');
-          reply.header('Cache-Control', 'public, max-age=86400');
+          reply.header('Cache-Control', 'private, max-age=86400');
           reply.type('image/jpeg');
           return reply.send(Buffer.from(picRes.data));
         }
@@ -489,18 +539,10 @@ export async function mediaRoutes(fastify: FastifyInstance) {
       }
     }
 
-    // 3. Fallback: generate dynamic avatar dari UI Avatars
-    const name = customer?.name || 'Pelanggan';
-    const fallbackUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=008069&color=fff&size=256&bold=true`;
-    try {
-      const fallbackRes = await axios.get(fallbackUrl, { responseType: 'arraybuffer', timeout: 5000, maxContentLength: 1024 * 1024 });
-      reply.header('Access-Control-Allow-Origin', '*');
-      reply.header('Cache-Control', 'public, max-age=86400');
-      reply.type('image/png');
-      return reply.send(Buffer.from(fallbackRes.data));
-    } catch {
-      return reply.redirect(fallbackUrl);
-    }
+    // 3. Fallback lokal: inisial nama. TIDAK mengirim nama ke layanan pihak ketiga.
+    reply.header('Cache-Control', 'private, max-age=300');
+    reply.type('image/svg+xml');
+    return reply.send(renderInitialsAvatar(customer?.name));
   });
 
   /**

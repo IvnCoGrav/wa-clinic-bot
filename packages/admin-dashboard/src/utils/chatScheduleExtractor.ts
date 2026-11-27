@@ -3,7 +3,7 @@
  * dari percakapan obrolan WhatsApp antara Bidan/CS dan Pelanggan.
  */
 import { matchCatalogService } from './treatmentStringParser';
-import { getWibDateKey, getTodayWibDate } from './dateWib';
+import { getWibDateKey, getTodayWibDate, getTomorrowWibDate } from './dateWib';
 import { isTreatmentCategoryOverlap, isScheduleBlockingStatus } from './treatmentCategory';
 
 export interface ExtractedScheduleData {
@@ -226,23 +226,20 @@ export function isValidChildName(name: string | null | undefined): boolean {
  */
 export function formatIndonesianDate(d?: Date | string | null): string {
   if (!d) {
-    const today = new Date();
-    today.setDate(today.getDate() + 1);
-    d = today;
+    d = getTomorrowWibDate();
   }
   const dateObj = typeof d === 'string' ? new Date(d) : d;
   if (!(dateObj instanceof Date) || isNaN(dateObj.getTime())) {
-    const today = new Date();
-    today.setDate(today.getDate() + 1);
-    const dayName = DAY_NAMES[today.getDay()] || 'Kamis';
-    const monthName = MONTH_NAMES[today.getMonth()] || 'Agustus';
-    return `${dayName} ${today.getDate()} ${monthName} ${today.getFullYear()}`;
+    const tomorrow = getTomorrowWibDate();
+    const dayName = DAY_NAMES[tomorrow.getDay()] || '';
+    const monthName = MONTH_NAMES[tomorrow.getMonth()] || '';
+    return `${dayName} ${tomorrow.getDate()} ${monthName} ${tomorrow.getFullYear()}`.trim();
   }
-  const dayName = DAY_NAMES[dateObj.getDay()] || 'Kamis';
+  const dayName = DAY_NAMES[dateObj.getDay()] || '';
   const dayNum = dateObj.getDate();
-  const monthName = MONTH_NAMES[dateObj.getMonth()] || 'Agustus';
+  const monthName = MONTH_NAMES[dateObj.getMonth()] || '';
   const year = dateObj.getFullYear();
-  return `${dayName} ${dayNum} ${monthName} ${year}`;
+  return `${dayName} ${dayNum} ${monthName} ${year}`.trim();
 }
 
 /**

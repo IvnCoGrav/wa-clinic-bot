@@ -24,7 +24,7 @@ import { __clearBrandCacheForTest } from '../../src/config/brand';
  */
 
 function extractInjectedPayload(html: string): any {
-  const m = html.match(/<script id="pricelist-data" type="application\/json">([\s\S]*?)<\/script>/);
+  const m = html.match(/<script[^>]*id="pricelist-data"[^>]*>([\s\S]*?)<\/script>/);
   if (!m) throw new Error('Blok #pricelist-data tidak ditemukan di HTML');
   return JSON.parse(m[1]);
 }

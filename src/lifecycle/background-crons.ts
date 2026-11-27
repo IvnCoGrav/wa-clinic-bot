@@ -118,11 +118,9 @@ export function registerCronWorkers(): void {
     const sheetsIntervalMinutes = parseInt(process.env.SHEETS_SYNC_INTERVAL_MINUTES || '3', 10);
     import('../services/cron.service').then(({ CronService }) => {
       const cron = new CronService();
-      cron.runSheetsSyncWorker().catch(e => console.warn('[SHEETS SYNC BOOT WARNING]', (e as Error).message));
-      trackIntervalStaggered(
-        createExclusiveCronTask('sheets-sync', () => cron.runSheetsSyncWorker()),
-        sheetsIntervalMinutes * 60 * 1000
-      );
+      const runBoot = createExclusiveCronTask('sheets-sync', () => cron.runSheetsSyncWorker());
+      runBoot().catch(e => console.warn('[SHEETS SYNC BOOT WARNING]', (e as Error).message));
+      trackIntervalStaggered(runBoot, sheetsIntervalMinutes * 60 * 1000);
       console.log(`📊 Google Sheets sync worker started (every ${sheetsIntervalMinutes}m, staggered)`);
     }).catch(e => console.error('[SHEETS SYNC START ERROR]', e));
   }
@@ -160,11 +158,9 @@ export function registerCronWorkers(): void {
     const intervalHours = parseInt(process.env.MEDIA_CLEANUP_INTERVAL_HOURS || '24', 10);
     import('../services/cron.service').then(({ CronService }) => {
       const cron = new CronService();
-      cron.runMediaCleanup().catch(e => console.warn('[MEDIA CLEANUP BOOT WARNING]', (e as Error).message));
-      trackInterval(
-        createExclusiveCronTask('media-cleanup', () => cron.runMediaCleanup()),
-        intervalHours * 60 * 60 * 1000
-      );
+      const runBoot = createExclusiveCronTask('media-cleanup', () => cron.runMediaCleanup());
+      runBoot().catch(e => console.warn('[MEDIA CLEANUP BOOT WARNING]', (e as Error).message));
+      trackInterval(runBoot, intervalHours * 60 * 60 * 1000);
       console.log(`🖼️ Media cleanup cron started (every ${intervalHours}h)`);
     }).catch(e => console.error('[MEDIA CLEANUP START ERROR]', e));
   }
@@ -490,8 +486,12 @@ export function registerCronWorkers(): void {
           }
 
           if (wibDay === 1 && wibHour === 2 && lastWeeklyBackupRunDate !== todayDateStr) {
-            lastWeeklyBackupRunDate = todayDateStr;
-            await cron.runWeeklyBackup();
+            // Set tanggal HANYA bila sukses; kegagalan boleh dicoba lagi pada
+            // tick berikutnya di jendela jam yang sama (bukan menunggu Senin depan).
+            const backupResult = await cron.runWeeklyBackup();
+            if (backupResult?.success) {
+              lastWeeklyBackupRunDate = todayDateStr;
+            }
             await cron.runLogRetentionSweep();
           }
         } catch (err: any) {

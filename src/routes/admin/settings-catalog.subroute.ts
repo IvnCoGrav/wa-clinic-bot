@@ -8,7 +8,7 @@ export async function settingsCatalogRoutes(fastify: FastifyInstance) {
    */
   fastify.get('/api/admin/services', async (request, reply) => {
     const { treatmentCatalogService } = await import('../../services/treatment-catalog.service');
-    const services = treatmentCatalogService.getAllServices(false);
+    const services = treatmentCatalogService.getAllServices(false, resolveTenantId(request));
     return reply.status(200).send({ success: true, count: services.length, data: services });
   });
 

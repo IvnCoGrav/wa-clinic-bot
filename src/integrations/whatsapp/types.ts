@@ -20,7 +20,7 @@ export interface WhatsAppIncomingMessage {
   from: string; // Nomor HP pengirim (format internasional tanpa +, misal: 628123456789)
   chatId?: string; // JID chat WAHA asli (misal phone@c.us / phone@lid) — dipakai utk label lifecycle
   timestamp: string;
-  type: 'text' | 'location' | 'image' | 'interactive' | 'reaction' | 'audio' | 'document' | 'video' | 'sticker' | 'contacts' | 'unknown';
+  type: 'text' | 'location' | 'image' | 'interactive' | 'button' | 'reaction' | 'audio' | 'document' | 'video' | 'sticker' | 'contacts' | 'order' | 'system' | 'unsupported' | 'unknown';
   text?: WhatsAppTextPayload;
   location?: WhatsAppLocationPayload;
   image?: {
@@ -64,6 +64,22 @@ export interface WhatsAppIncomingMessage {
   reaction?: {
     message_id: string;
     emoji: string;
+  };
+  /** Balasan tombol template (quick reply) Meta Cloud API. */
+  button?: {
+    text?: string;
+    payload?: string;
+  };
+  /** Order katalog WhatsApp (Meta Cloud API). */
+  order?: {
+    catalog_id?: string;
+    product_items?: Array<{ product_retailer_id?: string; quantity?: number; item_price?: number }>;
+    text?: string;
+  };
+  /** Notifikasi sistem Meta (mis. perubahan nomor, pembatasan). */
+  system?: {
+    body?: string;
+    type?: string;
   };
   /** Metadata media (gambar Live Chat): url/hdUrl relatif ke /media + mimeType + caption. */
   media?: {

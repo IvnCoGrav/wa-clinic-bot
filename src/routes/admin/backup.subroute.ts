@@ -1,6 +1,7 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import fs from 'fs';
 import path from 'path';
+import crypto from 'crypto';
 import { DEFAULT_TENANT_ID } from '../../config/tenant';
 import { backupService } from '../../services/backup.service';
 import { auditService } from '../../services/audit.service';
@@ -20,7 +21,7 @@ export async function backupAdminRoutes(fastify: FastifyInstance) {
     '/api/admin/backup/list',
     async (request: FastifyRequest<{ Querystring: { tenantId?: string } }>, reply: FastifyReply) => {
       try {
-        const tenantId = request.query?.tenantId || resolveSessionTenantId(request);
+        const tenantId = resolveSessionTenantId(request);
         const backups = await backupService.listAllBackups(tenantId);
         return reply.status(200).send({
           success: true,
@@ -40,15 +41,18 @@ export async function backupAdminRoutes(fastify: FastifyInstance) {
     '/api/admin/backup/create',
     async (
       request: FastifyRequest<{
-        Body: { uploadToDrive?: boolean; tenantId?: string };
+        Body: { uploadToDrive?: boolean; tenantId?: string; scope?: 'tenant' | 'global' };
       }>,
       reply: FastifyReply
     ) => {
       try {
-        const tenantId = request.body?.tenantId || resolveSessionTenantId(request);
+        const tenantId = resolveSessionTenantId(request);
         const uploadToDrive = Boolean(request.body?.uploadToDrive);
+        // Dump global hanya untuk operator (API key root/admin session), bukan sesi staf.
+        const scope: 'tenant' | 'global' =
+          request.body?.scope === 'global' && !(request as any).staffRole ? 'global' : 'tenant';
 
-        const dump = await backupService.createDatabaseDump(tenantId);
+        const dump = await backupService.createDatabaseDump(tenantId, { scope });
         let driveFile = null;
 
         if (uploadToDrive) {
@@ -59,7 +63,7 @@ export async function backupAdminRoutes(fastify: FastifyInstance) {
           apiKey: (request.headers['x-api-key'] as string) || 'admin_session',
           adminIdentity: 'ADMIN',
           action: 'CREATE_DATABASE_BACKUP',
-          payload: { fileName: dump.fileName, sizeBytes: dump.sizeBytes, uploadedToDrive: Boolean(driveFile) },
+          payload: { fileName: dump.fileName, sizeBytes: dump.sizeBytes, uploadedToDrive: Boolean(driveFile), scope },
           tenantId,
         });
 
@@ -128,7 +132,7 @@ export async function backupAdminRoutes(fastify: FastifyInstance) {
       reply: FastifyReply
     ) => {
       try {
-        const tenantId = request.body?.tenantId || resolveSessionTenantId(request);
+        const tenantId = resolveSessionTenantId(request);
         const fileName = sanitizeBackupFileName(request.body?.fileName || '');
         const filePath = path.join(BACKUP_STORAGE_DIR, fileName);
 
@@ -168,7 +172,7 @@ export async function backupAdminRoutes(fastify: FastifyInstance) {
       reply: FastifyReply
     ) => {
       try {
-        const tenantId = request.body?.tenantId || resolveSessionTenantId(request);
+        const tenantId = resolveSessionTenantId(request);
         const rawFileName = request.body?.fileName || '';
         const base64Data = request.body?.fileBase64 || '';
 
@@ -183,10 +187,27 @@ export async function backupAdminRoutes(fastify: FastifyInstance) {
         ensureBackupDirectory();
         const filePath = path.join(BACKUP_STORAGE_DIR, fileName);
 
+        if (fs.existsSync(filePath)) {
+          return reply.status(409).send({ success: false, error: 'File backup dengan nama itu sudah ada.' });
+        }
+
         const cleanB64 = base64Data.replace(/^data:.*?;base64,/, '');
         const fileBuffer = Buffer.from(cleanB64, 'base64');
 
-        fs.writeFileSync(filePath, fileBuffer);
+        const isGzip = fileBuffer.length >= 2 && fileBuffer[0] === 0x1f && fileBuffer[1] === 0x8b;
+        const isEncrypted = fileBuffer.length >= 4 && fileBuffer.subarray(0, 4).toString('ascii') === 'ENC1';
+        if (!isGzip && !isEncrypted) {
+          return reply.status(400).send({
+            success: false,
+            error: 'File backup harus gzip (.gz) atau terenkripsi ENC1; dump plaintext ditolak.',
+          });
+        }
+
+        // Tulis atomik: file sementara + rename, agar upload gagal tidak
+        // meninggalkan file setengah jadi dengan nama final.
+        const tmpPath = `${filePath}.${crypto.randomUUID()}.tmp`;
+        fs.writeFileSync(tmpPath, fileBuffer);
+        fs.renameSync(tmpPath, filePath);
 
         await auditService.logAdminAction({
           apiKey: (request.headers['x-api-key'] as string) || 'admin_session',
@@ -223,7 +244,7 @@ export async function backupAdminRoutes(fastify: FastifyInstance) {
       reply: FastifyReply
     ) => {
       try {
-        const tenantId = request.body?.tenantId || resolveSessionTenantId(request);
+        const tenantId = resolveSessionTenantId(request);
         const force = Boolean(request.body?.force);
         const fileName = sanitizeBackupFileName(request.body?.fileName || '');
         const filePath = path.join(BACKUP_STORAGE_DIR, fileName);
@@ -236,6 +257,14 @@ export async function backupAdminRoutes(fastify: FastifyInstance) {
         }
 
         const result = await backupService.restoreDatabaseFromDump(filePath, tenantId, { force });
+
+        if (!result.success) {
+          return reply.status(422).send({
+            success: false,
+            message: result.message,
+            data: { tablesRestored: result.tablesRestored },
+          });
+        }
 
         return reply.status(200).send({
           success: true,

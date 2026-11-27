@@ -7,20 +7,24 @@
 
 ## 1. Daftar Kapabilitas Kanonis Aktif
 
-Total kapabilitas terdaftar: **46 modul**.
+Total kapabilitas terdaftar: **53 modul**.
 
 | ID Kapabilitas | Judul & Deskripsi | Modul Kanonis | Ekspor Resmi | Test File |
 |---|---|---|---|---|
+| `ai.copilot_quota` | **Kuota admission Copilot per principal**<br>Bucket 6 request/menit per principal (staf, sesi admin, atau API key) yang dipakai bersama oleh /chat dan /stream; identitas header klien tidak boleh menjadi principal. | [`src/services/copilot/copilot-quota.ts`](../src/services/copilot/copilot-quota.ts) | `checkCopilotQuota`, `copilotPrincipalKey`, `resetCopilotQuota` | [`f6-copilot-contract.test.ts`](../tests/unit/f6-copilot-contract.test.ts) |
+| `ai.copilot_token_budget` | **Anggaran token Copilot per turn dan harian**<br>Plafon 20k token/turn dan 500k token/hari/tenant (env-overridable) dengan agregasi llm_audit_logs terbatas task_type AI_COPILOT_CHAT dan lantai in-memory saat buffer audit belum ter-flush atau DB offline. | [`src/services/copilot/copilot-budget.ts`](../src/services/copilot/copilot-budget.ts) | `assertCopilotDailyBudget`, `estimateTurnTokens`, `getCopilotDailyTokensUsed`, `maxTokensPerDay`, `maxTokensPerTurn`, `recordCopilotTokens`, `resetCopilotBudgetCache` | [`f6-copilot-budget.test.ts`](../tests/unit/f6-copilot-budget.test.ts) |
 | `analytics.baseline_settings` | **Konfigurasi baseline analitik tenant-aware**<br>Pengaturan jendela bulan, mode weekday/kalender, dan moving average smoothing per tenant dengan normalisasi ketat dan cache memori 5 menit. | [`src/config/analytics-baseline.ts`](../src/config/analytics-baseline.ts) | `getAnalyticsBaselineSettings`, `normalizeAnalyticsBaselineSettings`, `resolveBaselineSettingsForRequest`, `ALLOWED_BASELINE_MONTHS` | [`analytics-baseline-config.test.ts`](../tests/unit/analytics-baseline-config.test.ts) |
 | `analytics.daily_baseline` | **Perhitungan kurva baseline multi-bulan harian (domain murni)**<br>Perhitungan statistik baseline multi-bulan (weekday atau kalender moving average) dan komparasi bulan lalu untuk analitik tren harian tanpa I/O. | [`src/domain/daily-baseline.ts`](../src/domain/daily-baseline.ts) | `buildDailyBaseline`, `computeCumulativeAndForecast`, `daysInMonth`, `wibDateParts` | [`daily-baseline.test.ts`](../tests/unit/daily-baseline.test.ts) |
 | `analytics.financial_targets` | **Resolusi target finansial bulanan per-tenant**<br>Resolver target omset dan booking bulanan tenant-aware dari Tenant.settings dengan cache 5 menit dan fallback aman. | [`src/config/financial-targets.ts`](../src/config/financial-targets.ts) | `getFinancialTargets`, `clearFinancialTargetsCache`, `DEFAULT_FINANCIAL_TARGETS` | [`financial-targets-config.test.ts`](../tests/unit/financial-targets-config.test.ts) |
 | `analytics.revenue_contract` | **Kontrak kanonis revenue dan analitik dashboard**<br>Definisi tipe RevenueBasis, RevenueStatusFilter, RevenueQuery, RevenueAmounts, RevenueBasisMeta, dan helper filter status serta metadata basis analitik. | [`src/domain/analytics-contract.ts`](../src/domain/analytics-contract.ts) | `RevenueBasis`, `RevenueStatusFilter`, `RevenueQuery`, `RevenueAmounts`, `RevenueBasisMeta`, `DEFAULT_REVENUE_QUERY`, `isRevenueStatusIncluded`, `describeRevenueBasis`, `buildRevenueBasisMeta` | [`analytics-contract.test.ts`](../tests/unit/analytics-contract.test.ts) |
 | `capi.pure_helpers` | **Helper murni Meta Conversions API**<br>Transformasi deterministik nilai CAPI, format _fbc, hash SHA-256, decrypt token, kanonikalisasi landing URL, ekstraksi nominal template, dan event_id Purchase — tanpa I/O. | [`src/services/capi.helpers.ts`](../src/services/capi.helpers.ts) | `maskName`, `parseCapiValue`, `formatMetaFbc`, `sha256Hash`, `decryptCapiToken`, `resolveCanonicalLandingUrl`, `extractValueByFormat`, `normalizeCapiMatchingGeo`, `buildDeterministicPurchaseEventId`, `buildLegacyPurchaseEventId` | [`capi-value-guard.test.ts`](../tests/unit/capi-value-guard.test.ts) |
+| `data.spreadsheet_escape` | **Netralisasi formula spreadsheet**<br>Encoder sel CSV/Google Sheets yang menetralkan awalan formula (= + - @ TAB CR) untuk mencegah formula injection. | [`src/utils/spreadsheet-escape.ts`](../src/utils/spreadsheet-escape.ts) | `neutralizeFormula`, `escapeCsvCell`, `escapeSheetCell` | [`spreadsheet-escape.test.ts`](../tests/unit/spreadsheet-escape.test.ts) |
 | `date.parse_indonesian` | **Parser tanggal bahasa Indonesia**<br>Parsing ekspresi tanggal bahasa alami Indonesia (hari, nama bulan teks/angka, relatif) menjadi objek Date standar. | [`src/utils/indonesian-date-parser.ts`](../src/utils/indonesian-date-parser.ts) | `parseIndonesianDate`, `parseHistoricalIndonesianDate`, `applyBookingTimeToDate` | [`indonesian-date-parser.test.ts`](../tests/unit/v3/indonesian-date-parser.test.ts) |
 | `followup.holiday_scheduling` | **Kontrak & resolusi Mode Libur Follow-Up**<br>Parser konfigurasi libur tenant, resolver state (active/exit_pending/manual_expired), clamp jadwal ke hari buka pertama, dan epoch skema repeat 25/50/75 hari yang non-retroaktif. | [`src/config/followup-scheduling.ts`](../src/config/followup-scheduling.ts) | `parseFollowUpHolidayConfig`, `parseFollowUpHolidayInput`, `resolveFollowUpHolidayState`, `clampScheduledAtToPostHoliday`, `countWibDaysBetween`, `isRepeatSchemeEligible`, `NEXT_TREATMENT_SCHEME_EPOCH` | [`followup-holiday-state.test.ts`](../tests/unit/followup-holiday-state.test.ts) |
 | `followup.schedule_allocator` | **Alokator slot follow-up beban-aware**<br>Membagi antrean follow-up ke slot jam kerja WIB secara deterministik, menghormati beban existing per hari, dan mengisi celah slot kosong untuk mencegah blasting. | [`src/services/followup-schedule-allocator.ts`](../src/services/followup-schedule-allocator.ts) | `allocateFollowUpSlots`, `loadFollowUpDailyLoad`, `loadFollowUpDailyLoadDetailed`, `getWibMinutes` | [`followup-schedule-allocator.test.ts`](../tests/unit/followup-schedule-allocator.test.ts) |
 | `gesture.swipe` | **Fisika & klasifikasi gestur swipe kanonis**<br>Redaman eksponensial, dominansi sumbu, arah swipe, dan pemetaan kelas slide tab — murni tanpa DOM. | [`packages/admin-dashboard/src/utils/swipeGesture.ts`](../packages/admin-dashboard/src/utils/swipeGesture.ts) | `SWIPE_RATIO`, `EDGE_RATIO`, `TAB_SWIPE_MIN_PX`, `EDGE_OPEN_MIN_PX`, `EDGE_ZONE_PX`, `SWIPE_MAX_DURATION_MS`, `applyRubberBand`, `isDominantHorizontal`, `resolveSwipeDirection`, `slideClassFor` | [`swipe-gesture.test.ts`](../tests/unit/swipe-gesture.test.ts) |
 | `json.extract` | **Ekstraksi JSON dari output AI**<br>Mengekstrak blok JSON seimbang dari respons teks LLM yang mengandung markdown atau teks pelengkap. | [`src/utils/json-extract.ts`](../src/utils/json-extract.ts) | `extractBalancedJson`, `extractJsonContent`, `repairTruncatedJson` | [`json-extract.test.ts`](../tests/unit/json-extract.test.ts) |
+| `landing.field_contract` | **Kontrak field landing**<br>Validasi dan sanitasi metaPixelId/whatsappNumber pada batas tulis dan render landing agar tidak masuk ke konteks script sebagai nilai bebas. | [`src/utils/landing-fields.ts`](../src/utils/landing-fields.ts) | `parseMetaPixelId`, `parseWhatsappNumber`, `sanitizePixelForRender`, `sanitizePhoneForRender` | [`landing-fields.test.ts`](../tests/unit/landing-fields.test.ts) |
 | `livechat.serialize` | **Proyeksi DTO LiveChat**<br>Memetakan baris percakapan/kustomer/reservasi menjadi DTO LiveChat (badge reservasi, sumber lokasi, awaiting-reply) tanpa akses DB. | [`src/services/live-chat.serializer.ts`](../src/services/live-chat.serializer.ts) | `serializeLiveChatConversation` | [`livechat-payload-completeness.test.ts`](../tests/unit/livechat-payload-completeness.test.ts) |
 | `livechat.thread_pagination` | **Paginasi dua arah thread pesan Live Chat**<br>Jendela fokus di sekitar pesan hasil pencarian dan paginasi dua arah (before/after) dengan penanda hasNewer/newestCursor, tenant-scoped dan tahan DB offline. | [`src/services/message-thread.service.ts`](../src/services/message-thread.service.ts) | `messageThreadService` | [`live-chat-paged-messages.test.ts`](../tests/unit/live-chat-paged-messages.test.ts) |
 | `location.adequacy` | **Kecukupan, presisi, dan precedence lokasi tugas**<br>Resolver kanonis kecukupan/presisi/kepercayaan lokasi serta precedence titik tugas (pemilik koordinat) berbasis status; mencegah penurunan label & shareloc palsu. | [`src/domain/location-adequacy.ts`](../src/domain/location-adequacy.ts) | `resolveLocationAdequacy`, `resolveTaskLocationPrecedence`, `extractStaffVerifiedCoords`, `SAME_PLACE_TOLERANCE_M` | [`location-adequacy.test.ts`](../tests/unit/location-adequacy.test.ts) |
@@ -42,6 +46,9 @@ Total kapabilitas terdaftar: **46 modul**.
 | `reservation.payment_response` | **Response wrapper evaluasi pembayaran reservasi**<br>Menyematkan hasil kalkulasi paymentEvaluation ke dalam payload respons reservasi admin. | [`src/routes/admin/shared/reservation-response.ts`](../src/routes/admin/shared/reservation-response.ts) | `withPaymentEvaluation` | [`reservation-payment-response.test.ts`](../tests/unit/reservation-payment-response.test.ts) |
 | `reservation.payment_verification` | **Verifikasi bukti pembayaran reservasi**<br>Seam kanonis verifikasi pembayaran transfer/non-tunai: simpan bukti permanen, hitung tagihan kanonis (GROSS), catat pembayaran tanpa mengubah status kunjungan, audit tenant-aware — tanpa akses Prisma di route. | [`src/services/reservation-payment-verification.service.ts`](../src/services/reservation-payment-verification.service.ts) | `verifyReservationPayment` | [`admin-verify-payment.test.ts`](../tests/integration/admin-verify-payment.test.ts) |
 | `schedule.overlap` | **Deteksi tumpang tindih slot jadwal**<br>Menghitung durasi efektif dan memeriksa tumpang-tindih interval reservasi atau janji temu. | [`src/services/slot-overlap.service.ts`](../src/services/slot-overlap.service.ts) | `effectiveDuration`, `intervalsOverlap` | [`slot-overlap-parity.test.ts`](../tests/unit/slot-overlap-parity.test.ts) |
+| `security.inbound_event_dedup` | **Klaim sekali-pakai event inbound non-pesan**<br>Dedup idempoten untuk event webhook yang dimutasi sebelum jalur idempotensi pesan (reaction, ack): klaim SET NX di DistributedKv dengan fallback memori, TTL 10 menit. | [`src/services/inbound-event-dedup.service.ts`](../src/services/inbound-event-dedup.service.ts) | `inboundEventDedup` | [`f8-reaction-dedup.test.ts`](../tests/unit/f8-reaction-dedup.test.ts) |
+| `security.script_escape` | **Escaping konteks script HTML**<br>Escaping nilai dinamis yang disisipkan ke dalam <script>: netralkan </script>, <, >, &, dan U+2028/2029 tanpa merusak JSON JavaScript. | [`src/utils/script-escape.ts`](../src/utils/script-escape.ts) | `escapeScriptText`, `jsStringLiteral`, `safeJsonForScript` | [`script-escape.test.ts`](../tests/unit/script-escape.test.ts) |
+| `security.tenant_id` | **Validasi identitas tenant kanonik**<br>Pola tenant id kanonik dan guard untuk mencegah traversal/path injection saat tenant dipakai sebagai komponen path, kunci cache, atau filter query. | [`src/utils/tenant-id.ts`](../src/utils/tenant-id.ts) | `TENANT_ID_PATTERN`, `isValidTenantId`, `assertValidTenantId` | [`tenant-id.test.ts`](../tests/unit/tenant-id.test.ts) |
 | `staff.delay_watchdog_config` | **Resolusi konfigurasi delay watchdog per-tenant**<br>Resolver konfigurasi delay watchdog tenant-aware dengan TTL cache 5 menit dan fallback deterministik ke StaffScorecardPolicy atau default 30 menit. | [`src/config/delay-watchdog-config.ts`](../src/config/delay-watchdog-config.ts) | `getDelayWatchdogSettings`, `clearDelayWatchdogCache`, `DEFAULT_DELAY_WATCHDOG_SETTINGS` | [`delay-watchdog-config.test.ts`](../tests/unit/delay-watchdog-config.test.ts) |
 | `staff.delay_watchdog_domain` | **Prediksi keterlambatan dan deadline keberangkatan staf**<br>Domain murni untuk menentukan origin leg (rumah vs tugas sebelumnya), deadline keberangkatan, dan prediksi keterlambatan (on_time, warning, critical) tanpa I/O. | [`src/domain/delay-watchdog.ts`](../src/domain/delay-watchdog.ts) | `resolveLegOrigin`, `computeDepartureDeadline`, `etaMinutesTo`, `predictTaskDelay`, `computeItineraryDelays` | [`delay-watchdog-domain.test.ts`](../tests/unit/delay-watchdog-domain.test.ts) |
 | `staff.departure_watchdog_service` | **Service watchdog keterlambatan & notifikasi admin**<br>Evaluasi jadwal hari ini untuk deteksi keterlambatan staf serta pengiriman notifikasi WhatsApp ke nomor admin resmi dengan audit trail. | [`src/services/staff-departure-watchdog.service.ts`](../src/services/staff-departure-watchdog.service.ts) | `StaffDepartureWatchdogService`, `staffDepartureWatchdogService` | [`staff-departure-watchdog.test.ts`](../tests/unit/staff-departure-watchdog.test.ts) |
@@ -59,6 +66,24 @@ Total kapabilitas terdaftar: **46 modul**.
 | `whatsapp.message_id` | **Validasi & klasifikasi format WhatsApp Message ID**<br>Leaf util murni tanpa I/O untuk validasi format message ID reply_to per provider (WAHA serialized vs WABA wamid) dan deteksi error format ID untuk fallback fail-open. | [`src/utils/whatsapp-message-id.ts`](../src/utils/whatsapp-message-id.ts) | `isValidReplyToForProvider`, `isReplyIdFormatError` | [`whatsapp-message-id.test.ts`](../tests/unit/whatsapp-message-id.test.ts) |
 
 ## 2. Rincian Modul & Aturan Guardrail
+
+### `ai.copilot_quota` — Kuota admission Copilot per principal
+
+- **Deskripsi:** Bucket 6 request/menit per principal (staf, sesi admin, atau API key) yang dipakai bersama oleh /chat dan /stream; identitas header klien tidak boleh menjadi principal.
+- **File Kanonis:** [`src/services/copilot/copilot-quota.ts`](../src/services/copilot/copilot-quota.ts)
+- **Ekspor Kanonis:** `checkCopilotQuota`, `copilotPrincipalKey`, `resetCopilotQuota`
+- **Simbol Terlarang di Luar Kanonis:** `checkCopilotQuota`, `copilotPrincipalKey`
+- **File yang Diizinkan:** `src/services/copilot/copilot-quota.ts`
+- **File Test:** [`tests/unit/f6-copilot-contract.test.ts`](../tests/unit/f6-copilot-contract.test.ts)
+
+### `ai.copilot_token_budget` — Anggaran token Copilot per turn dan harian
+
+- **Deskripsi:** Plafon 20k token/turn dan 500k token/hari/tenant (env-overridable) dengan agregasi llm_audit_logs terbatas task_type AI_COPILOT_CHAT dan lantai in-memory saat buffer audit belum ter-flush atau DB offline.
+- **File Kanonis:** [`src/services/copilot/copilot-budget.ts`](../src/services/copilot/copilot-budget.ts)
+- **Ekspor Kanonis:** `assertCopilotDailyBudget`, `estimateTurnTokens`, `getCopilotDailyTokensUsed`, `maxTokensPerDay`, `maxTokensPerTurn`, `recordCopilotTokens`, `resetCopilotBudgetCache`
+- **Simbol Terlarang di Luar Kanonis:** `assertCopilotDailyBudget`, `getCopilotDailyTokensUsed`, `recordCopilotTokens`
+- **File yang Diizinkan:** `src/services/copilot/copilot-budget.ts`
+- **File Test:** [`tests/unit/f6-copilot-budget.test.ts`](../tests/unit/f6-copilot-budget.test.ts)
 
 ### `analytics.baseline_settings` — Konfigurasi baseline analitik tenant-aware
 
@@ -105,6 +130,15 @@ Total kapabilitas terdaftar: **46 modul**.
 - **File yang Diizinkan:** `src/services/capi.helpers.ts`
 - **File Test:** [`tests/unit/capi-value-guard.test.ts`](../tests/unit/capi-value-guard.test.ts)
 
+### `data.spreadsheet_escape` — Netralisasi formula spreadsheet
+
+- **Deskripsi:** Encoder sel CSV/Google Sheets yang menetralkan awalan formula (= + - @ TAB CR) untuk mencegah formula injection.
+- **File Kanonis:** [`src/utils/spreadsheet-escape.ts`](../src/utils/spreadsheet-escape.ts)
+- **Ekspor Kanonis:** `neutralizeFormula`, `escapeCsvCell`, `escapeSheetCell`
+- **Simbol Terlarang di Luar Kanonis:** 
+- **File yang Diizinkan:** `src/utils/spreadsheet-escape.ts`, `src/services/financial-analytics.service.ts`
+- **File Test:** [`tests/unit/spreadsheet-escape.test.ts`](../tests/unit/spreadsheet-escape.test.ts)
+
 ### `date.parse_indonesian` — Parser tanggal bahasa Indonesia
 
 - **Deskripsi:** Parsing ekspresi tanggal bahasa alami Indonesia (hari, nama bulan teks/angka, relatif) menjadi objek Date standar.
@@ -149,6 +183,15 @@ Total kapabilitas terdaftar: **46 modul**.
 - **Simbol Terlarang di Luar Kanonis:** `extractBalancedJson`
 - **File yang Diizinkan:** `src/utils/json-extract.ts`
 - **File Test:** [`tests/unit/json-extract.test.ts`](../tests/unit/json-extract.test.ts)
+
+### `landing.field_contract` — Kontrak field landing
+
+- **Deskripsi:** Validasi dan sanitasi metaPixelId/whatsappNumber pada batas tulis dan render landing agar tidak masuk ke konteks script sebagai nilai bebas.
+- **File Kanonis:** [`src/utils/landing-fields.ts`](../src/utils/landing-fields.ts)
+- **Ekspor Kanonis:** `parseMetaPixelId`, `parseWhatsappNumber`, `sanitizePixelForRender`, `sanitizePhoneForRender`
+- **Simbol Terlarang di Luar Kanonis:** `parseMetaPixelId`, `parseWhatsappNumber`, `sanitizePixelForRender`, `sanitizePhoneForRender`
+- **File yang Diizinkan:** `src/utils/landing-fields.ts`
+- **File Test:** [`tests/unit/landing-fields.test.ts`](../tests/unit/landing-fields.test.ts)
 
 ### `livechat.serialize` — Proyeksi DTO LiveChat
 
@@ -338,6 +381,33 @@ Total kapabilitas terdaftar: **46 modul**.
 - **Simbol Terlarang di Luar Kanonis:** `effectiveDuration`, `intervalsOverlap`
 - **File yang Diizinkan:** `src/services/slot-overlap.service.ts`
 - **File Test:** [`tests/unit/slot-overlap-parity.test.ts`](../tests/unit/slot-overlap-parity.test.ts)
+
+### `security.inbound_event_dedup` — Klaim sekali-pakai event inbound non-pesan
+
+- **Deskripsi:** Dedup idempoten untuk event webhook yang dimutasi sebelum jalur idempotensi pesan (reaction, ack): klaim SET NX di DistributedKv dengan fallback memori, TTL 10 menit.
+- **File Kanonis:** [`src/services/inbound-event-dedup.service.ts`](../src/services/inbound-event-dedup.service.ts)
+- **Ekspor Kanonis:** `inboundEventDedup`
+- **Simbol Terlarang di Luar Kanonis:** `inboundEventDedup`
+- **File yang Diizinkan:** `src/services/inbound-event-dedup.service.ts`
+- **File Test:** [`tests/unit/f8-reaction-dedup.test.ts`](../tests/unit/f8-reaction-dedup.test.ts)
+
+### `security.script_escape` — Escaping konteks script HTML
+
+- **Deskripsi:** Escaping nilai dinamis yang disisipkan ke dalam <script>: netralkan </script>, <, >, &, dan U+2028/2029 tanpa merusak JSON JavaScript.
+- **File Kanonis:** [`src/utils/script-escape.ts`](../src/utils/script-escape.ts)
+- **Ekspor Kanonis:** `escapeScriptText`, `jsStringLiteral`, `safeJsonForScript`
+- **Simbol Terlarang di Luar Kanonis:** `escapeScriptText`, `jsStringLiteral`, `safeJsonForScript`
+- **File yang Diizinkan:** `src/utils/script-escape.ts`
+- **File Test:** [`tests/unit/script-escape.test.ts`](../tests/unit/script-escape.test.ts)
+
+### `security.tenant_id` — Validasi identitas tenant kanonik
+
+- **Deskripsi:** Pola tenant id kanonik dan guard untuk mencegah traversal/path injection saat tenant dipakai sebagai komponen path, kunci cache, atau filter query.
+- **File Kanonis:** [`src/utils/tenant-id.ts`](../src/utils/tenant-id.ts)
+- **Ekspor Kanonis:** `TENANT_ID_PATTERN`, `isValidTenantId`, `assertValidTenantId`
+- **Simbol Terlarang di Luar Kanonis:** `TENANT_ID_PATTERN`, `isValidTenantId`, `assertValidTenantId`
+- **File yang Diizinkan:** `src/utils/tenant-id.ts`
+- **File Test:** [`tests/unit/tenant-id.test.ts`](../tests/unit/tenant-id.test.ts)
 
 ### `staff.delay_watchdog_config` — Resolusi konfigurasi delay watchdog per-tenant
 

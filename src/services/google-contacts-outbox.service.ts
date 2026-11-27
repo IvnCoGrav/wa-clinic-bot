@@ -51,6 +51,8 @@ const OUTBOX_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const itemKey = (tenantId: string, customerId: string) =>
   `gcontact:outbox:${tenantId}:${customerId}`;
 const indexKey = (tenantId: string) => `gcontact:outbox:index:${tenantId}`;
+const deadKey = (tenantId: string, customerId: string) =>
+  `gcontact:outbox:dead:${tenantId}:${customerId}`;
 const TENANTS_KEY = 'gcontact:outbox:tenants';
 
 function safeParse(raw: string | null): GoogleContactsOutboxItem | null {
@@ -80,6 +82,22 @@ export class GoogleContactsOutbox {
     if (!tenantId || !customerId) return null;
 
     const key = itemKey(tenantId, customerId);
+    const lockKey = `${key}:enqueue`;
+    let locked = false;
+    try {
+      locked = await this.kv.setNx(lockKey, '1', 5000);
+    } catch {
+      locked = true;
+    }
+    if (!locked) {
+      // Proses lain sedang menulis item yang sama; kembalikan snapshot terbaru.
+      try {
+        return safeParse(await this.kv.get(key));
+      } catch {
+        return null;
+      }
+    }
+
     let existing: GoogleContactsOutboxItem | null = null;
     try {
       existing = safeParse(await this.kv.get(key));
@@ -106,6 +124,12 @@ export class GoogleContactsOutbox {
     } catch (err: any) {
       console.warn('[GoogleContactsOutbox] Gagal menulis antrean:', err?.message || err);
       return null;
+    } finally {
+      try {
+        await this.kv.del(lockKey);
+      } catch {
+        /* lock kedaluwarsa sendiri */
+      }
     }
   }
 
@@ -173,6 +197,19 @@ export class GoogleContactsOutbox {
       }
       result.processed++;
 
+      const lockKey = `${itemKey(tenantId, item.customerId)}:lock`;
+      let lockAcquired = false;
+      try {
+        lockAcquired = await this.kv.setNx(lockKey, '1', 30_000);
+      } catch {
+        lockAcquired = true; // KV bermasalah: jangan hilangkan item, proses seperti biasa.
+      }
+      if (!lockAcquired) {
+        result.deferred++;
+        continue;
+      }
+
+      try {
       let success = false;
       let errorMessage: string | undefined;
       try {
@@ -197,6 +234,14 @@ export class GoogleContactsOutbox {
       const attempts = (item.attempts || 0) + 1;
       if (attempts >= MAX_OUTBOX_ATTEMPTS) {
         await this.remove(tenantId, item.customerId);
+        // Dead-letter (7 hari) + alert, bukan sekadar console.warn.
+        try {
+          await this.kv.set(
+            deadKey(tenantId, item.customerId),
+            JSON.stringify({ ...item, attempts, lastError: errorMessage, droppedAt: this.now() }),
+            7 * 24 * 60 * 60 * 1000
+          );
+        } catch {}
         result.dropped++;
         console.warn(JSON.stringify({
           event: 'GOOGLE_CONTACTS_OUTBOX_DROPPED',
@@ -206,6 +251,15 @@ export class GoogleContactsOutbox {
           lastError: errorMessage,
           timestamp: new Date(this.now()).toISOString(),
         }));
+        try {
+          const { alertService, AlertType, AlertSeverity } = await import('./alert.service');
+          await alertService.notifyAlert({
+            type: AlertType.THIRD_PARTY_OUTAGE,
+            severity: AlertSeverity.CRITICAL,
+            message: `[GOOGLE CONTACTS DEAD-LETTER] Sinkronisasi kontak customer ${item.customerId} dibuang setelah ${attempts} percobaan: ${errorMessage || 'unknown'}`,
+            metadata: { tenantId, customerId: item.customerId, attempts },
+          });
+        } catch {}
         continue;
       }
 
@@ -224,6 +278,13 @@ export class GoogleContactsOutbox {
         /* biarkan item lama; percobaan berikutnya mencoba lagi */
       }
       result.failed++;
+      } finally {
+        try {
+          await this.kv.del(lockKey);
+        } catch {
+          /* lock akan kedaluwarsa sendiri */
+        }
+      }
     }
 
     return result;

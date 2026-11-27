@@ -1,5 +1,6 @@
 import { resolveSheetTarget, DEFAULT_MONTH_TAB_NAMES } from './month-resolver';
 import { isValidChildName } from '../../utils/name-sanitizer';
+import { escapeSheetCell } from '../../utils/spreadsheet-escape';
 
 /**
  * row-formatter.ts — konversi entitas reservasi → TEPAT 16 elemen array sesuai
@@ -93,7 +94,9 @@ function cleanFreeText(value: string | null | undefined): string {
 
 function toCell(value: string | null | undefined): string {
   const s = cleanFreeText(value);
-  return s.length > 0 ? s : EMPTY_CELL;
+  if (!s) return EMPTY_CELL;
+  if (s === EMPTY_CELL) return EMPTY_CELL;
+  return escapeSheetCell(s);
 }
 
 /** Lokasi: kelurahan saja; fallback ke kecamatan/kota bila kelurahan kosong.
@@ -278,7 +281,7 @@ export function formatReservationToRow(input: SheetRowInput): (string | number)[
     target.isoDate,                                             // A Tanggal
     target.dayName,                                             // B Hari
     toCell(customer?.name),                                     // C Customer
-    resolveLocation(customer, customerAddress),                 // D Lokasi (kelurahan saja)
+    toCell(resolveLocation(customer, customerAddress)),         // D Lokasi (kelurahan saja)
     toCell(childName),                                          // E Bayi/Layanan (nama saja)
     resolveCustomerType(reservation.is_repeat_order, customer, reservation.prior_reservations_count), // F Tipe Customer (Repeat / New Ads / New)
     toCell(reservation.treatment_detail),                       // G Layanan Detail

@@ -58,12 +58,12 @@ export const ACTION_RULES: Record<ActionKey, ActionRule> = {
   toggle_global_bot: {
     roles: ['super_admin'],
     source: 'src/routes/admin.route.ts:210 (PATCH /api/admin/settings)',
-    note: 'Menyalakan/mematikan Chatbot AI global hanya diizinkan untuk Super Admin (KNOWN #358 A-004).',
+    note: 'Menyalakan/mematikan Chatbot AI global hanya diizinkan untuk Super Admin (KNOWN Issue 358 A-004).',
   },
   view_financial_overview: {
     roles: ['super_admin', 'spv_cs'],
     source: 'prisma/migrations/20261118160000_reconcile_rbac_role_api_scopes (GET /api/admin/financial-analytics)',
-    note: 'Metrik omzet & AOV di Overview hanya untuk Super Admin dan Supervisor CS (KNOWN #358 K-1).',
+    note: 'Metrik omzet & AOV di Overview hanya untuk Super Admin dan Supervisor CS (KNOWN Issue 358 K-1).',
   },
 };
 

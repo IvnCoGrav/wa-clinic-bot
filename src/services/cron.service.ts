@@ -91,6 +91,8 @@ export class CronService {
         });
         return !existing;
       } catch {
+        // DB tetap tidak terbaca: pertahankan perilaku lama (fail-open) agar
+        // morning jobs tidak diam total saat DB sempat offline.
         return true;
       }
     }
@@ -753,7 +755,10 @@ export class CronService {
     return `${tenantId}:WEEKLY_BACKUP:${dateStr}`;
   }
 
-  private async tryClaimWeeklyBackup(tenantId: string, dateStr: string): Promise<boolean> {
+  private async tryClaimWeeklyBackup(
+    tenantId: string,
+    dateStr: string
+  ): Promise<'claimed' | 'already' | 'unknown'> {
     try {
       await prisma.adminNotificationLog.create({
         data: {
@@ -768,15 +773,16 @@ export class CronService {
           status: 'SENT',
         },
       });
-      return true;
+      return 'claimed';
     } catch {
       try {
         const existing = await prisma.adminNotificationLog.findFirst({
           where: { idempotency_key: this.weeklyBackupClaimKey(tenantId, dateStr) },
         });
-        return !existing;
+        return existing ? 'already' : 'claimed';
       } catch {
-        return true;
+        // Tidak bisa memastikan status klaim → jangan jalan dan jangan anggap sukses.
+        return 'unknown';
       }
     }
   }
@@ -792,13 +798,36 @@ export class CronService {
   /**
    * Auto-Backup Mingguan ke Google Drive (Dijalankan setiap Senin jam 02:00 WIB)
    */
-  public async runWeeklyBackup(tenantId: string = DEFAULT_TENANT_ID): Promise<{ success: boolean; error?: string }> {
+  public async runWeeklyBackup(tenantId?: string): Promise<{ success: boolean; error?: string }> {
+    if (tenantId) return this.runWeeklyBackupForTenant(tenantId);
+
+    let tenants: string[] = [DEFAULT_TENANT_ID];
+    try {
+      const rows = await prisma.tenant.findMany({ select: { id: true } });
+      if (rows.length > 0) tenants = rows.map((r: any) => r.id);
+    } catch {
+      // DB offline → satu tenant default; backup tetap dicoba.
+    }
+
+    let allSucceeded = true;
+    for (const tid of tenants) {
+      const result = await this.runWeeklyBackupForTenant(tid);
+      if (!result.success) allSucceeded = false;
+    }
+    return { success: allSucceeded };
+  }
+
+  private async runWeeklyBackupForTenant(tenantId: string): Promise<{ success: boolean; error?: string }> {
     const wibNow = new Date(Date.now() + 7 * 60 * 60 * 1000);
     const dateStr = wibNow.toISOString().slice(0, 10);
-    const claimed = await this.tryClaimWeeklyBackup(tenantId, dateStr);
-    if (!claimed) {
+    const claimStatus = await this.tryClaimWeeklyBackup(tenantId, dateStr);
+    if (claimStatus === 'already') {
       console.log(`[Cron Service] Auto-Backup untuk tenant ${tenantId} sudah dijalankan hari/minggu ini. Dilewati (idempoten).`);
       return { success: true };
+    }
+    if (claimStatus === 'unknown') {
+      console.warn('[Cron Service] Status klaim backup tidak dapat dipastikan (DB error); backup ditunda untuk dicoba lagi.');
+      return { success: false, error: 'BACKUP_CLAIM_UNAVAILABLE' };
     }
 
     try {

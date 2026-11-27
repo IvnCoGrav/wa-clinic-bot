@@ -23,6 +23,12 @@ export interface ConversationStatePatch {
   humanHandlingSince?: Date | null;
   escalationReason?: string | null;
   lastMessageAt?: Date;
+  /**
+   * State episodik (JSON) — mis. penanda `reset_pending_at` untuk konfirmasi
+   * /reset. Ditulis utuh (merge dilakukan pemanggil) agar tidak menghapus kunci
+   * V3 lain (cart/booking) yang sudah ada.
+   */
+  sessionData?: Record<string, any> | null;
 }
 
 export interface ConversationRepository {
@@ -111,6 +117,7 @@ export class PostgresConversationRepository implements ConversationRepository {
     if (patch.humanHandlingSince !== undefined) data.human_handling_since = patch.humanHandlingSince;
     if (patch.escalationReason !== undefined) data.escalation_reason = patch.escalationReason;
     if (patch.lastMessageAt !== undefined) data.last_message_at = patch.lastMessageAt;
+    if (patch.sessionData !== undefined) data.session_data = patch.sessionData as any;
     // D-04: Jalur cepat hemat round-trip (2 query alih-alih 3).
     // Langsung updateMany dengan tenant guard di WHERE.
     const res = await prisma.conversation.updateMany({ where: { id, tenant_id: tenantId }, data });
@@ -215,6 +222,7 @@ export class InMemoryConversationRepository implements ConversationRepository {
     if (patch.humanHandlingSince !== undefined) data.human_handling_since = patch.humanHandlingSince;
     if (patch.escalationReason !== undefined) data.escalation_reason = patch.escalationReason;
     if (patch.lastMessageAt !== undefined) data.last_message_at = patch.lastMessageAt;
+    if (patch.sessionData !== undefined) data.session_data = patch.sessionData;
     data.updated_at = new Date();
     this.store.set(id, data);
     return data;

@@ -105,7 +105,7 @@ describe('landing admin jujur saat DB gagal (produksi)', () => {
   });
 
   it('PUT update gagal → 503', async () => {
-    vi.spyOn(prisma.landingPage, 'findUnique').mockResolvedValue({
+    vi.spyOn(prisma.landingPage, 'findFirst').mockResolvedValue({
       id: 'lp-1',
       tenant_id: 'tenant-b',
       slug: 'promo-baby',
@@ -131,7 +131,7 @@ describe('landing admin jujur saat DB gagal (produksi)', () => {
   });
 
   it('DELETE gagal → 503', async () => {
-    vi.spyOn(prisma.landingPage, 'findUnique').mockResolvedValue({
+    vi.spyOn(prisma.landingPage, 'findFirst').mockResolvedValue({
       id: 'lp-1',
       tenant_id: 'tenant-b',
       slug: 'promo-baby',

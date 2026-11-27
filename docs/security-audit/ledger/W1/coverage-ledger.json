@@ -1,0 +1,4341 @@
+[
+  {
+    "coverage_id": "packages%2Fadmin-dashboard%2Fsrc%2Fconfig%2FrolePermissions.ts%23UI%20path%20matrix::src%2Fdomain%2Frole-module-scopes.ts%23UI%20and%20API%20parity::packages%2Fadmin-dashboard%2Fsrc%2Fconfig%2FrolePermissions.ts::ATTACK-CLASSES.md%23Access%20control",
+    "canonical_refs": {
+      "surface": "packages/admin-dashboard/src/config/rolePermissions.ts#UI path matrix",
+      "boundary": "src/domain/role-module-scopes.ts#UI and API parity",
+      "subsystem": "packages/admin-dashboard/src/config/rolePermissions.ts",
+      "attack_class": "ATTACK-CLASSES.md#Access control"
+    },
+    "surface": "packages/admin-dashboard/src/config/rolePermissions.ts#UI path matrix",
+    "boundary": "src/domain/role-module-scopes.ts#UI and API parity",
+    "subsystem": "packages/admin-dashboard/src/config/rolePermissions.ts",
+    "attack_class": "ATTACK-CLASSES.md#Access control",
+    "starting_paths": [
+      "packages/admin-dashboard/src/config/rolePermissions.ts",
+      "src/domain/role-module-scopes.ts"
+    ],
+    "ordinary_attack_class_block": "ATTACK-CLASSES.md#Access control",
+    "selected_companion_blocks": [],
+    "excluded_blocks": [
+      {
+        "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+        "reason": "Unit ini TypeScript/Node tanpa target native yang dieksekusi; pustaka native hanya disentuh lewat batas media yang diaudit terpisah."
+      },
+      {
+        "block": "DESKTOP-MOBILE-AND-LOCAL-IPC.md#Core discipline",
+        "reason": "Tidak ada aplikasi desktop/mobile, deep link, atau IPC lokal pada surface ini."
+      },
+      {
+        "block": "AI-AND-LLM.md#Core discipline",
+        "reason": "Batas unit berhenti sebelum pipeline LLM; interaksi model dan tool diaudit di M11/M12/M10."
+      }
+    ],
+    "prior_status": "none",
+    "attempts": [],
+    "wave": 1,
+    "status": "planned",
+    "agent_id": null,
+    "reviewed_paths": [],
+    "local_checks": [],
+    "result_fingerprints": [],
+    "unresolved": [],
+    "module": "M06",
+    "check_ids": [
+      "M06-04"
+    ]
+  },
+  {
+    "coverage_id": "packages%2Fadmin-dashboard%2Fsrc%2Fconfig%2FrolePermissions.ts%23tenant_admin%20ALL_PATHS::src%2Fdomain%2Frole-module-scopes.ts%23super%20admin%20prefixes::packages%2Fadmin-dashboard%2Fsrc%2Fconfig%2FrolePermissions.ts::ATTACK-CLASSES.md%23Access%20control",
+    "canonical_refs": {
+      "surface": "packages/admin-dashboard/src/config/rolePermissions.ts#tenant_admin ALL_PATHS",
+      "boundary": "src/domain/role-module-scopes.ts#super admin prefixes",
+      "subsystem": "packages/admin-dashboard/src/config/rolePermissions.ts",
+      "attack_class": "ATTACK-CLASSES.md#Access control"
+    },
+    "surface": "packages/admin-dashboard/src/config/rolePermissions.ts#tenant_admin ALL_PATHS",
+    "boundary": "src/domain/role-module-scopes.ts#super admin prefixes",
+    "subsystem": "packages/admin-dashboard/src/config/rolePermissions.ts",
+    "attack_class": "ATTACK-CLASSES.md#Access control",
+    "starting_paths": [
+      "packages/admin-dashboard/src/config/rolePermissions.ts",
+      "src/domain/role-module-scopes.ts"
+    ],
+    "ordinary_attack_class_block": "ATTACK-CLASSES.md#Access control",
+    "selected_companion_blocks": [],
+    "excluded_blocks": [
+      {
+        "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+        "reason": "Unit ini TypeScript/Node tanpa target native yang dieksekusi; pustaka native hanya disentuh lewat batas media yang diaudit terpisah."
+      },
+      {
+        "block": "DESKTOP-MOBILE-AND-LOCAL-IPC.md#Core discipline",
+        "reason": "Tidak ada aplikasi desktop/mobile, deep link, atau IPC lokal pada surface ini."
+      },
+      {
+        "block": "AI-AND-LLM.md#Core discipline",
+        "reason": "Batas unit berhenti sebelum pipeline LLM; interaksi model dan tool diaudit di M11/M12/M10."
+      }
+    ],
+    "prior_status": "none",
+    "attempts": [],
+    "wave": 1,
+    "status": "planned",
+    "agent_id": null,
+    "reviewed_paths": [],
+    "local_checks": [],
+    "result_fingerprints": [],
+    "unresolved": [],
+    "module": "M06",
+    "check_ids": [
+      "M06-11"
+    ]
+  },
+  {
+    "coverage_id": "prisma%2Fmigrations%2F20260926000002_add_role_api_scopes%23role%20seeds::src%2Fdomain%2Frole-module-scopes.ts%23seed%20coverage::src%2Fdomain%2Frole-module-scopes.ts::ATTACK-CLASSES.md%23Access%20control",
+    "canonical_refs": {
+      "surface": "prisma/migrations/20260926000002_add_role_api_scopes#role seeds",
+      "boundary": "src/domain/role-module-scopes.ts#seed coverage",
+      "subsystem": "src/domain/role-module-scopes.ts",
+      "attack_class": "ATTACK-CLASSES.md#Access control"
+    },
+    "surface": "prisma/migrations/20260926000002_add_role_api_scopes#role seeds",
+    "boundary": "src/domain/role-module-scopes.ts#seed coverage",
+    "subsystem": "src/domain/role-module-scopes.ts",
+    "attack_class": "ATTACK-CLASSES.md#Access control",
+    "starting_paths": [
+      "src/domain/role-module-scopes.ts",
+      "prisma/migrations/20260926000002_add_role_api_scopes/migration.sql"
+    ],
+    "ordinary_attack_class_block": "ATTACK-CLASSES.md#Access control",
+    "selected_companion_blocks": [],
+    "excluded_blocks": [
+      {
+        "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+        "reason": "Unit ini TypeScript/Node tanpa target native yang dieksekusi; pustaka native hanya disentuh lewat batas media yang diaudit terpisah."
+      },
+      {
+        "block": "DESKTOP-MOBILE-AND-LOCAL-IPC.md#Core discipline",
+        "reason": "Tidak ada aplikasi desktop/mobile, deep link, atau IPC lokal pada surface ini."
+      },
+      {
+        "block": "AI-AND-LLM.md#Core discipline",
+        "reason": "Batas unit berhenti sebelum pipeline LLM; interaksi model dan tool diaudit di M11/M12/M10."
+      }
+    ],
+    "prior_status": "none",
+    "attempts": [],
+    "wave": 1,
+    "status": "planned",
+    "agent_id": null,
+    "reviewed_paths": [],
+    "local_checks": [],
+    "result_fingerprints": [],
+    "unresolved": [],
+    "module": "M06",
+    "check_ids": [
+      "M06-08"
+    ]
+  },
+  {
+    "coverage_id": "prisma%2Fschema.prisma%23business%20models::prisma%2Fschema.prisma%23tenant_id%20columns::prisma%2Fschema.prisma::DATA-ISOLATION-AND-LIFECYCLE.md%23Missing%20tenant%20or%20owner%20enforcement",
+    "canonical_refs": {
+      "surface": "prisma/schema.prisma#business models",
+      "boundary": "prisma/schema.prisma#tenant_id columns",
+      "subsystem": "prisma/schema.prisma",
+      "attack_class": "DATA-ISOLATION-AND-LIFECYCLE.md#Missing tenant or owner enforcement"
+    },
+    "surface": "prisma/schema.prisma#business models",
+    "boundary": "prisma/schema.prisma#tenant_id columns",
+    "subsystem": "prisma/schema.prisma",
+    "attack_class": "DATA-ISOLATION-AND-LIFECYCLE.md#Missing tenant or owner enforcement",
+    "starting_paths": [
+      "prisma/schema.prisma"
+    ],
+    "ordinary_attack_class_block": "ATTACK-CLASSES.md#Access control",
+    "selected_companion_blocks": [
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Core discipline",
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Missing tenant or owner enforcement",
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Universal moves",
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Validation rules"
+    ],
+    "excluded_blocks": [
+      {
+        "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+        "reason": "Unit ini TypeScript/Node tanpa target native yang dieksekusi; pustaka native hanya disentuh lewat batas media yang diaudit terpisah."
+      },
+      {
+        "block": "DESKTOP-MOBILE-AND-LOCAL-IPC.md#Core discipline",
+        "reason": "Tidak ada aplikasi desktop/mobile, deep link, atau IPC lokal pada surface ini."
+      },
+      {
+        "block": "AI-AND-LLM.md#Core discipline",
+        "reason": "Batas unit berhenti sebelum pipeline LLM; interaksi model dan tool diaudit di M11/M12/M10."
+      }
+    ],
+    "prior_status": "none",
+    "attempts": [],
+    "wave": 1,
+    "status": "planned",
+    "agent_id": null,
+    "reviewed_paths": [],
+    "local_checks": [],
+    "result_fingerprints": [],
+    "unresolved": [],
+    "module": "M07",
+    "check_ids": [
+      "M07-01"
+    ]
+  },
+  {
+    "coverage_id": "prisma%2Fschema.prisma%23tenant%20relations::prisma%2Fschema.prisma%23no%20tenant%20FK%20or%20RLS::prisma%2Fschema.prisma::DATA-ISOLATION-AND-LIFECYCLE.md%23Missing%20tenant%20or%20owner%20enforcement",
+    "canonical_refs": {
+      "surface": "prisma/schema.prisma#tenant relations",
+      "boundary": "prisma/schema.prisma#no tenant FK or RLS",
+      "subsystem": "prisma/schema.prisma",
+      "attack_class": "DATA-ISOLATION-AND-LIFECYCLE.md#Missing tenant or owner enforcement"
+    },
+    "surface": "prisma/schema.prisma#tenant relations",
+    "boundary": "prisma/schema.prisma#no tenant FK or RLS",
+    "subsystem": "prisma/schema.prisma",
+    "attack_class": "DATA-ISOLATION-AND-LIFECYCLE.md#Missing tenant or owner enforcement",
+    "starting_paths": [
+      "prisma/schema.prisma"
+    ],
+    "ordinary_attack_class_block": "ATTACK-CLASSES.md#Access control",
+    "selected_companion_blocks": [
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Core discipline",
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Missing tenant or owner enforcement",
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Universal moves",
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Validation rules"
+    ],
+    "excluded_blocks": [
+      {
+        "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+        "reason": "Unit ini TypeScript/Node tanpa target native yang dieksekusi; pustaka native hanya disentuh lewat batas media yang diaudit terpisah."
+      },
+      {
+        "block": "DESKTOP-MOBILE-AND-LOCAL-IPC.md#Core discipline",
+        "reason": "Tidak ada aplikasi desktop/mobile, deep link, atau IPC lokal pada surface ini."
+      },
+      {
+        "block": "AI-AND-LLM.md#Core discipline",
+        "reason": "Batas unit berhenti sebelum pipeline LLM; interaksi model dan tool diaudit di M11/M12/M10."
+      }
+    ],
+    "prior_status": "none",
+    "attempts": [],
+    "wave": 1,
+    "status": "planned",
+    "agent_id": null,
+    "reviewed_paths": [],
+    "local_checks": [],
+    "result_fingerprints": [],
+    "unresolved": [],
+    "module": "M07",
+    "check_ids": [
+      "M07-14"
+    ]
+  },
+  {
+    "coverage_id": "src%2Fapp.ts%23route%20registration::src%2Froutes%2Fadmin.route.ts%23hook%20exemptions::src%2Froutes%2Fadmin.route.ts::ATTACK-CLASSES.md%23Access%20control",
+    "canonical_refs": {
+      "surface": "src/app.ts#route registration",
+      "boundary": "src/routes/admin.route.ts#hook exemptions",
+      "subsystem": "src/routes/admin.route.ts",
+      "attack_class": "ATTACK-CLASSES.md#Access control"
+    },
+    "surface": "src/app.ts#route registration",
+    "boundary": "src/routes/admin.route.ts#hook exemptions",
+    "subsystem": "src/routes/admin.route.ts",
+    "attack_class": "ATTACK-CLASSES.md#Access control",
+    "starting_paths": [
+      "src/app.ts",
+      "src/routes/admin.route.ts"
+    ],
+    "ordinary_attack_class_block": "ATTACK-CLASSES.md#Access control",
+    "selected_companion_blocks": [],
+    "excluded_blocks": [
+      {
+        "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+        "reason": "Unit ini TypeScript/Node tanpa target native yang dieksekusi; pustaka native hanya disentuh lewat batas media yang diaudit terpisah."
+      },
+      {
+        "block": "DESKTOP-MOBILE-AND-LOCAL-IPC.md#Core discipline",
+        "reason": "Tidak ada aplikasi desktop/mobile, deep link, atau IPC lokal pada surface ini."
+      },
+      {
+        "block": "AI-AND-LLM.md#Core discipline",
+        "reason": "Batas unit berhenti sebelum pipeline LLM; interaksi model dan tool diaudit di M11/M12/M10."
+      }
+    ],
+    "prior_status": "none",
+    "attempts": [],
+    "wave": 1,
+    "status": "planned",
+    "agent_id": null,
+    "reviewed_paths": [],
+    "local_checks": [],
+    "result_fingerprints": [],
+    "unresolved": [],
+    "module": "M06",
+    "check_ids": [
+      "M06-10"
+    ]
+  },
+  {
+    "coverage_id": "src%2Fintegrations%2Fwhatsapp%2Fwaba.driver.ts%23send::src%2Fintegrations%2Fwhatsapp%2Fwaba.driver.ts%23recipient%20binding::src%2Fintegrations%2Fwhatsapp%2Fwaba.driver.ts::ATTACK-CLASSES.md%23Business%20logic",
+    "canonical_refs": {
+      "surface": "src/integrations/whatsapp/waba.driver.ts#send",
+      "boundary": "src/integrations/whatsapp/waba.driver.ts#recipient binding",
+      "subsystem": "src/integrations/whatsapp/waba.driver.ts",
+      "attack_class": "ATTACK-CLASSES.md#Business logic"
+    },
+    "surface": "src/integrations/whatsapp/waba.driver.ts#send",
+    "boundary": "src/integrations/whatsapp/waba.driver.ts#recipient binding",
+    "subsystem": "src/integrations/whatsapp/waba.driver.ts",
+    "attack_class": "ATTACK-CLASSES.md#Business logic",
+    "starting_paths": [
+      "src/integrations/whatsapp/waba.driver.ts"
+    ],
+    "ordinary_attack_class_block": "ATTACK-CLASSES.md#Business logic",
+    "selected_companion_blocks": [],
+    "excluded_blocks": [
+      {
+        "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+        "reason": "Unit ini TypeScript/Node tanpa target native yang dieksekusi; pustaka native hanya disentuh lewat batas media yang diaudit terpisah."
+      },
+      {
+        "block": "DESKTOP-MOBILE-AND-LOCAL-IPC.md#Core discipline",
+        "reason": "Tidak ada aplikasi desktop/mobile, deep link, atau IPC lokal pada surface ini."
+      },
+      {
+        "block": "AI-AND-LLM.md#Core discipline",
+        "reason": "Batas unit berhenti sebelum pipeline LLM; interaksi model dan tool diaudit di M11/M12/M10."
+      }
+    ],
+    "prior_status": "none",
+    "attempts": [],
+    "wave": 1,
+    "status": "planned",
+    "agent_id": null,
+    "reviewed_paths": [],
+    "local_checks": [],
+    "result_fingerprints": [],
+    "unresolved": [],
+    "module": "M02",
+    "check_ids": [
+      "M02-08"
+    ]
+  },
+  {
+    "coverage_id": "src%2Frepositories%2Fcustomer.repository.ts%23read%20paths::src%2Frepositories%2Fcustomer.repository.ts%23deleted_at%20filter::src%2Frepositories%2Fcustomer.repository.ts::DATA-ISOLATION-AND-LIFECYCLE.md%23Missing%20tenant%20or%20owner%20enforcement",
+    "canonical_refs": {
+      "surface": "src/repositories/customer.repository.ts#read paths",
+      "boundary": "src/repositories/customer.repository.ts#deleted_at filter",
+      "subsystem": "src/repositories/customer.repository.ts",
+      "attack_class": "DATA-ISOLATION-AND-LIFECYCLE.md#Missing tenant or owner enforcement"
+    },
+    "surface": "src/repositories/customer.repository.ts#read paths",
+    "boundary": "src/repositories/customer.repository.ts#deleted_at filter",
+    "subsystem": "src/repositories/customer.repository.ts",
+    "attack_class": "DATA-ISOLATION-AND-LIFECYCLE.md#Missing tenant or owner enforcement",
+    "starting_paths": [
+      "src/repositories/customer.repository.ts"
+    ],
+    "ordinary_attack_class_block": "ATTACK-CLASSES.md#Access control",
+    "selected_companion_blocks": [
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Core discipline",
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Missing tenant or owner enforcement",
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Universal moves",
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Validation rules"
+    ],
+    "excluded_blocks": [
+      {
+        "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+        "reason": "Unit ini TypeScript/Node tanpa target native yang dieksekusi; pustaka native hanya disentuh lewat batas media yang diaudit terpisah."
+      },
+      {
+        "block": "DESKTOP-MOBILE-AND-LOCAL-IPC.md#Core discipline",
+        "reason": "Tidak ada aplikasi desktop/mobile, deep link, atau IPC lokal pada surface ini."
+      },
+      {
+        "block": "AI-AND-LLM.md#Core discipline",
+        "reason": "Batas unit berhenti sebelum pipeline LLM; interaksi model dan tool diaudit di M11/M12/M10."
+      }
+    ],
+    "prior_status": "none",
+    "attempts": [],
+    "wave": 1,
+    "status": "planned",
+    "agent_id": null,
+    "reviewed_paths": [],
+    "local_checks": [],
+    "result_fingerprints": [],
+    "unresolved": [],
+    "module": "M07",
+    "check_ids": [
+      "M07-09"
+    ]
+  },
+  {
+    "coverage_id": "src%2Froutes%2Fadmin%23id%20endpoints::src%2Futils%2Ftenant-scope.ts%23id%20plus%20tenant%20lookup::src%2Futils%2Ftenant-scope.ts::DATA-ISOLATION-AND-LIFECYCLE.md%23Missing%20tenant%20or%20owner%20enforcement",
+    "canonical_refs": {
+      "surface": "src/routes/admin#id endpoints",
+      "boundary": "src/utils/tenant-scope.ts#id plus tenant lookup",
+      "subsystem": "src/utils/tenant-scope.ts",
+      "attack_class": "DATA-ISOLATION-AND-LIFECYCLE.md#Missing tenant or owner enforcement"
+    },
+    "surface": "src/routes/admin#id endpoints",
+    "boundary": "src/utils/tenant-scope.ts#id plus tenant lookup",
+    "subsystem": "src/utils/tenant-scope.ts",
+    "attack_class": "DATA-ISOLATION-AND-LIFECYCLE.md#Missing tenant or owner enforcement",
+    "starting_paths": [
+      "src/utils/tenant-scope.ts",
+      "src/routes/admin/reservation-dispatch-crud.subroute.ts"
+    ],
+    "ordinary_attack_class_block": "ATTACK-CLASSES.md#Access control",
+    "selected_companion_blocks": [
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Core discipline",
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Missing tenant or owner enforcement",
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Universal moves",
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Validation rules"
+    ],
+    "excluded_blocks": [
+      {
+        "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+        "reason": "Unit ini TypeScript/Node tanpa target native yang dieksekusi; pustaka native hanya disentuh lewat batas media yang diaudit terpisah."
+      },
+      {
+        "block": "DESKTOP-MOBILE-AND-LOCAL-IPC.md#Core discipline",
+        "reason": "Tidak ada aplikasi desktop/mobile, deep link, atau IPC lokal pada surface ini."
+      },
+      {
+        "block": "AI-AND-LLM.md#Core discipline",
+        "reason": "Batas unit berhenti sebelum pipeline LLM; interaksi model dan tool diaudit di M11/M12/M10."
+      }
+    ],
+    "prior_status": "none",
+    "attempts": [],
+    "wave": 1,
+    "status": "planned",
+    "agent_id": null,
+    "reviewed_paths": [],
+    "local_checks": [],
+    "result_fingerprints": [],
+    "unresolved": [],
+    "module": "M07",
+    "check_ids": [
+      "M07-03"
+    ]
+  },
+  {
+    "coverage_id": "src%2Froutes%2Fadmin%23mutation%20handlers::src%2Froutes%2Fadmin%23mutation%20tenant%20guard::src%2Froutes%2Fadmin::DATA-ISOLATION-AND-LIFECYCLE.md%23Missing%20tenant%20or%20owner%20enforcement",
+    "canonical_refs": {
+      "surface": "src/routes/admin#mutation handlers",
+      "boundary": "src/routes/admin#mutation tenant guard",
+      "subsystem": "src/routes/admin",
+      "attack_class": "DATA-ISOLATION-AND-LIFECYCLE.md#Missing tenant or owner enforcement"
+    },
+    "surface": "src/routes/admin#mutation handlers",
+    "boundary": "src/routes/admin#mutation tenant guard",
+    "subsystem": "src/routes/admin",
+    "attack_class": "DATA-ISOLATION-AND-LIFECYCLE.md#Missing tenant or owner enforcement",
+    "starting_paths": [
+      "src/routes/admin/reservation-dispatch-crud.subroute.ts",
+      "src/routes/admin/customers.subroute.ts"
+    ],
+    "ordinary_attack_class_block": "ATTACK-CLASSES.md#Access control",
+    "selected_companion_blocks": [
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Core discipline",
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Missing tenant or owner enforcement",
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Universal moves",
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Validation rules"
+    ],
+    "excluded_blocks": [
+      {
+        "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+        "reason": "Unit ini TypeScript/Node tanpa target native yang dieksekusi; pustaka native hanya disentuh lewat batas media yang diaudit terpisah."
+      },
+      {
+        "block": "DESKTOP-MOBILE-AND-LOCAL-IPC.md#Core discipline",
+        "reason": "Tidak ada aplikasi desktop/mobile, deep link, atau IPC lokal pada surface ini."
+      },
+      {
+        "block": "AI-AND-LLM.md#Core discipline",
+        "reason": "Batas unit berhenti sebelum pipeline LLM; interaksi model dan tool diaudit di M11/M12/M10."
+      }
+    ],
+    "prior_status": "none",
+    "attempts": [],
+    "wave": 1,
+    "status": "planned",
+    "agent_id": null,
+    "reviewed_paths": [],
+    "local_checks": [],
+    "result_fingerprints": [],
+    "unresolved": [],
+    "module": "M07",
+    "check_ids": [
+      "M07-04"
+    ]
+  },
+  {
+    "coverage_id": "src%2Froutes%2Fadmin%2Fauth.subroute.ts%23GET%20%2Fapi%2Fadmin%2Fauth%2Fme::src%2Froutes%2Fadmin%2Fauth.subroute.ts%23me%20response::src%2Froutes%2Fadmin%2Fauth.subroute.ts::ATTACK-CLASSES.md%23Feature%20abuse%20and%20data%20leakage",
+    "canonical_refs": {
+      "surface": "src/routes/admin/auth.subroute.ts#GET /api/admin/auth/me",
+      "boundary": "src/routes/admin/auth.subroute.ts#me response",
+      "subsystem": "src/routes/admin/auth.subroute.ts",
+      "attack_class": "ATTACK-CLASSES.md#Feature abuse and data leakage"
+    },
+    "surface": "src/routes/admin/auth.subroute.ts#GET /api/admin/auth/me",
+    "boundary": "src/routes/admin/auth.subroute.ts#me response",
+    "subsystem": "src/routes/admin/auth.subroute.ts",
+    "attack_class": "ATTACK-CLASSES.md#Feature abuse and data leakage",
+    "starting_paths": [
+      "src/routes/admin/auth.subroute.ts"
+    ],
+    "ordinary_attack_class_block": "ATTACK-CLASSES.md#Feature abuse and data leakage",
+    "selected_companion_blocks": [],
+    "excluded_blocks": [
+      {
+        "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+        "reason": "Unit ini TypeScript/Node tanpa target native yang dieksekusi; pustaka native hanya disentuh lewat batas media yang diaudit terpisah."
+      },
+      {
+        "block": "DESKTOP-MOBILE-AND-LOCAL-IPC.md#Core discipline",
+        "reason": "Tidak ada aplikasi desktop/mobile, deep link, atau IPC lokal pada surface ini."
+      },
+      {
+        "block": "AI-AND-LLM.md#Core discipline",
+        "reason": "Batas unit berhenti sebelum pipeline LLM; interaksi model dan tool diaudit di M11/M12/M10."
+      }
+    ],
+    "prior_status": "none",
+    "attempts": [],
+    "wave": 1,
+    "status": "planned",
+    "agent_id": null,
+    "reviewed_paths": [],
+    "local_checks": [],
+    "result_fingerprints": [],
+    "unresolved": [],
+    "module": "M04",
+    "check_ids": [
+      "M04-07"
+    ]
+  },
+  {
+    "coverage_id": "src%2Froutes%2Fadmin%2Fauth.subroute.ts%23POST%20%2Fapi%2Fadmin%2Fauth%2Flogin::src%2Froutes%2Fadmin%2Fauth.subroute.ts%23Set-Cookie::src%2Froutes%2Fadmin%2Fauth.subroute.ts::WEB-PROTOCOL-AND-AUTH.md%23Session%20fixation%20and%20invalidation",
+    "canonical_refs": {
+      "surface": "src/routes/admin/auth.subroute.ts#POST /api/admin/auth/login",
+      "boundary": "src/routes/admin/auth.subroute.ts#Set-Cookie",
+      "subsystem": "src/routes/admin/auth.subroute.ts",
+      "attack_class": "WEB-PROTOCOL-AND-AUTH.md#Session fixation and invalidation"
+    },
+    "surface": "src/routes/admin/auth.subroute.ts#POST /api/admin/auth/login",
+    "boundary": "src/routes/admin/auth.subroute.ts#Set-Cookie",
+    "subsystem": "src/routes/admin/auth.subroute.ts",
+    "attack_class": "WEB-PROTOCOL-AND-AUTH.md#Session fixation and invalidation",
+    "starting_paths": [
+      "src/routes/admin/auth.subroute.ts"
+    ],
+    "ordinary_attack_class_block": "ATTACK-CLASSES.md#Access control",
+    "selected_companion_blocks": [
+      "WEB-PROTOCOL-AND-AUTH.md#Core discipline",
+      "WEB-PROTOCOL-AND-AUTH.md#Universal moves",
+      "WEB-PROTOCOL-AND-AUTH.md#Validation rules"
+    ],
+    "excluded_blocks": [
+      {
+        "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+        "reason": "Unit ini TypeScript/Node tanpa target native yang dieksekusi; pustaka native hanya disentuh lewat batas media yang diaudit terpisah."
+      },
+      {
+        "block": "DESKTOP-MOBILE-AND-LOCAL-IPC.md#Core discipline",
+        "reason": "Tidak ada aplikasi desktop/mobile, deep link, atau IPC lokal pada surface ini."
+      },
+      {
+        "block": "AI-AND-LLM.md#Core discipline",
+        "reason": "Batas unit berhenti sebelum pipeline LLM; interaksi model dan tool diaudit di M11/M12/M10."
+      }
+    ],
+    "prior_status": "none",
+    "attempts": [],
+    "wave": 1,
+    "status": "planned",
+    "agent_id": null,
+    "reviewed_paths": [],
+    "local_checks": [],
+    "result_fingerprints": [],
+    "unresolved": [],
+    "module": "M04",
+    "check_ids": [
+      "M04-03",
+      "M04-15"
+    ]
+  },
+  {
+    "coverage_id": "src%2Froutes%2Fadmin%2Fauth.subroute.ts%23POST%20%2Fapi%2Fadmin%2Fauth%2Flogin::src%2Froutes%2Fadmin%2Fauth.subroute.ts%23apiKey%20login::src%2Froutes%2Fadmin%2Fauth.subroute.ts::ATTACK-CLASSES.md%23Access%20control",
+    "canonical_refs": {
+      "surface": "src/routes/admin/auth.subroute.ts#POST /api/admin/auth/login",
+      "boundary": "src/routes/admin/auth.subroute.ts#apiKey login",
+      "subsystem": "src/routes/admin/auth.subroute.ts",
+      "attack_class": "ATTACK-CLASSES.md#Access control"
+    },
+    "surface": "src/routes/admin/auth.subroute.ts#POST /api/admin/auth/login",
+    "boundary": "src/routes/admin/auth.subroute.ts#apiKey login",
+    "subsystem": "src/routes/admin/auth.subroute.ts",
+    "attack_class": "ATTACK-CLASSES.md#Access control",
+    "starting_paths": [
+      "src/routes/admin/auth.subroute.ts"
+    ],
+    "ordinary_attack_class_block": "ATTACK-CLASSES.md#Access control",
+    "selected_companion_blocks": [],
+    "excluded_blocks": [
+      {
+        "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+        "reason": "Unit ini TypeScript/Node tanpa target native yang dieksekusi; pustaka native hanya disentuh lewat batas media yang diaudit terpisah."
+      },
+      {
+        "block": "DESKTOP-MOBILE-AND-LOCAL-IPC.md#Core discipline",
+        "reason": "Tidak ada aplikasi desktop/mobile, deep link, atau IPC lokal pada surface ini."
+      },
+      {
+        "block": "AI-AND-LLM.md#Core discipline",
+        "reason": "Batas unit berhenti sebelum pipeline LLM; interaksi model dan tool diaudit di M11/M12/M10."
+      }
+    ],
+    "prior_status": "none",
+    "attempts": [],
+    "wave": 1,
+    "status": "planned",
+    "agent_id": null,
+    "reviewed_paths": [],
+    "local_checks": [],
+    "result_fingerprints": [],
+    "unresolved": [],
+    "module": "M04",
+    "check_ids": [
+      "M04-16"
+    ]
+  },
+  {
+    "coverage_id": "src%2Froutes%2Fadmin%2Fauth.subroute.ts%23POST%20%2Fapi%2Fadmin%2Fauth%2Flogin::src%2Froutes%2Fadmin%2Fauth.subroute.ts%23login%20response%20token::src%2Froutes%2Fadmin%2Fauth.subroute.ts::ATTACK-CLASSES.md%23Cryptography%20and%20secrets",
+    "canonical_refs": {
+      "surface": "src/routes/admin/auth.subroute.ts#POST /api/admin/auth/login",
+      "boundary": "src/routes/admin/auth.subroute.ts#login response token",
+      "subsystem": "src/routes/admin/auth.subroute.ts",
+      "attack_class": "ATTACK-CLASSES.md#Cryptography and secrets"
+    },
+    "surface": "src/routes/admin/auth.subroute.ts#POST /api/admin/auth/login",
+    "boundary": "src/routes/admin/auth.subroute.ts#login response token",
+    "subsystem": "src/routes/admin/auth.subroute.ts",
+    "attack_class": "ATTACK-CLASSES.md#Cryptography and secrets",
+    "starting_paths": [
+      "src/routes/admin/auth.subroute.ts"
+    ],
+    "ordinary_attack_class_block": "ATTACK-CLASSES.md#Cryptography and secrets",
+    "selected_companion_blocks": [],
+    "excluded_blocks": [
+      {
+        "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+        "reason": "Unit ini TypeScript/Node tanpa target native yang dieksekusi; pustaka native hanya disentuh lewat batas media yang diaudit terpisah."
+      },
+      {
+        "block": "DESKTOP-MOBILE-AND-LOCAL-IPC.md#Core discipline",
+        "reason": "Tidak ada aplikasi desktop/mobile, deep link, atau IPC lokal pada surface ini."
+      },
+      {
+        "block": "AI-AND-LLM.md#Core discipline",
+        "reason": "Batas unit berhenti sebelum pipeline LLM; interaksi model dan tool diaudit di M11/M12/M10."
+      }
+    ],
+    "prior_status": "none",
+    "attempts": [],
+    "wave": 1,
+    "status": "planned",
+    "agent_id": null,
+    "reviewed_paths": [],
+    "local_checks": [],
+    "result_fingerprints": [],
+    "unresolved": [],
+    "module": "M04",
+    "check_ids": [
+      "M04-13"
+    ]
+  },
+  {
+    "coverage_id": "src%2Froutes%2Fadmin%2Fauth.subroute.ts%23POST%20%2Fapi%2Fadmin%2Fauth%2Flogin::src%2Froutes%2Fadmin%2Fstores.ts%23login%20lockout::src%2Froutes%2Fadmin%2Fstores.ts::ATTACK-CLASSES.md%23Access%20control",
+    "canonical_refs": {
+      "surface": "src/routes/admin/auth.subroute.ts#POST /api/admin/auth/login",
+      "boundary": "src/routes/admin/stores.ts#login lockout",
+      "subsystem": "src/routes/admin/stores.ts",
+      "attack_class": "ATTACK-CLASSES.md#Access control"
+    },
+    "surface": "src/routes/admin/auth.subroute.ts#POST /api/admin/auth/login",
+    "boundary": "src/routes/admin/stores.ts#login lockout",
+    "subsystem": "src/routes/admin/stores.ts",
+    "attack_class": "ATTACK-CLASSES.md#Access control",
+    "starting_paths": [
+      "src/routes/admin/stores.ts",
+      "src/routes/admin/auth.subroute.ts"
+    ],
+    "ordinary_attack_class_block": "ATTACK-CLASSES.md#Access control",
+    "selected_companion_blocks": [],
+    "excluded_blocks": [
+      {
+        "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+        "reason": "Unit ini TypeScript/Node tanpa target native yang dieksekusi; pustaka native hanya disentuh lewat batas media yang diaudit terpisah."
+      },
+      {
+        "block": "DESKTOP-MOBILE-AND-LOCAL-IPC.md#Core discipline",
+        "reason": "Tidak ada aplikasi desktop/mobile, deep link, atau IPC lokal pada surface ini."
+      },
+      {
+        "block": "AI-AND-LLM.md#Core discipline",
+        "reason": "Batas unit berhenti sebelum pipeline LLM; interaksi model dan tool diaudit di M11/M12/M10."
+      }
+    ],
+    "prior_status": "none",
+    "attempts": [],
+    "wave": 1,
+    "status": "planned",
+    "agent_id": null,
+    "reviewed_paths": [],
+    "local_checks": [],
+    "result_fingerprints": [],
+    "unresolved": [],
+    "module": "M04",
+    "check_ids": [
+      "M04-04"
+    ]
+  },
+  {
+    "coverage_id": "src%2Froutes%2Fadmin%2Fauth.subroute.ts%23POST%20%2Fapi%2Fadmin%2Fauth%2Frestore::src%2Froutes%2Fadmin%2Fauth.subroute.ts%23restore%20proof::src%2Froutes%2Fadmin%2Fauth.subroute.ts::ATTACK-CLASSES.md%23Access%20control",
+    "canonical_refs": {
+      "surface": "src/routes/admin/auth.subroute.ts#POST /api/admin/auth/restore",
+      "boundary": "src/routes/admin/auth.subroute.ts#restore proof",
+      "subsystem": "src/routes/admin/auth.subroute.ts",
+      "attack_class": "ATTACK-CLASSES.md#Access control"
+    },
+    "surface": "src/routes/admin/auth.subroute.ts#POST /api/admin/auth/restore",
+    "boundary": "src/routes/admin/auth.subroute.ts#restore proof",
+    "subsystem": "src/routes/admin/auth.subroute.ts",
+    "attack_class": "ATTACK-CLASSES.md#Access control",
+    "starting_paths": [
+      "src/routes/admin/auth.subroute.ts"
+    ],
+    "ordinary_attack_class_block": "ATTACK-CLASSES.md#Access control",
+    "selected_companion_blocks": [],
+    "excluded_blocks": [
+      {
+        "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+        "reason": "Unit ini TypeScript/Node tanpa target native yang dieksekusi; pustaka native hanya disentuh lewat batas media yang diaudit terpisah."
+      },
+      {
+        "block": "DESKTOP-MOBILE-AND-LOCAL-IPC.md#Core discipline",
+        "reason": "Tidak ada aplikasi desktop/mobile, deep link, atau IPC lokal pada surface ini."
+      },
+      {
+        "block": "AI-AND-LLM.md#Core discipline",
+        "reason": "Batas unit berhenti sebelum pipeline LLM; interaksi model dan tool diaudit di M11/M12/M10."
+      }
+    ],
+    "prior_status": "none",
+    "attempts": [],
+    "wave": 1,
+    "status": "planned",
+    "agent_id": null,
+    "reviewed_paths": [],
+    "local_checks": [],
+    "result_fingerprints": [],
+    "unresolved": [],
+    "module": "M04",
+    "check_ids": [
+      "M04-08"
+    ]
+  },
+  {
+    "coverage_id": "src%2Froutes%2Fadmin%2Fauth.subroute.ts%23password%20reset::src%2Froutes%2Fadmin%2Fauth.subroute.ts%23reset%20authorization::src%2Froutes%2Fadmin%2Fauth.subroute.ts::ATTACK-CLASSES.md%23Access%20control",
+    "canonical_refs": {
+      "surface": "src/routes/admin/auth.subroute.ts#password reset",
+      "boundary": "src/routes/admin/auth.subroute.ts#reset authorization",
+      "subsystem": "src/routes/admin/auth.subroute.ts",
+      "attack_class": "ATTACK-CLASSES.md#Access control"
+    },
+    "surface": "src/routes/admin/auth.subroute.ts#password reset",
+    "boundary": "src/routes/admin/auth.subroute.ts#reset authorization",
+    "subsystem": "src/routes/admin/auth.subroute.ts",
+    "attack_class": "ATTACK-CLASSES.md#Access control",
+    "starting_paths": [
+      "src/routes/admin/auth.subroute.ts"
+    ],
+    "ordinary_attack_class_block": "ATTACK-CLASSES.md#Access control",
+    "selected_companion_blocks": [],
+    "excluded_blocks": [
+      {
+        "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+        "reason": "Unit ini TypeScript/Node tanpa target native yang dieksekusi; pustaka native hanya disentuh lewat batas media yang diaudit terpisah."
+      },
+      {
+        "block": "DESKTOP-MOBILE-AND-LOCAL-IPC.md#Core discipline",
+        "reason": "Tidak ada aplikasi desktop/mobile, deep link, atau IPC lokal pada surface ini."
+      },
+      {
+        "block": "AI-AND-LLM.md#Core discipline",
+        "reason": "Batas unit berhenti sebelum pipeline LLM; interaksi model dan tool diaudit di M11/M12/M10."
+      }
+    ],
+    "prior_status": "none",
+    "attempts": [],
+    "wave": 1,
+    "status": "planned",
+    "agent_id": null,
+    "reviewed_paths": [],
+    "local_checks": [],
+    "result_fingerprints": [],
+    "unresolved": [],
+    "module": "M04",
+    "check_ids": [
+      "M04-10"
+    ]
+  },
+  {
+    "coverage_id": "src%2Froutes%2Fadmin%2Fbackup.subroute.ts%23export%20and%20backup::src%2Froutes%2Fadmin%2Fbackup.subroute.ts%23export%20tenant%20scope::src%2Froutes%2Fadmin%2Fbackup.subroute.ts::DATA-ISOLATION-AND-LIFECYCLE.md%23Missing%20tenant%20or%20owner%20enforcement",
+    "canonical_refs": {
+      "surface": "src/routes/admin/backup.subroute.ts#export and backup",
+      "boundary": "src/routes/admin/backup.subroute.ts#export tenant scope",
+      "subsystem": "src/routes/admin/backup.subroute.ts",
+      "attack_class": "DATA-ISOLATION-AND-LIFECYCLE.md#Missing tenant or owner enforcement"
+    },
+    "surface": "src/routes/admin/backup.subroute.ts#export and backup",
+    "boundary": "src/routes/admin/backup.subroute.ts#export tenant scope",
+    "subsystem": "src/routes/admin/backup.subroute.ts",
+    "attack_class": "DATA-ISOLATION-AND-LIFECYCLE.md#Missing tenant or owner enforcement",
+    "starting_paths": [
+      "src/routes/admin/backup.subroute.ts",
+      "src/services/backup.service.ts"
+    ],
+    "ordinary_attack_class_block": "ATTACK-CLASSES.md#Access control",
+    "selected_companion_blocks": [
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Core discipline",
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Missing tenant or owner enforcement",
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Universal moves",
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Validation rules"
+    ],
+    "excluded_blocks": [
+      {
+        "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+        "reason": "Unit ini TypeScript/Node tanpa target native yang dieksekusi; pustaka native hanya disentuh lewat batas media yang diaudit terpisah."
+      },
+      {
+        "block": "DESKTOP-MOBILE-AND-LOCAL-IPC.md#Core discipline",
+        "reason": "Tidak ada aplikasi desktop/mobile, deep link, atau IPC lokal pada surface ini."
+      },
+      {
+        "block": "AI-AND-LLM.md#Core discipline",
+        "reason": "Batas unit berhenti sebelum pipeline LLM; interaksi model dan tool diaudit di M11/M12/M10."
+      }
+    ],
+    "prior_status": "none",
+    "attempts": [],
+    "wave": 1,
+    "status": "planned",
+    "agent_id": null,
+    "reviewed_paths": [],
+    "local_checks": [],
+    "result_fingerprints": [],
+    "unresolved": [],
+    "module": "M07",
+    "check_ids": [
+      "M07-07"
+    ]
+  },
+  {
+    "coverage_id": "src%2Froutes%2Fadmin%2Fbackup.subroute.ts%23tenant%20override::src%2Froutes%2Fadmin%2Froute-helpers.ts%23tenant%20before%20session::src%2Froutes%2Fadmin%2Froute-helpers.ts::DATA-ISOLATION-AND-LIFECYCLE.md%23Missing%20tenant%20or%20owner%20enforcement",
+    "canonical_refs": {
+      "surface": "src/routes/admin/backup.subroute.ts#tenant override",
+      "boundary": "src/routes/admin/route-helpers.ts#tenant before session",
+      "subsystem": "src/routes/admin/route-helpers.ts",
+      "attack_class": "DATA-ISOLATION-AND-LIFECYCLE.md#Missing tenant or owner enforcement"
+    },
+    "surface": "src/routes/admin/backup.subroute.ts#tenant override",
+    "boundary": "src/routes/admin/route-helpers.ts#tenant before session",
+    "subsystem": "src/routes/admin/route-helpers.ts",
+    "attack_class": "DATA-ISOLATION-AND-LIFECYCLE.md#Missing tenant or owner enforcement",
+    "starting_paths": [
+      "src/routes/admin/route-helpers.ts",
+      "src/routes/admin/backup.subroute.ts",
+      "src/routes/admin/export.subroute.ts"
+    ],
+    "ordinary_attack_class_block": "ATTACK-CLASSES.md#Access control",
+    "selected_companion_blocks": [
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Core discipline",
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Missing tenant or owner enforcement",
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Universal moves",
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Validation rules"
+    ],
+    "excluded_blocks": [
+      {
+        "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+        "reason": "Unit ini TypeScript/Node tanpa target native yang dieksekusi; pustaka native hanya disentuh lewat batas media yang diaudit terpisah."
+      },
+      {
+        "block": "DESKTOP-MOBILE-AND-LOCAL-IPC.md#Core discipline",
+        "reason": "Tidak ada aplikasi desktop/mobile, deep link, atau IPC lokal pada surface ini."
+      },
+      {
+        "block": "AI-AND-LLM.md#Core discipline",
+        "reason": "Batas unit berhenti sebelum pipeline LLM; interaksi model dan tool diaudit di M11/M12/M10."
+      }
+    ],
+    "prior_status": "none",
+    "attempts": [],
+    "wave": 1,
+    "status": "planned",
+    "agent_id": null,
+    "reviewed_paths": [],
+    "local_checks": [],
+    "result_fingerprints": [],
+    "unresolved": [],
+    "module": "M07",
+    "check_ids": [
+      "M07-13"
+    ]
+  },
+  {
+    "coverage_id": "src%2Froutes%2Fadmin%2Fknowledge.subroute.ts%23knowledge%20persona%20catalog::src%2Fservices%2Fknowledge.service.ts%23tenant%20filter::src%2Fservices%2Fknowledge.service.ts::DATA-ISOLATION-AND-LIFECYCLE.md%23Missing%20tenant%20or%20owner%20enforcement",
+    "canonical_refs": {
+      "surface": "src/routes/admin/knowledge.subroute.ts#knowledge persona catalog",
+      "boundary": "src/services/knowledge.service.ts#tenant filter",
+      "subsystem": "src/services/knowledge.service.ts",
+      "attack_class": "DATA-ISOLATION-AND-LIFECYCLE.md#Missing tenant or owner enforcement"
+    },
+    "surface": "src/routes/admin/knowledge.subroute.ts#knowledge persona catalog",
+    "boundary": "src/services/knowledge.service.ts#tenant filter",
+    "subsystem": "src/services/knowledge.service.ts",
+    "attack_class": "DATA-ISOLATION-AND-LIFECYCLE.md#Missing tenant or owner enforcement",
+    "starting_paths": [
+      "src/services/knowledge.service.ts",
+      "src/routes/admin/knowledge.subroute.ts"
+    ],
+    "ordinary_attack_class_block": "ATTACK-CLASSES.md#Access control",
+    "selected_companion_blocks": [
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Core discipline",
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Missing tenant or owner enforcement",
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Universal moves",
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Validation rules"
+    ],
+    "excluded_blocks": [
+      {
+        "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+        "reason": "Unit ini TypeScript/Node tanpa target native yang dieksekusi; pustaka native hanya disentuh lewat batas media yang diaudit terpisah."
+      },
+      {
+        "block": "DESKTOP-MOBILE-AND-LOCAL-IPC.md#Core discipline",
+        "reason": "Tidak ada aplikasi desktop/mobile, deep link, atau IPC lokal pada surface ini."
+      },
+      {
+        "block": "AI-AND-LLM.md#Core discipline",
+        "reason": "Batas unit berhenti sebelum pipeline LLM; interaksi model dan tool diaudit di M11/M12/M10."
+      }
+    ],
+    "prior_status": "none",
+    "attempts": [],
+    "wave": 1,
+    "status": "planned",
+    "agent_id": null,
+    "reviewed_paths": [],
+    "local_checks": [],
+    "result_fingerprints": [],
+    "unresolved": [],
+    "module": "M07",
+    "check_ids": [
+      "M07-12"
+    ]
+  },
+  {
+    "coverage_id": "src%2Froutes%2Fadmin%2Flabels.subroute.ts%23label%20assignment::src%2Froutes%2Fadmin%2Flabels.subroute.ts%23label%20findUnique::src%2Froutes%2Fadmin%2Flabels.subroute.ts::DATA-ISOLATION-AND-LIFECYCLE.md%23Missing%20tenant%20or%20owner%20enforcement",
+    "canonical_refs": {
+      "surface": "src/routes/admin/labels.subroute.ts#label assignment",
+      "boundary": "src/routes/admin/labels.subroute.ts#label findUnique",
+      "subsystem": "src/routes/admin/labels.subroute.ts",
+      "attack_class": "DATA-ISOLATION-AND-LIFECYCLE.md#Missing tenant or owner enforcement"
+    },
+    "surface": "src/routes/admin/labels.subroute.ts#label assignment",
+    "boundary": "src/routes/admin/labels.subroute.ts#label findUnique",
+    "subsystem": "src/routes/admin/labels.subroute.ts",
+    "attack_class": "DATA-ISOLATION-AND-LIFECYCLE.md#Missing tenant or owner enforcement",
+    "starting_paths": [
+      "src/routes/admin/labels.subroute.ts"
+    ],
+    "ordinary_attack_class_block": "ATTACK-CLASSES.md#Access control",
+    "selected_companion_blocks": [
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Core discipline",
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Missing tenant or owner enforcement",
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Universal moves",
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Validation rules"
+    ],
+    "excluded_blocks": [
+      {
+        "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+        "reason": "Unit ini TypeScript/Node tanpa target native yang dieksekusi; pustaka native hanya disentuh lewat batas media yang diaudit terpisah."
+      },
+      {
+        "block": "DESKTOP-MOBILE-AND-LOCAL-IPC.md#Core discipline",
+        "reason": "Tidak ada aplikasi desktop/mobile, deep link, atau IPC lokal pada surface ini."
+      },
+      {
+        "block": "AI-AND-LLM.md#Core discipline",
+        "reason": "Batas unit berhenti sebelum pipeline LLM; interaksi model dan tool diaudit di M11/M12/M10."
+      }
+    ],
+    "prior_status": "none",
+    "attempts": [],
+    "wave": 1,
+    "status": "planned",
+    "agent_id": null,
+    "reviewed_paths": [],
+    "local_checks": [],
+    "result_fingerprints": [],
+    "unresolved": [],
+    "module": "M07",
+    "check_ids": [
+      "M07-15"
+    ]
+  },
+  {
+    "coverage_id": "src%2Froutes%2Fadmin%2Flandings.subroute.ts%23GET%20%2Fapi%2Fadmin%2Flandings%2F%3Aid::src%2Froutes%2Fadmin%2Flandings.subroute.ts%23id%20only%20read::src%2Froutes%2Fadmin%2Flandings.subroute.ts::DATA-ISOLATION-AND-LIFECYCLE.md%23Missing%20tenant%20or%20owner%20enforcement",
+    "canonical_refs": {
+      "surface": "src/routes/admin/landings.subroute.ts#GET /api/admin/landings/:id",
+      "boundary": "src/routes/admin/landings.subroute.ts#id only read",
+      "subsystem": "src/routes/admin/landings.subroute.ts",
+      "attack_class": "DATA-ISOLATION-AND-LIFECYCLE.md#Missing tenant or owner enforcement"
+    },
+    "surface": "src/routes/admin/landings.subroute.ts#GET /api/admin/landings/:id",
+    "boundary": "src/routes/admin/landings.subroute.ts#id only read",
+    "subsystem": "src/routes/admin/landings.subroute.ts",
+    "attack_class": "DATA-ISOLATION-AND-LIFECYCLE.md#Missing tenant or owner enforcement",
+    "starting_paths": [
+      "src/routes/admin/landings.subroute.ts"
+    ],
+    "ordinary_attack_class_block": "ATTACK-CLASSES.md#Access control",
+    "selected_companion_blocks": [
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Core discipline",
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Missing tenant or owner enforcement",
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Universal moves",
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Validation rules"
+    ],
+    "excluded_blocks": [
+      {
+        "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+        "reason": "Unit ini TypeScript/Node tanpa target native yang dieksekusi; pustaka native hanya disentuh lewat batas media yang diaudit terpisah."
+      },
+      {
+        "block": "DESKTOP-MOBILE-AND-LOCAL-IPC.md#Core discipline",
+        "reason": "Tidak ada aplikasi desktop/mobile, deep link, atau IPC lokal pada surface ini."
+      },
+      {
+        "block": "AI-AND-LLM.md#Core discipline",
+        "reason": "Batas unit berhenti sebelum pipeline LLM; interaksi model dan tool diaudit di M11/M12/M10."
+      }
+    ],
+    "prior_status": "none",
+    "attempts": [],
+    "wave": 1,
+    "status": "planned",
+    "agent_id": null,
+    "reviewed_paths": [],
+    "local_checks": [],
+    "result_fingerprints": [],
+    "unresolved": [],
+    "module": "M07",
+    "check_ids": [
+      "M07-15"
+    ]
+  },
+  {
+    "coverage_id": "src%2Froutes%2Fadmin%2Flivechat.subroute.ts%23SSE::src%2Froutes%2Fadmin%2Flivechat.subroute.ts%23SSE%20tenant%20scope::src%2Froutes%2Fadmin%2Flivechat.subroute.ts::DATA-ISOLATION-AND-LIFECYCLE.md%23Missing%20tenant%20or%20owner%20enforcement",
+    "canonical_refs": {
+      "surface": "src/routes/admin/livechat.subroute.ts#SSE",
+      "boundary": "src/routes/admin/livechat.subroute.ts#SSE tenant scope",
+      "subsystem": "src/routes/admin/livechat.subroute.ts",
+      "attack_class": "DATA-ISOLATION-AND-LIFECYCLE.md#Missing tenant or owner enforcement"
+    },
+    "surface": "src/routes/admin/livechat.subroute.ts#SSE",
+    "boundary": "src/routes/admin/livechat.subroute.ts#SSE tenant scope",
+    "subsystem": "src/routes/admin/livechat.subroute.ts",
+    "attack_class": "DATA-ISOLATION-AND-LIFECYCLE.md#Missing tenant or owner enforcement",
+    "starting_paths": [
+      "src/routes/admin/livechat.subroute.ts"
+    ],
+    "ordinary_attack_class_block": "ATTACK-CLASSES.md#Access control",
+    "selected_companion_blocks": [
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Core discipline",
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Missing tenant or owner enforcement",
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Universal moves",
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Validation rules"
+    ],
+    "excluded_blocks": [
+      {
+        "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+        "reason": "Unit ini TypeScript/Node tanpa target native yang dieksekusi; pustaka native hanya disentuh lewat batas media yang diaudit terpisah."
+      },
+      {
+        "block": "DESKTOP-MOBILE-AND-LOCAL-IPC.md#Core discipline",
+        "reason": "Tidak ada aplikasi desktop/mobile, deep link, atau IPC lokal pada surface ini."
+      },
+      {
+        "block": "AI-AND-LLM.md#Core discipline",
+        "reason": "Batas unit berhenti sebelum pipeline LLM; interaksi model dan tool diaudit di M11/M12/M10."
+      }
+    ],
+    "prior_status": "none",
+    "attempts": [],
+    "wave": 1,
+    "status": "planned",
+    "agent_id": null,
+    "reviewed_paths": [],
+    "local_checks": [],
+    "result_fingerprints": [],
+    "unresolved": [],
+    "module": "M07",
+    "check_ids": [
+      "M07-06"
+    ]
+  },
+  {
+    "coverage_id": "src%2Froutes%2Fadmin%2Flivechat.subroute.ts%23SSE::src%2Froutes%2Fadmin.route.ts%23RBAC%20on%20SSE::src%2Froutes%2Fadmin.route.ts::ATTACK-CLASSES.md%23Access%20control",
+    "canonical_refs": {
+      "surface": "src/routes/admin/livechat.subroute.ts#SSE",
+      "boundary": "src/routes/admin.route.ts#RBAC on SSE",
+      "subsystem": "src/routes/admin.route.ts",
+      "attack_class": "ATTACK-CLASSES.md#Access control"
+    },
+    "surface": "src/routes/admin/livechat.subroute.ts#SSE",
+    "boundary": "src/routes/admin.route.ts#RBAC on SSE",
+    "subsystem": "src/routes/admin.route.ts",
+    "attack_class": "ATTACK-CLASSES.md#Access control",
+    "starting_paths": [
+      "src/routes/admin/livechat.subroute.ts",
+      "src/routes/admin.route.ts"
+    ],
+    "ordinary_attack_class_block": "ATTACK-CLASSES.md#Access control",
+    "selected_companion_blocks": [],
+    "excluded_blocks": [
+      {
+        "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+        "reason": "Unit ini TypeScript/Node tanpa target native yang dieksekusi; pustaka native hanya disentuh lewat batas media yang diaudit terpisah."
+      },
+      {
+        "block": "DESKTOP-MOBILE-AND-LOCAL-IPC.md#Core discipline",
+        "reason": "Tidak ada aplikasi desktop/mobile, deep link, atau IPC lokal pada surface ini."
+      },
+      {
+        "block": "AI-AND-LLM.md#Core discipline",
+        "reason": "Batas unit berhenti sebelum pipeline LLM; interaksi model dan tool diaudit di M11/M12/M10."
+      }
+    ],
+    "prior_status": "none",
+    "attempts": [],
+    "wave": 1,
+    "status": "planned",
+    "agent_id": null,
+    "reviewed_paths": [],
+    "local_checks": [],
+    "result_fingerprints": [],
+    "unresolved": [],
+    "module": "M06",
+    "check_ids": [
+      "M06-09"
+    ]
+  },
+  {
+    "coverage_id": "src%2Froutes%2Fadmin%2Froles.subroute.ts%23%2Fapi%2Fadmin%2Froles::src%2Froutes%2Fadmin%2Froles.subroute.ts%23role%20management%20authority::src%2Froutes%2Fadmin%2Froles.subroute.ts::ATTACK-CLASSES.md%23Access%20control",
+    "canonical_refs": {
+      "surface": "src/routes/admin/roles.subroute.ts#/api/admin/roles",
+      "boundary": "src/routes/admin/roles.subroute.ts#role management authority",
+      "subsystem": "src/routes/admin/roles.subroute.ts",
+      "attack_class": "ATTACK-CLASSES.md#Access control"
+    },
+    "surface": "src/routes/admin/roles.subroute.ts#/api/admin/roles",
+    "boundary": "src/routes/admin/roles.subroute.ts#role management authority",
+    "subsystem": "src/routes/admin/roles.subroute.ts",
+    "attack_class": "ATTACK-CLASSES.md#Access control",
+    "starting_paths": [
+      "src/routes/admin/roles.subroute.ts"
+    ],
+    "ordinary_attack_class_block": "ATTACK-CLASSES.md#Access control",
+    "selected_companion_blocks": [],
+    "excluded_blocks": [
+      {
+        "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+        "reason": "Unit ini TypeScript/Node tanpa target native yang dieksekusi; pustaka native hanya disentuh lewat batas media yang diaudit terpisah."
+      },
+      {
+        "block": "DESKTOP-MOBILE-AND-LOCAL-IPC.md#Core discipline",
+        "reason": "Tidak ada aplikasi desktop/mobile, deep link, atau IPC lokal pada surface ini."
+      },
+      {
+        "block": "AI-AND-LLM.md#Core discipline",
+        "reason": "Batas unit berhenti sebelum pipeline LLM; interaksi model dan tool diaudit di M11/M12/M10."
+      }
+    ],
+    "prior_status": "none",
+    "attempts": [],
+    "wave": 1,
+    "status": "planned",
+    "agent_id": null,
+    "reviewed_paths": [],
+    "local_checks": [],
+    "result_fingerprints": [],
+    "unresolved": [],
+    "module": "M06",
+    "check_ids": [
+      "M06-06"
+    ]
+  },
+  {
+    "coverage_id": "src%2Froutes%2Fadmin%2Fsettings-catalog.subroute.ts%23GET%20%2Fapi%2Fadmin%2Fservices::src%2Fservices%2Ftreatment-catalog.service.ts%23default%20tenant::src%2Fservices%2Ftreatment-catalog.service.ts::DATA-ISOLATION-AND-LIFECYCLE.md%23Missing%20tenant%20or%20owner%20enforcement",
+    "canonical_refs": {
+      "surface": "src/routes/admin/settings-catalog.subroute.ts#GET /api/admin/services",
+      "boundary": "src/services/treatment-catalog.service.ts#default tenant",
+      "subsystem": "src/services/treatment-catalog.service.ts",
+      "attack_class": "DATA-ISOLATION-AND-LIFECYCLE.md#Missing tenant or owner enforcement"
+    },
+    "surface": "src/routes/admin/settings-catalog.subroute.ts#GET /api/admin/services",
+    "boundary": "src/services/treatment-catalog.service.ts#default tenant",
+    "subsystem": "src/services/treatment-catalog.service.ts",
+    "attack_class": "DATA-ISOLATION-AND-LIFECYCLE.md#Missing tenant or owner enforcement",
+    "starting_paths": [
+      "src/routes/admin/settings-catalog.subroute.ts",
+      "src/services/treatment-catalog.service.ts"
+    ],
+    "ordinary_attack_class_block": "ATTACK-CLASSES.md#Access control",
+    "selected_companion_blocks": [
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Core discipline",
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Missing tenant or owner enforcement",
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Universal moves",
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Validation rules"
+    ],
+    "excluded_blocks": [
+      {
+        "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+        "reason": "Unit ini TypeScript/Node tanpa target native yang dieksekusi; pustaka native hanya disentuh lewat batas media yang diaudit terpisah."
+      },
+      {
+        "block": "DESKTOP-MOBILE-AND-LOCAL-IPC.md#Core discipline",
+        "reason": "Tidak ada aplikasi desktop/mobile, deep link, atau IPC lokal pada surface ini."
+      },
+      {
+        "block": "AI-AND-LLM.md#Core discipline",
+        "reason": "Batas unit berhenti sebelum pipeline LLM; interaksi model dan tool diaudit di M11/M12/M10."
+      }
+    ],
+    "prior_status": "none",
+    "attempts": [],
+    "wave": 1,
+    "status": "planned",
+    "agent_id": null,
+    "reviewed_paths": [],
+    "local_checks": [],
+    "result_fingerprints": [],
+    "unresolved": [],
+    "module": "M07",
+    "check_ids": [
+      "M07-16"
+    ]
+  },
+  {
+    "coverage_id": "src%2Froutes%2Fadmin%2Fsettings-notifications.subroute.ts%23%2Fsettings::src%2Froutes%2Fadmin%2Fsettings-notifications.subroute.ts%23token%20exposure::src%2Froutes%2Fadmin%2Fsettings-notifications.subroute.ts::ATTACK-CLASSES.md%23Cryptography%20and%20secrets",
+    "canonical_refs": {
+      "surface": "src/routes/admin/settings-notifications.subroute.ts#/settings",
+      "boundary": "src/routes/admin/settings-notifications.subroute.ts#token exposure",
+      "subsystem": "src/routes/admin/settings-notifications.subroute.ts",
+      "attack_class": "ATTACK-CLASSES.md#Cryptography and secrets"
+    },
+    "surface": "src/routes/admin/settings-notifications.subroute.ts#/settings",
+    "boundary": "src/routes/admin/settings-notifications.subroute.ts#token exposure",
+    "subsystem": "src/routes/admin/settings-notifications.subroute.ts",
+    "attack_class": "ATTACK-CLASSES.md#Cryptography and secrets",
+    "starting_paths": [
+      "src/routes/admin/settings-notifications.subroute.ts"
+    ],
+    "ordinary_attack_class_block": "ATTACK-CLASSES.md#Cryptography and secrets",
+    "selected_companion_blocks": [],
+    "excluded_blocks": [
+      {
+        "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+        "reason": "Unit ini TypeScript/Node tanpa target native yang dieksekusi; pustaka native hanya disentuh lewat batas media yang diaudit terpisah."
+      },
+      {
+        "block": "DESKTOP-MOBILE-AND-LOCAL-IPC.md#Core discipline",
+        "reason": "Tidak ada aplikasi desktop/mobile, deep link, atau IPC lokal pada surface ini."
+      },
+      {
+        "block": "AI-AND-LLM.md#Core discipline",
+        "reason": "Batas unit berhenti sebelum pipeline LLM; interaksi model dan tool diaudit di M11/M12/M10."
+      }
+    ],
+    "prior_status": "none",
+    "attempts": [],
+    "wave": 1,
+    "status": "planned",
+    "agent_id": null,
+    "reviewed_paths": [],
+    "local_checks": [],
+    "result_fingerprints": [],
+    "unresolved": [],
+    "module": "M03",
+    "check_ids": [
+      "M03-05"
+    ]
+  },
+  {
+    "coverage_id": "src%2Froutes%2Fadmin%2Fsettings-notifications.subroute.ts%23daily-report::src%2Fdomain%2Frole-module-scopes.ts%23SETTINGS_READ_ALLOWLIST::src%2Fdomain%2Frole-module-scopes.ts::ATTACK-CLASSES.md%23Access%20control",
+    "canonical_refs": {
+      "surface": "src/routes/admin/settings-notifications.subroute.ts#daily-report",
+      "boundary": "src/domain/role-module-scopes.ts#SETTINGS_READ_ALLOWLIST",
+      "subsystem": "src/domain/role-module-scopes.ts",
+      "attack_class": "ATTACK-CLASSES.md#Access control"
+    },
+    "surface": "src/routes/admin/settings-notifications.subroute.ts#daily-report",
+    "boundary": "src/domain/role-module-scopes.ts#SETTINGS_READ_ALLOWLIST",
+    "subsystem": "src/domain/role-module-scopes.ts",
+    "attack_class": "ATTACK-CLASSES.md#Access control",
+    "starting_paths": [
+      "src/domain/role-module-scopes.ts",
+      "src/routes/admin/settings-notifications.subroute.ts"
+    ],
+    "ordinary_attack_class_block": "ATTACK-CLASSES.md#Access control",
+    "selected_companion_blocks": [],
+    "excluded_blocks": [
+      {
+        "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+        "reason": "Unit ini TypeScript/Node tanpa target native yang dieksekusi; pustaka native hanya disentuh lewat batas media yang diaudit terpisah."
+      },
+      {
+        "block": "DESKTOP-MOBILE-AND-LOCAL-IPC.md#Core discipline",
+        "reason": "Tidak ada aplikasi desktop/mobile, deep link, atau IPC lokal pada surface ini."
+      },
+      {
+        "block": "AI-AND-LLM.md#Core discipline",
+        "reason": "Batas unit berhenti sebelum pipeline LLM; interaksi model dan tool diaudit di M11/M12/M10."
+      }
+    ],
+    "prior_status": "none",
+    "attempts": [],
+    "wave": 1,
+    "status": "planned",
+    "agent_id": null,
+    "reviewed_paths": [],
+    "local_checks": [],
+    "result_fingerprints": [],
+    "unresolved": [],
+    "module": "M06",
+    "check_ids": [
+      "M06-12"
+    ]
+  },
+  {
+    "coverage_id": "src%2Froutes%2Fadmin%2Fstaff-management.subroute.ts%23%2Fapi%2Fadmin%2Fstaff::src%2Froutes%2Fadmin%2Fstaff-management.subroute.ts%23tenant%20scoping::src%2Froutes%2Fadmin%2Fstaff-management.subroute.ts::DATA-ISOLATION-AND-LIFECYCLE.md%23Missing%20tenant%20or%20owner%20enforcement",
+    "canonical_refs": {
+      "surface": "src/routes/admin/staff-management.subroute.ts#/api/admin/staff",
+      "boundary": "src/routes/admin/staff-management.subroute.ts#tenant scoping",
+      "subsystem": "src/routes/admin/staff-management.subroute.ts",
+      "attack_class": "DATA-ISOLATION-AND-LIFECYCLE.md#Missing tenant or owner enforcement"
+    },
+    "surface": "src/routes/admin/staff-management.subroute.ts#/api/admin/staff",
+    "boundary": "src/routes/admin/staff-management.subroute.ts#tenant scoping",
+    "subsystem": "src/routes/admin/staff-management.subroute.ts",
+    "attack_class": "DATA-ISOLATION-AND-LIFECYCLE.md#Missing tenant or owner enforcement",
+    "starting_paths": [
+      "src/routes/admin/staff-management.subroute.ts"
+    ],
+    "ordinary_attack_class_block": "ATTACK-CLASSES.md#Access control",
+    "selected_companion_blocks": [
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Core discipline",
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Missing tenant or owner enforcement",
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Universal moves",
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Validation rules"
+    ],
+    "excluded_blocks": [
+      {
+        "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+        "reason": "Unit ini TypeScript/Node tanpa target native yang dieksekusi; pustaka native hanya disentuh lewat batas media yang diaudit terpisah."
+      },
+      {
+        "block": "DESKTOP-MOBILE-AND-LOCAL-IPC.md#Core discipline",
+        "reason": "Tidak ada aplikasi desktop/mobile, deep link, atau IPC lokal pada surface ini."
+      },
+      {
+        "block": "AI-AND-LLM.md#Core discipline",
+        "reason": "Batas unit berhenti sebelum pipeline LLM; interaksi model dan tool diaudit di M11/M12/M10."
+      }
+    ],
+    "prior_status": "none",
+    "attempts": [],
+    "wave": 1,
+    "status": "planned",
+    "agent_id": null,
+    "reviewed_paths": [],
+    "local_checks": [],
+    "result_fingerprints": [],
+    "unresolved": [],
+    "module": "M06",
+    "check_ids": [
+      "M06-07"
+    ]
+  },
+  {
+    "coverage_id": "src%2Froutes%2Fadmin.route.ts%23%2Fadmin%20static::src%2Froutes%2Fadmin.route.ts%23static%20asset%20containment::src%2Froutes%2Fadmin.route.ts::RESOURCE-EXHAUSTION-AND-AVAILABILITY.md%23Unbounded%20buffering%20and%20cardinality",
+    "canonical_refs": {
+      "surface": "src/routes/admin.route.ts#/admin static",
+      "boundary": "src/routes/admin.route.ts#static asset containment",
+      "subsystem": "src/routes/admin.route.ts",
+      "attack_class": "RESOURCE-EXHAUSTION-AND-AVAILABILITY.md#Unbounded buffering and cardinality"
+    },
+    "surface": "src/routes/admin.route.ts#/admin static",
+    "boundary": "src/routes/admin.route.ts#static asset containment",
+    "subsystem": "src/routes/admin.route.ts",
+    "attack_class": "RESOURCE-EXHAUSTION-AND-AVAILABILITY.md#Unbounded buffering and cardinality",
+    "starting_paths": [
+      "src/routes/admin.route.ts"
+    ],
+    "ordinary_attack_class_block": "ATTACK-CLASSES.md#Resource and file handling",
+    "selected_companion_blocks": [
+      "RESOURCE-EXHAUSTION-AND-AVAILABILITY.md#Core discipline",
+      "RESOURCE-EXHAUSTION-AND-AVAILABILITY.md#Universal moves",
+      "RESOURCE-EXHAUSTION-AND-AVAILABILITY.md#Validation rules"
+    ],
+    "excluded_blocks": [
+      {
+        "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+        "reason": "Unit ini TypeScript/Node tanpa target native yang dieksekusi; pustaka native hanya disentuh lewat batas media yang diaudit terpisah."
+      },
+      {
+        "block": "DESKTOP-MOBILE-AND-LOCAL-IPC.md#Core discipline",
+        "reason": "Tidak ada aplikasi desktop/mobile, deep link, atau IPC lokal pada surface ini."
+      },
+      {
+        "block": "AI-AND-LLM.md#Core discipline",
+        "reason": "Batas unit berhenti sebelum pipeline LLM; interaksi model dan tool diaudit di M11/M12/M10."
+      }
+    ],
+    "prior_status": "none",
+    "attempts": [],
+    "wave": 1,
+    "status": "planned",
+    "agent_id": null,
+    "reviewed_paths": [],
+    "local_checks": [],
+    "result_fingerprints": [],
+    "unresolved": [],
+    "module": "M04",
+    "check_ids": [
+      "M04-11"
+    ]
+  },
+  {
+    "coverage_id": "src%2Froutes%2Fadmin.route.ts%23%2Fapi%2Fadmin%2F%2A::src%2Froutes%2Fadmin.route.ts%23CSRF%20guard%20presence%20versus%20validity::src%2Froutes%2Fadmin.route.ts::WEB-PROTOCOL-AND-AUTH.md%23Ordinary%20CSRF",
+    "canonical_refs": {
+      "surface": "src/routes/admin.route.ts#/api/admin/*",
+      "boundary": "src/routes/admin.route.ts#CSRF guard presence versus validity",
+      "subsystem": "src/routes/admin.route.ts",
+      "attack_class": "WEB-PROTOCOL-AND-AUTH.md#Ordinary CSRF"
+    },
+    "surface": "src/routes/admin.route.ts#/api/admin/*",
+    "boundary": "src/routes/admin.route.ts#CSRF guard presence versus validity",
+    "subsystem": "src/routes/admin.route.ts",
+    "attack_class": "WEB-PROTOCOL-AND-AUTH.md#Ordinary CSRF",
+    "starting_paths": [
+      "src/routes/admin.route.ts"
+    ],
+    "ordinary_attack_class_block": "ATTACK-CLASSES.md#Access control",
+    "selected_companion_blocks": [
+      "WEB-PROTOCOL-AND-AUTH.md#Core discipline",
+      "WEB-PROTOCOL-AND-AUTH.md#Universal moves",
+      "WEB-PROTOCOL-AND-AUTH.md#Validation rules"
+    ],
+    "excluded_blocks": [
+      {
+        "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+        "reason": "Unit ini TypeScript/Node tanpa target native yang dieksekusi; pustaka native hanya disentuh lewat batas media yang diaudit terpisah."
+      },
+      {
+        "block": "DESKTOP-MOBILE-AND-LOCAL-IPC.md#Core discipline",
+        "reason": "Tidak ada aplikasi desktop/mobile, deep link, atau IPC lokal pada surface ini."
+      },
+      {
+        "block": "AI-AND-LLM.md#Core discipline",
+        "reason": "Batas unit berhenti sebelum pipeline LLM; interaksi model dan tool diaudit di M11/M12/M10."
+      }
+    ],
+    "prior_status": "none",
+    "attempts": [],
+    "wave": 1,
+    "status": "planned",
+    "agent_id": null,
+    "reviewed_paths": [],
+    "local_checks": [],
+    "result_fingerprints": [],
+    "unresolved": [],
+    "module": "M04",
+    "check_ids": [
+      "M04-17"
+    ]
+  },
+  {
+    "coverage_id": "src%2Froutes%2Fadmin.route.ts%23%2Fapi%2Fadmin%2F%2A::src%2Froutes%2Fadmin.route.ts%23preHandler%20CSRF::src%2Froutes%2Fadmin.route.ts::WEB-PROTOCOL-AND-AUTH.md%23Ordinary%20CSRF",
+    "canonical_refs": {
+      "surface": "src/routes/admin.route.ts#/api/admin/*",
+      "boundary": "src/routes/admin.route.ts#preHandler CSRF",
+      "subsystem": "src/routes/admin.route.ts",
+      "attack_class": "WEB-PROTOCOL-AND-AUTH.md#Ordinary CSRF"
+    },
+    "surface": "src/routes/admin.route.ts#/api/admin/*",
+    "boundary": "src/routes/admin.route.ts#preHandler CSRF",
+    "subsystem": "src/routes/admin.route.ts",
+    "attack_class": "WEB-PROTOCOL-AND-AUTH.md#Ordinary CSRF",
+    "starting_paths": [
+      "src/routes/admin.route.ts"
+    ],
+    "ordinary_attack_class_block": "ATTACK-CLASSES.md#Access control",
+    "selected_companion_blocks": [
+      "WEB-PROTOCOL-AND-AUTH.md#Core discipline",
+      "WEB-PROTOCOL-AND-AUTH.md#Universal moves",
+      "WEB-PROTOCOL-AND-AUTH.md#Validation rules"
+    ],
+    "excluded_blocks": [
+      {
+        "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+        "reason": "Unit ini TypeScript/Node tanpa target native yang dieksekusi; pustaka native hanya disentuh lewat batas media yang diaudit terpisah."
+      },
+      {
+        "block": "DESKTOP-MOBILE-AND-LOCAL-IPC.md#Core discipline",
+        "reason": "Tidak ada aplikasi desktop/mobile, deep link, atau IPC lokal pada surface ini."
+      },
+      {
+        "block": "AI-AND-LLM.md#Core discipline",
+        "reason": "Batas unit berhenti sebelum pipeline LLM; interaksi model dan tool diaudit di M11/M12/M10."
+      }
+    ],
+    "prior_status": "none",
+    "attempts": [],
+    "wave": 1,
+    "status": "planned",
+    "agent_id": null,
+    "reviewed_paths": [],
+    "local_checks": [],
+    "result_fingerprints": [],
+    "unresolved": [],
+    "module": "M04",
+    "check_ids": [
+      "M04-06"
+    ]
+  },
+  {
+    "coverage_id": "src%2Froutes%2Fadmin.route.ts%23%2Fapi%2Fadmin%2F%2A::src%2Fservices%2Fadmin-session.service.ts%23SessionStoreUnavailable%20fallback::src%2Fservices%2Fadmin-session.service.ts::ATTACK-CLASSES.md%23Access%20control",
+    "canonical_refs": {
+      "surface": "src/routes/admin.route.ts#/api/admin/*",
+      "boundary": "src/services/admin-session.service.ts#SessionStoreUnavailable fallback",
+      "subsystem": "src/services/admin-session.service.ts",
+      "attack_class": "ATTACK-CLASSES.md#Access control"
+    },
+    "surface": "src/routes/admin.route.ts#/api/admin/*",
+    "boundary": "src/services/admin-session.service.ts#SessionStoreUnavailable fallback",
+    "subsystem": "src/services/admin-session.service.ts",
+    "attack_class": "ATTACK-CLASSES.md#Access control",
+    "starting_paths": [
+      "src/services/admin-session.service.ts",
+      "src/routes/admin.route.ts"
+    ],
+    "ordinary_attack_class_block": "ATTACK-CLASSES.md#Access control",
+    "selected_companion_blocks": [],
+    "excluded_blocks": [
+      {
+        "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+        "reason": "Unit ini TypeScript/Node tanpa target native yang dieksekusi; pustaka native hanya disentuh lewat batas media yang diaudit terpisah."
+      },
+      {
+        "block": "DESKTOP-MOBILE-AND-LOCAL-IPC.md#Core discipline",
+        "reason": "Tidak ada aplikasi desktop/mobile, deep link, atau IPC lokal pada surface ini."
+      },
+      {
+        "block": "AI-AND-LLM.md#Core discipline",
+        "reason": "Batas unit berhenti sebelum pipeline LLM; interaksi model dan tool diaudit di M11/M12/M10."
+      }
+    ],
+    "prior_status": "none",
+    "attempts": [],
+    "wave": 1,
+    "status": "planned",
+    "agent_id": null,
+    "reviewed_paths": [],
+    "local_checks": [],
+    "result_fingerprints": [],
+    "unresolved": [],
+    "module": "M04",
+    "check_ids": [
+      "M04-09"
+    ]
+  },
+  {
+    "coverage_id": "src%2Froutes%2Fadmin.route.ts%23%2Fapi%2Fadmin%2F%2A::src%2Fservices%2Fadmin-session.service.ts%23token%20hash%20store::src%2Fservices%2Fadmin-session.service.ts::ATTACK-CLASSES.md%23Cryptography%20and%20secrets",
+    "canonical_refs": {
+      "surface": "src/routes/admin.route.ts#/api/admin/*",
+      "boundary": "src/services/admin-session.service.ts#token hash store",
+      "subsystem": "src/services/admin-session.service.ts",
+      "attack_class": "ATTACK-CLASSES.md#Cryptography and secrets"
+    },
+    "surface": "src/routes/admin.route.ts#/api/admin/*",
+    "boundary": "src/services/admin-session.service.ts#token hash store",
+    "subsystem": "src/services/admin-session.service.ts",
+    "attack_class": "ATTACK-CLASSES.md#Cryptography and secrets",
+    "starting_paths": [
+      "src/services/admin-session.service.ts"
+    ],
+    "ordinary_attack_class_block": "ATTACK-CLASSES.md#Cryptography and secrets",
+    "selected_companion_blocks": [],
+    "excluded_blocks": [
+      {
+        "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+        "reason": "Unit ini TypeScript/Node tanpa target native yang dieksekusi; pustaka native hanya disentuh lewat batas media yang diaudit terpisah."
+      },
+      {
+        "block": "DESKTOP-MOBILE-AND-LOCAL-IPC.md#Core discipline",
+        "reason": "Tidak ada aplikasi desktop/mobile, deep link, atau IPC lokal pada surface ini."
+      },
+      {
+        "block": "AI-AND-LLM.md#Core discipline",
+        "reason": "Batas unit berhenti sebelum pipeline LLM; interaksi model dan tool diaudit di M11/M12/M10."
+      }
+    ],
+    "prior_status": "none",
+    "attempts": [],
+    "wave": 1,
+    "status": "planned",
+    "agent_id": null,
+    "reviewed_paths": [],
+    "local_checks": [],
+    "result_fingerprints": [],
+    "unresolved": [],
+    "module": "M04",
+    "check_ids": [
+      "M04-02"
+    ]
+  },
+  {
+    "coverage_id": "src%2Froutes%2Fadmin.route.ts%23%2Fapi%2Fadmin%2F%2A::src%2Futils%2Fauth.ts%23safeCompare::src%2Futils%2Fauth.ts::ATTACK-CLASSES.md%23Cryptography%20and%20secrets",
+    "canonical_refs": {
+      "surface": "src/routes/admin.route.ts#/api/admin/*",
+      "boundary": "src/utils/auth.ts#safeCompare",
+      "subsystem": "src/utils/auth.ts",
+      "attack_class": "ATTACK-CLASSES.md#Cryptography and secrets"
+    },
+    "surface": "src/routes/admin.route.ts#/api/admin/*",
+    "boundary": "src/utils/auth.ts#safeCompare",
+    "subsystem": "src/utils/auth.ts",
+    "attack_class": "ATTACK-CLASSES.md#Cryptography and secrets",
+    "starting_paths": [
+      "src/utils/auth.ts",
+      "src/routes/admin.route.ts"
+    ],
+    "ordinary_attack_class_block": "ATTACK-CLASSES.md#Cryptography and secrets",
+    "selected_companion_blocks": [],
+    "excluded_blocks": [
+      {
+        "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+        "reason": "Unit ini TypeScript/Node tanpa target native yang dieksekusi; pustaka native hanya disentuh lewat batas media yang diaudit terpisah."
+      },
+      {
+        "block": "DESKTOP-MOBILE-AND-LOCAL-IPC.md#Core discipline",
+        "reason": "Tidak ada aplikasi desktop/mobile, deep link, atau IPC lokal pada surface ini."
+      },
+      {
+        "block": "AI-AND-LLM.md#Core discipline",
+        "reason": "Batas unit berhenti sebelum pipeline LLM; interaksi model dan tool diaudit di M11/M12/M10."
+      }
+    ],
+    "prior_status": "none",
+    "attempts": [],
+    "wave": 1,
+    "status": "planned",
+    "agent_id": null,
+    "reviewed_paths": [],
+    "local_checks": [],
+    "result_fingerprints": [],
+    "unresolved": [],
+    "module": "M04",
+    "check_ids": [
+      "M04-01"
+    ]
+  },
+  {
+    "coverage_id": "src%2Froutes%2Fadmin.route.ts%23API%20key%20session::src%2Froutes%2Fadmin%2Froute-helpers.ts%23resolveSessionTenantId::src%2Froutes%2Fadmin%2Froute-helpers.ts::DATA-ISOLATION-AND-LIFECYCLE.md%23Missing%20tenant%20or%20owner%20enforcement",
+    "canonical_refs": {
+      "surface": "src/routes/admin.route.ts#API key session",
+      "boundary": "src/routes/admin/route-helpers.ts#resolveSessionTenantId",
+      "subsystem": "src/routes/admin/route-helpers.ts",
+      "attack_class": "DATA-ISOLATION-AND-LIFECYCLE.md#Missing tenant or owner enforcement"
+    },
+    "surface": "src/routes/admin.route.ts#API key session",
+    "boundary": "src/routes/admin/route-helpers.ts#resolveSessionTenantId",
+    "subsystem": "src/routes/admin/route-helpers.ts",
+    "attack_class": "DATA-ISOLATION-AND-LIFECYCLE.md#Missing tenant or owner enforcement",
+    "starting_paths": [
+      "src/routes/admin/route-helpers.ts",
+      "src/routes/admin.route.ts"
+    ],
+    "ordinary_attack_class_block": "ATTACK-CLASSES.md#Access control",
+    "selected_companion_blocks": [
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Core discipline",
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Missing tenant or owner enforcement",
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Universal moves",
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Validation rules"
+    ],
+    "excluded_blocks": [
+      {
+        "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+        "reason": "Unit ini TypeScript/Node tanpa target native yang dieksekusi; pustaka native hanya disentuh lewat batas media yang diaudit terpisah."
+      },
+      {
+        "block": "DESKTOP-MOBILE-AND-LOCAL-IPC.md#Core discipline",
+        "reason": "Tidak ada aplikasi desktop/mobile, deep link, atau IPC lokal pada surface ini."
+      },
+      {
+        "block": "AI-AND-LLM.md#Core discipline",
+        "reason": "Batas unit berhenti sebelum pipeline LLM; interaksi model dan tool diaudit di M11/M12/M10."
+      }
+    ],
+    "prior_status": "none",
+    "attempts": [],
+    "wave": 1,
+    "status": "planned",
+    "agent_id": null,
+    "reviewed_paths": [],
+    "local_checks": [],
+    "result_fingerprints": [],
+    "unresolved": [],
+    "module": "M07",
+    "check_ids": [
+      "M07-08"
+    ]
+  },
+  {
+    "coverage_id": "src%2Froutes%2Fadmin.route.ts%23RBAC%20preHandler::src%2Fdomain%2Frole-module-scopes.ts%23superAdminOnlyPrefixes::src%2Fdomain%2Frole-module-scopes.ts::ATTACK-CLASSES.md%23Access%20control",
+    "canonical_refs": {
+      "surface": "src/routes/admin.route.ts#RBAC preHandler",
+      "boundary": "src/domain/role-module-scopes.ts#superAdminOnlyPrefixes",
+      "subsystem": "src/domain/role-module-scopes.ts",
+      "attack_class": "ATTACK-CLASSES.md#Access control"
+    },
+    "surface": "src/routes/admin.route.ts#RBAC preHandler",
+    "boundary": "src/domain/role-module-scopes.ts#superAdminOnlyPrefixes",
+    "subsystem": "src/domain/role-module-scopes.ts",
+    "attack_class": "ATTACK-CLASSES.md#Access control",
+    "starting_paths": [
+      "src/domain/role-module-scopes.ts"
+    ],
+    "ordinary_attack_class_block": "ATTACK-CLASSES.md#Access control",
+    "selected_companion_blocks": [],
+    "excluded_blocks": [
+      {
+        "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+        "reason": "Unit ini TypeScript/Node tanpa target native yang dieksekusi; pustaka native hanya disentuh lewat batas media yang diaudit terpisah."
+      },
+      {
+        "block": "DESKTOP-MOBILE-AND-LOCAL-IPC.md#Core discipline",
+        "reason": "Tidak ada aplikasi desktop/mobile, deep link, atau IPC lokal pada surface ini."
+      },
+      {
+        "block": "AI-AND-LLM.md#Core discipline",
+        "reason": "Batas unit berhenti sebelum pipeline LLM; interaksi model dan tool diaudit di M11/M12/M10."
+      }
+    ],
+    "prior_status": "none",
+    "attempts": [],
+    "wave": 1,
+    "status": "planned",
+    "agent_id": null,
+    "reviewed_paths": [],
+    "local_checks": [],
+    "result_fingerprints": [],
+    "unresolved": [],
+    "module": "M06",
+    "check_ids": [
+      "M06-02"
+    ]
+  },
+  {
+    "coverage_id": "src%2Froutes%2Fadmin.route.ts%23RBAC%20preHandler::src%2Fservices%2Frole-scope.service.ts%23default%20deny::src%2Fservices%2Frole-scope.service.ts::ATTACK-CLASSES.md%23Access%20control",
+    "canonical_refs": {
+      "surface": "src/routes/admin.route.ts#RBAC preHandler",
+      "boundary": "src/services/role-scope.service.ts#default deny",
+      "subsystem": "src/services/role-scope.service.ts",
+      "attack_class": "ATTACK-CLASSES.md#Access control"
+    },
+    "surface": "src/routes/admin.route.ts#RBAC preHandler",
+    "boundary": "src/services/role-scope.service.ts#default deny",
+    "subsystem": "src/services/role-scope.service.ts",
+    "attack_class": "ATTACK-CLASSES.md#Access control",
+    "starting_paths": [
+      "src/services/role-scope.service.ts",
+      "src/routes/admin.route.ts"
+    ],
+    "ordinary_attack_class_block": "ATTACK-CLASSES.md#Access control",
+    "selected_companion_blocks": [],
+    "excluded_blocks": [
+      {
+        "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+        "reason": "Unit ini TypeScript/Node tanpa target native yang dieksekusi; pustaka native hanya disentuh lewat batas media yang diaudit terpisah."
+      },
+      {
+        "block": "DESKTOP-MOBILE-AND-LOCAL-IPC.md#Core discipline",
+        "reason": "Tidak ada aplikasi desktop/mobile, deep link, atau IPC lokal pada surface ini."
+      },
+      {
+        "block": "AI-AND-LLM.md#Core discipline",
+        "reason": "Batas unit berhenti sebelum pipeline LLM; interaksi model dan tool diaudit di M11/M12/M10."
+      }
+    ],
+    "prior_status": "none",
+    "attempts": [],
+    "wave": 1,
+    "status": "planned",
+    "agent_id": null,
+    "reviewed_paths": [],
+    "local_checks": [],
+    "result_fingerprints": [],
+    "unresolved": [],
+    "module": "M06",
+    "check_ids": [
+      "M06-01"
+    ]
+  },
+  {
+    "coverage_id": "src%2Froutes%2Fadmin.route.ts%23hook%20exemptions::src%2Froutes%2Fadmin.route.ts%23login%20and%20logout%20CSRF::src%2Froutes%2Fadmin.route.ts::WEB-PROTOCOL-AND-AUTH.md%23Ordinary%20CSRF",
+    "canonical_refs": {
+      "surface": "src/routes/admin.route.ts#hook exemptions",
+      "boundary": "src/routes/admin.route.ts#login and logout CSRF",
+      "subsystem": "src/routes/admin.route.ts",
+      "attack_class": "WEB-PROTOCOL-AND-AUTH.md#Ordinary CSRF"
+    },
+    "surface": "src/routes/admin.route.ts#hook exemptions",
+    "boundary": "src/routes/admin.route.ts#login and logout CSRF",
+    "subsystem": "src/routes/admin.route.ts",
+    "attack_class": "WEB-PROTOCOL-AND-AUTH.md#Ordinary CSRF",
+    "starting_paths": [
+      "src/routes/admin.route.ts",
+      "src/routes/staff.route.ts"
+    ],
+    "ordinary_attack_class_block": "ATTACK-CLASSES.md#Access control",
+    "selected_companion_blocks": [
+      "WEB-PROTOCOL-AND-AUTH.md#Core discipline",
+      "WEB-PROTOCOL-AND-AUTH.md#Universal moves",
+      "WEB-PROTOCOL-AND-AUTH.md#Validation rules"
+    ],
+    "excluded_blocks": [
+      {
+        "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+        "reason": "Unit ini TypeScript/Node tanpa target native yang dieksekusi; pustaka native hanya disentuh lewat batas media yang diaudit terpisah."
+      },
+      {
+        "block": "DESKTOP-MOBILE-AND-LOCAL-IPC.md#Core discipline",
+        "reason": "Tidak ada aplikasi desktop/mobile, deep link, atau IPC lokal pada surface ini."
+      },
+      {
+        "block": "AI-AND-LLM.md#Core discipline",
+        "reason": "Batas unit berhenti sebelum pipeline LLM; interaksi model dan tool diaudit di M11/M12/M10."
+      }
+    ],
+    "prior_status": "none",
+    "attempts": [],
+    "wave": 1,
+    "status": "planned",
+    "agent_id": null,
+    "reviewed_paths": [],
+    "local_checks": [],
+    "result_fingerprints": [],
+    "unresolved": [],
+    "module": "M04",
+    "check_ids": [
+      "M04-14"
+    ]
+  },
+  {
+    "coverage_id": "src%2Froutes%2Fstaff%2Fauth.subroute.ts%23POST%20%2Fapi%2Fstaff%2Fauth%2Flogin::src%2Froutes%2Fstaff%2Fauth.subroute.ts%23login%20lockout::src%2Froutes%2Fstaff%2Fauth.subroute.ts::ATTACK-CLASSES.md%23Access%20control",
+    "canonical_refs": {
+      "surface": "src/routes/staff/auth.subroute.ts#POST /api/staff/auth/login",
+      "boundary": "src/routes/staff/auth.subroute.ts#login lockout",
+      "subsystem": "src/routes/staff/auth.subroute.ts",
+      "attack_class": "ATTACK-CLASSES.md#Access control"
+    },
+    "surface": "src/routes/staff/auth.subroute.ts#POST /api/staff/auth/login",
+    "boundary": "src/routes/staff/auth.subroute.ts#login lockout",
+    "subsystem": "src/routes/staff/auth.subroute.ts",
+    "attack_class": "ATTACK-CLASSES.md#Access control",
+    "starting_paths": [
+      "src/routes/staff/auth.subroute.ts"
+    ],
+    "ordinary_attack_class_block": "ATTACK-CLASSES.md#Access control",
+    "selected_companion_blocks": [],
+    "excluded_blocks": [
+      {
+        "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+        "reason": "Unit ini TypeScript/Node tanpa target native yang dieksekusi; pustaka native hanya disentuh lewat batas media yang diaudit terpisah."
+      },
+      {
+        "block": "DESKTOP-MOBILE-AND-LOCAL-IPC.md#Core discipline",
+        "reason": "Tidak ada aplikasi desktop/mobile, deep link, atau IPC lokal pada surface ini."
+      },
+      {
+        "block": "AI-AND-LLM.md#Core discipline",
+        "reason": "Batas unit berhenti sebelum pipeline LLM; interaksi model dan tool diaudit di M11/M12/M10."
+      }
+    ],
+    "prior_status": "none",
+    "attempts": [],
+    "wave": 1,
+    "status": "planned",
+    "agent_id": null,
+    "reviewed_paths": [],
+    "local_checks": [],
+    "result_fingerprints": [],
+    "unresolved": [],
+    "module": "M05",
+    "check_ids": [
+      "M05-08"
+    ]
+  },
+  {
+    "coverage_id": "src%2Froutes%2Fstaff%2Fauth.subroute.ts%23POST%20%2Fapi%2Fstaff%2Fauth%2Flogout::src%2Fservices%2Fstaff-auth.service.ts%23logout%20revocation::src%2Fservices%2Fstaff-auth.service.ts::WEB-PROTOCOL-AND-AUTH.md%23Session%20fixation%20and%20invalidation",
+    "canonical_refs": {
+      "surface": "src/routes/staff/auth.subroute.ts#POST /api/staff/auth/logout",
+      "boundary": "src/services/staff-auth.service.ts#logout revocation",
+      "subsystem": "src/services/staff-auth.service.ts",
+      "attack_class": "WEB-PROTOCOL-AND-AUTH.md#Session fixation and invalidation"
+    },
+    "surface": "src/routes/staff/auth.subroute.ts#POST /api/staff/auth/logout",
+    "boundary": "src/services/staff-auth.service.ts#logout revocation",
+    "subsystem": "src/services/staff-auth.service.ts",
+    "attack_class": "WEB-PROTOCOL-AND-AUTH.md#Session fixation and invalidation",
+    "starting_paths": [
+      "src/services/staff-auth.service.ts",
+      "src/routes/staff/auth.subroute.ts"
+    ],
+    "ordinary_attack_class_block": "ATTACK-CLASSES.md#Access control",
+    "selected_companion_blocks": [
+      "WEB-PROTOCOL-AND-AUTH.md#Core discipline",
+      "WEB-PROTOCOL-AND-AUTH.md#Universal moves",
+      "WEB-PROTOCOL-AND-AUTH.md#Validation rules"
+    ],
+    "excluded_blocks": [
+      {
+        "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+        "reason": "Unit ini TypeScript/Node tanpa target native yang dieksekusi; pustaka native hanya disentuh lewat batas media yang diaudit terpisah."
+      },
+      {
+        "block": "DESKTOP-MOBILE-AND-LOCAL-IPC.md#Core discipline",
+        "reason": "Tidak ada aplikasi desktop/mobile, deep link, atau IPC lokal pada surface ini."
+      },
+      {
+        "block": "AI-AND-LLM.md#Core discipline",
+        "reason": "Batas unit berhenti sebelum pipeline LLM; interaksi model dan tool diaudit di M11/M12/M10."
+      }
+    ],
+    "prior_status": "none",
+    "attempts": [],
+    "wave": 1,
+    "status": "planned",
+    "agent_id": null,
+    "reviewed_paths": [],
+    "local_checks": [],
+    "result_fingerprints": [],
+    "unresolved": [],
+    "module": "M05",
+    "check_ids": [
+      "M05-07"
+    ]
+  },
+  {
+    "coverage_id": "src%2Froutes%2Fstaff%2Fauth.subroute.ts%23POST%20%2Fapi%2Fstaff%2Fauth%2Frestore::src%2Froutes%2Fstaff%2Fauth.subroute.ts%23pairing%20token::src%2Froutes%2Fstaff%2Fauth.subroute.ts::ATTACK-CLASSES.md%23Access%20control",
+    "canonical_refs": {
+      "surface": "src/routes/staff/auth.subroute.ts#POST /api/staff/auth/restore",
+      "boundary": "src/routes/staff/auth.subroute.ts#pairing token",
+      "subsystem": "src/routes/staff/auth.subroute.ts",
+      "attack_class": "ATTACK-CLASSES.md#Access control"
+    },
+    "surface": "src/routes/staff/auth.subroute.ts#POST /api/staff/auth/restore",
+    "boundary": "src/routes/staff/auth.subroute.ts#pairing token",
+    "subsystem": "src/routes/staff/auth.subroute.ts",
+    "attack_class": "ATTACK-CLASSES.md#Access control",
+    "starting_paths": [
+      "src/routes/staff/auth.subroute.ts"
+    ],
+    "ordinary_attack_class_block": "ATTACK-CLASSES.md#Access control",
+    "selected_companion_blocks": [],
+    "excluded_blocks": [
+      {
+        "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+        "reason": "Unit ini TypeScript/Node tanpa target native yang dieksekusi; pustaka native hanya disentuh lewat batas media yang diaudit terpisah."
+      },
+      {
+        "block": "DESKTOP-MOBILE-AND-LOCAL-IPC.md#Core discipline",
+        "reason": "Tidak ada aplikasi desktop/mobile, deep link, atau IPC lokal pada surface ini."
+      },
+      {
+        "block": "AI-AND-LLM.md#Core discipline",
+        "reason": "Batas unit berhenti sebelum pipeline LLM; interaksi model dan tool diaudit di M11/M12/M10."
+      }
+    ],
+    "prior_status": "none",
+    "attempts": [],
+    "wave": 1,
+    "status": "planned",
+    "agent_id": null,
+    "reviewed_paths": [],
+    "local_checks": [],
+    "result_fingerprints": [],
+    "unresolved": [],
+    "module": "M05",
+    "check_ids": [
+      "M05-01"
+    ]
+  },
+  {
+    "coverage_id": "src%2Froutes%2Fstaff%2Fauth.subroute.ts%23telegram%20pairing::src%2Froutes%2Fstaff%2Fauth.subroute.ts%23pairing%20token%20lifecycle::src%2Froutes%2Fstaff%2Fauth.subroute.ts::ATTACK-CLASSES.md%23Access%20control",
+    "canonical_refs": {
+      "surface": "src/routes/staff/auth.subroute.ts#telegram pairing",
+      "boundary": "src/routes/staff/auth.subroute.ts#pairing token lifecycle",
+      "subsystem": "src/routes/staff/auth.subroute.ts",
+      "attack_class": "ATTACK-CLASSES.md#Access control"
+    },
+    "surface": "src/routes/staff/auth.subroute.ts#telegram pairing",
+    "boundary": "src/routes/staff/auth.subroute.ts#pairing token lifecycle",
+    "subsystem": "src/routes/staff/auth.subroute.ts",
+    "attack_class": "ATTACK-CLASSES.md#Access control",
+    "starting_paths": [
+      "src/routes/staff/auth.subroute.ts"
+    ],
+    "ordinary_attack_class_block": "ATTACK-CLASSES.md#Access control",
+    "selected_companion_blocks": [],
+    "excluded_blocks": [
+      {
+        "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+        "reason": "Unit ini TypeScript/Node tanpa target native yang dieksekusi; pustaka native hanya disentuh lewat batas media yang diaudit terpisah."
+      },
+      {
+        "block": "DESKTOP-MOBILE-AND-LOCAL-IPC.md#Core discipline",
+        "reason": "Tidak ada aplikasi desktop/mobile, deep link, atau IPC lokal pada surface ini."
+      },
+      {
+        "block": "AI-AND-LLM.md#Core discipline",
+        "reason": "Batas unit berhenti sebelum pipeline LLM; interaksi model dan tool diaudit di M11/M12/M10."
+      }
+    ],
+    "prior_status": "none",
+    "attempts": [],
+    "wave": 1,
+    "status": "planned",
+    "agent_id": null,
+    "reviewed_paths": [],
+    "local_checks": [],
+    "result_fingerprints": [],
+    "unresolved": [],
+    "module": "M03",
+    "check_ids": [
+      "M03-06"
+    ]
+  },
+  {
+    "coverage_id": "src%2Froutes%2Fstaff%2Fscorecard.subroute.ts%23GET%20%2Fapi%2Fstaff%2Fscorecard%2Fme::src%2Froutes%2Fstaff%2Fscorecard.subroute.ts%23staffId%20source::src%2Froutes%2Fstaff%2Fscorecard.subroute.ts::ATTACK-CLASSES.md%23Access%20control",
+    "canonical_refs": {
+      "surface": "src/routes/staff/scorecard.subroute.ts#GET /api/staff/scorecard/me",
+      "boundary": "src/routes/staff/scorecard.subroute.ts#staffId source",
+      "subsystem": "src/routes/staff/scorecard.subroute.ts",
+      "attack_class": "ATTACK-CLASSES.md#Access control"
+    },
+    "surface": "src/routes/staff/scorecard.subroute.ts#GET /api/staff/scorecard/me",
+    "boundary": "src/routes/staff/scorecard.subroute.ts#staffId source",
+    "subsystem": "src/routes/staff/scorecard.subroute.ts",
+    "attack_class": "ATTACK-CLASSES.md#Access control",
+    "starting_paths": [
+      "src/routes/staff/scorecard.subroute.ts"
+    ],
+    "ordinary_attack_class_block": "ATTACK-CLASSES.md#Access control",
+    "selected_companion_blocks": [],
+    "excluded_blocks": [
+      {
+        "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+        "reason": "Unit ini TypeScript/Node tanpa target native yang dieksekusi; pustaka native hanya disentuh lewat batas media yang diaudit terpisah."
+      },
+      {
+        "block": "DESKTOP-MOBILE-AND-LOCAL-IPC.md#Core discipline",
+        "reason": "Tidak ada aplikasi desktop/mobile, deep link, atau IPC lokal pada surface ini."
+      },
+      {
+        "block": "AI-AND-LLM.md#Core discipline",
+        "reason": "Batas unit berhenti sebelum pipeline LLM; interaksi model dan tool diaudit di M11/M12/M10."
+      }
+    ],
+    "prior_status": "none",
+    "attempts": [],
+    "wave": 1,
+    "status": "planned",
+    "agent_id": null,
+    "reviewed_paths": [],
+    "local_checks": [],
+    "result_fingerprints": [],
+    "unresolved": [],
+    "module": "M05",
+    "check_ids": [
+      "M05-09"
+    ]
+  },
+  {
+    "coverage_id": "src%2Froutes%2Fstaff%2Ftoday.subroute.ts%23%2Fapi%2Fstaff%2F%2A::src%2Fservices%2Fstaff-reservation-access.service.ts%23tenant%20and%20assignment%20guard::src%2Fservices%2Fstaff-reservation-access.service.ts::DATA-ISOLATION-AND-LIFECYCLE.md%23Missing%20tenant%20or%20owner%20enforcement",
+    "canonical_refs": {
+      "surface": "src/routes/staff/today.subroute.ts#/api/staff/*",
+      "boundary": "src/services/staff-reservation-access.service.ts#tenant and assignment guard",
+      "subsystem": "src/services/staff-reservation-access.service.ts",
+      "attack_class": "DATA-ISOLATION-AND-LIFECYCLE.md#Missing tenant or owner enforcement"
+    },
+    "surface": "src/routes/staff/today.subroute.ts#/api/staff/*",
+    "boundary": "src/services/staff-reservation-access.service.ts#tenant and assignment guard",
+    "subsystem": "src/services/staff-reservation-access.service.ts",
+    "attack_class": "DATA-ISOLATION-AND-LIFECYCLE.md#Missing tenant or owner enforcement",
+    "starting_paths": [
+      "src/services/staff-reservation-access.service.ts",
+      "src/routes/staff/today.subroute.ts"
+    ],
+    "ordinary_attack_class_block": "ATTACK-CLASSES.md#Access control",
+    "selected_companion_blocks": [
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Core discipline",
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Missing tenant or owner enforcement",
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Universal moves",
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Validation rules"
+    ],
+    "excluded_blocks": [
+      {
+        "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+        "reason": "Unit ini TypeScript/Node tanpa target native yang dieksekusi; pustaka native hanya disentuh lewat batas media yang diaudit terpisah."
+      },
+      {
+        "block": "DESKTOP-MOBILE-AND-LOCAL-IPC.md#Core discipline",
+        "reason": "Tidak ada aplikasi desktop/mobile, deep link, atau IPC lokal pada surface ini."
+      },
+      {
+        "block": "AI-AND-LLM.md#Core discipline",
+        "reason": "Batas unit berhenti sebelum pipeline LLM; interaksi model dan tool diaudit di M11/M12/M10."
+      }
+    ],
+    "prior_status": "none",
+    "attempts": [],
+    "wave": 1,
+    "status": "planned",
+    "agent_id": null,
+    "reviewed_paths": [],
+    "local_checks": [],
+    "result_fingerprints": [],
+    "unresolved": [],
+    "module": "M05",
+    "check_ids": [
+      "M05-04"
+    ]
+  },
+  {
+    "coverage_id": "src%2Froutes%2Fstaff%2Ftoday.subroute.ts%23%2Fapi%2Fstaff%2F%2A::src%2Futils%2Fpii-masker.ts%23staff%20PII%20masking::src%2Futils%2Fpii-masker.ts::ATTACK-CLASSES.md%23Feature%20abuse%20and%20data%20leakage",
+    "canonical_refs": {
+      "surface": "src/routes/staff/today.subroute.ts#/api/staff/*",
+      "boundary": "src/utils/pii-masker.ts#staff PII masking",
+      "subsystem": "src/utils/pii-masker.ts",
+      "attack_class": "ATTACK-CLASSES.md#Feature abuse and data leakage"
+    },
+    "surface": "src/routes/staff/today.subroute.ts#/api/staff/*",
+    "boundary": "src/utils/pii-masker.ts#staff PII masking",
+    "subsystem": "src/utils/pii-masker.ts",
+    "attack_class": "ATTACK-CLASSES.md#Feature abuse and data leakage",
+    "starting_paths": [
+      "src/utils/pii-masker.ts",
+      "src/routes/staff/today.subroute.ts"
+    ],
+    "ordinary_attack_class_block": "ATTACK-CLASSES.md#Feature abuse and data leakage",
+    "selected_companion_blocks": [],
+    "excluded_blocks": [
+      {
+        "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+        "reason": "Unit ini TypeScript/Node tanpa target native yang dieksekusi; pustaka native hanya disentuh lewat batas media yang diaudit terpisah."
+      },
+      {
+        "block": "DESKTOP-MOBILE-AND-LOCAL-IPC.md#Core discipline",
+        "reason": "Tidak ada aplikasi desktop/mobile, deep link, atau IPC lokal pada surface ini."
+      },
+      {
+        "block": "AI-AND-LLM.md#Core discipline",
+        "reason": "Batas unit berhenti sebelum pipeline LLM; interaksi model dan tool diaudit di M11/M12/M10."
+      }
+    ],
+    "prior_status": "none",
+    "attempts": [],
+    "wave": 1,
+    "status": "planned",
+    "agent_id": null,
+    "reviewed_paths": [],
+    "local_checks": [],
+    "result_fingerprints": [],
+    "unresolved": [],
+    "module": "M05",
+    "check_ids": [
+      "M05-05"
+    ]
+  },
+  {
+    "coverage_id": "src%2Froutes%2Fstaff%2Ftoday.subroute.ts%23message%20edit%20and%20delete::src%2Froutes%2Fstaff%2Ftoday.subroute.ts%23message%20ownership::src%2Froutes%2Fstaff%2Ftoday.subroute.ts::ATTACK-CLASSES.md%23Access%20control",
+    "canonical_refs": {
+      "surface": "src/routes/staff/today.subroute.ts#message edit and delete",
+      "boundary": "src/routes/staff/today.subroute.ts#message ownership",
+      "subsystem": "src/routes/staff/today.subroute.ts",
+      "attack_class": "ATTACK-CLASSES.md#Access control"
+    },
+    "surface": "src/routes/staff/today.subroute.ts#message edit and delete",
+    "boundary": "src/routes/staff/today.subroute.ts#message ownership",
+    "subsystem": "src/routes/staff/today.subroute.ts",
+    "attack_class": "ATTACK-CLASSES.md#Access control",
+    "starting_paths": [
+      "src/routes/staff/today.subroute.ts"
+    ],
+    "ordinary_attack_class_block": "ATTACK-CLASSES.md#Access control",
+    "selected_companion_blocks": [],
+    "excluded_blocks": [
+      {
+        "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+        "reason": "Unit ini TypeScript/Node tanpa target native yang dieksekusi; pustaka native hanya disentuh lewat batas media yang diaudit terpisah."
+      },
+      {
+        "block": "DESKTOP-MOBILE-AND-LOCAL-IPC.md#Core discipline",
+        "reason": "Tidak ada aplikasi desktop/mobile, deep link, atau IPC lokal pada surface ini."
+      },
+      {
+        "block": "AI-AND-LLM.md#Core discipline",
+        "reason": "Batas unit berhenti sebelum pipeline LLM; interaksi model dan tool diaudit di M11/M12/M10."
+      }
+    ],
+    "prior_status": "none",
+    "attempts": [],
+    "wave": 1,
+    "status": "planned",
+    "agent_id": null,
+    "reviewed_paths": [],
+    "local_checks": [],
+    "result_fingerprints": [],
+    "unresolved": [],
+    "module": "M05",
+    "check_ids": [
+      "M05-10"
+    ]
+  },
+  {
+    "coverage_id": "src%2Froutes%2Fstaff.route.ts%23%2Fapi%2Fstaff%2F%2A::src%2Froutes%2Fadmin.route.ts%23staff_session%20accepted%20for%20admin%20API::src%2Froutes%2Fadmin.route.ts::ATTACK-CLASSES.md%23Access%20control",
+    "canonical_refs": {
+      "surface": "src/routes/staff.route.ts#/api/staff/*",
+      "boundary": "src/routes/admin.route.ts#staff_session accepted for admin API",
+      "subsystem": "src/routes/admin.route.ts",
+      "attack_class": "ATTACK-CLASSES.md#Access control"
+    },
+    "surface": "src/routes/staff.route.ts#/api/staff/*",
+    "boundary": "src/routes/admin.route.ts#staff_session accepted for admin API",
+    "subsystem": "src/routes/admin.route.ts",
+    "attack_class": "ATTACK-CLASSES.md#Access control",
+    "starting_paths": [
+      "src/routes/admin.route.ts",
+      "src/routes/staff.route.ts"
+    ],
+    "ordinary_attack_class_block": "ATTACK-CLASSES.md#Access control",
+    "selected_companion_blocks": [],
+    "excluded_blocks": [
+      {
+        "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+        "reason": "Unit ini TypeScript/Node tanpa target native yang dieksekusi; pustaka native hanya disentuh lewat batas media yang diaudit terpisah."
+      },
+      {
+        "block": "DESKTOP-MOBILE-AND-LOCAL-IPC.md#Core discipline",
+        "reason": "Tidak ada aplikasi desktop/mobile, deep link, atau IPC lokal pada surface ini."
+      },
+      {
+        "block": "AI-AND-LLM.md#Core discipline",
+        "reason": "Batas unit berhenti sebelum pipeline LLM; interaksi model dan tool diaudit di M11/M12/M10."
+      }
+    ],
+    "prior_status": "none",
+    "attempts": [],
+    "wave": 1,
+    "status": "planned",
+    "agent_id": null,
+    "reviewed_paths": [],
+    "local_checks": [],
+    "result_fingerprints": [],
+    "unresolved": [],
+    "module": "M05",
+    "check_ids": [
+      "M05-06"
+    ]
+  },
+  {
+    "coverage_id": "src%2Froutes%2Fstaff.route.ts%23%2Fapi%2Fstaff%2F%2A::src%2Froutes%2Fstaff.route.ts%23admin%20impersonation::src%2Froutes%2Fstaff.route.ts::DATA-ISOLATION-AND-LIFECYCLE.md%23Missing%20tenant%20or%20owner%20enforcement",
+    "canonical_refs": {
+      "surface": "src/routes/staff.route.ts#/api/staff/*",
+      "boundary": "src/routes/staff.route.ts#admin impersonation",
+      "subsystem": "src/routes/staff.route.ts",
+      "attack_class": "DATA-ISOLATION-AND-LIFECYCLE.md#Missing tenant or owner enforcement"
+    },
+    "surface": "src/routes/staff.route.ts#/api/staff/*",
+    "boundary": "src/routes/staff.route.ts#admin impersonation",
+    "subsystem": "src/routes/staff.route.ts",
+    "attack_class": "DATA-ISOLATION-AND-LIFECYCLE.md#Missing tenant or owner enforcement",
+    "starting_paths": [
+      "src/routes/staff.route.ts"
+    ],
+    "ordinary_attack_class_block": "ATTACK-CLASSES.md#Access control",
+    "selected_companion_blocks": [
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Core discipline",
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Missing tenant or owner enforcement",
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Universal moves",
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Validation rules"
+    ],
+    "excluded_blocks": [
+      {
+        "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+        "reason": "Unit ini TypeScript/Node tanpa target native yang dieksekusi; pustaka native hanya disentuh lewat batas media yang diaudit terpisah."
+      },
+      {
+        "block": "DESKTOP-MOBILE-AND-LOCAL-IPC.md#Core discipline",
+        "reason": "Tidak ada aplikasi desktop/mobile, deep link, atau IPC lokal pada surface ini."
+      },
+      {
+        "block": "AI-AND-LLM.md#Core discipline",
+        "reason": "Batas unit berhenti sebelum pipeline LLM; interaksi model dan tool diaudit di M11/M12/M10."
+      }
+    ],
+    "prior_status": "none",
+    "attempts": [],
+    "wave": 1,
+    "status": "planned",
+    "agent_id": null,
+    "reviewed_paths": [],
+    "local_checks": [],
+    "result_fingerprints": [],
+    "unresolved": [],
+    "module": "M05",
+    "check_ids": [
+      "M05-11"
+    ]
+  },
+  {
+    "coverage_id": "src%2Froutes%2Fstaff.route.ts%23%2Fapi%2Fstaff%2F%2A::src%2Froutes%2Fstaff.route.ts%23state-changing%20CSRF::src%2Froutes%2Fstaff.route.ts::WEB-PROTOCOL-AND-AUTH.md%23Ordinary%20CSRF",
+    "canonical_refs": {
+      "surface": "src/routes/staff.route.ts#/api/staff/*",
+      "boundary": "src/routes/staff.route.ts#state-changing CSRF",
+      "subsystem": "src/routes/staff.route.ts",
+      "attack_class": "WEB-PROTOCOL-AND-AUTH.md#Ordinary CSRF"
+    },
+    "surface": "src/routes/staff.route.ts#/api/staff/*",
+    "boundary": "src/routes/staff.route.ts#state-changing CSRF",
+    "subsystem": "src/routes/staff.route.ts",
+    "attack_class": "WEB-PROTOCOL-AND-AUTH.md#Ordinary CSRF",
+    "starting_paths": [
+      "src/routes/staff.route.ts"
+    ],
+    "ordinary_attack_class_block": "ATTACK-CLASSES.md#Access control",
+    "selected_companion_blocks": [
+      "WEB-PROTOCOL-AND-AUTH.md#Core discipline",
+      "WEB-PROTOCOL-AND-AUTH.md#Universal moves",
+      "WEB-PROTOCOL-AND-AUTH.md#Validation rules"
+    ],
+    "excluded_blocks": [
+      {
+        "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+        "reason": "Unit ini TypeScript/Node tanpa target native yang dieksekusi; pustaka native hanya disentuh lewat batas media yang diaudit terpisah."
+      },
+      {
+        "block": "DESKTOP-MOBILE-AND-LOCAL-IPC.md#Core discipline",
+        "reason": "Tidak ada aplikasi desktop/mobile, deep link, atau IPC lokal pada surface ini."
+      },
+      {
+        "block": "AI-AND-LLM.md#Core discipline",
+        "reason": "Batas unit berhenti sebelum pipeline LLM; interaksi model dan tool diaudit di M11/M12/M10."
+      }
+    ],
+    "prior_status": "none",
+    "attempts": [],
+    "wave": 1,
+    "status": "planned",
+    "agent_id": null,
+    "reviewed_paths": [],
+    "local_checks": [],
+    "result_fingerprints": [],
+    "unresolved": [],
+    "module": "M05",
+    "check_ids": [
+      "M05-12"
+    ]
+  },
+  {
+    "coverage_id": "src%2Froutes%2Fstaff.route.ts%23%2Fapi%2Fstaff%2F%2A::src%2Froutes%2Fstaff.route.ts%23tenant%20binding::src%2Froutes%2Fstaff.route.ts::DATA-ISOLATION-AND-LIFECYCLE.md%23Missing%20tenant%20or%20owner%20enforcement",
+    "canonical_refs": {
+      "surface": "src/routes/staff.route.ts#/api/staff/*",
+      "boundary": "src/routes/staff.route.ts#tenant binding",
+      "subsystem": "src/routes/staff.route.ts",
+      "attack_class": "DATA-ISOLATION-AND-LIFECYCLE.md#Missing tenant or owner enforcement"
+    },
+    "surface": "src/routes/staff.route.ts#/api/staff/*",
+    "boundary": "src/routes/staff.route.ts#tenant binding",
+    "subsystem": "src/routes/staff.route.ts",
+    "attack_class": "DATA-ISOLATION-AND-LIFECYCLE.md#Missing tenant or owner enforcement",
+    "starting_paths": [
+      "src/routes/staff.route.ts",
+      "src/routes/staff/today.subroute.ts"
+    ],
+    "ordinary_attack_class_block": "ATTACK-CLASSES.md#Access control",
+    "selected_companion_blocks": [
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Core discipline",
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Missing tenant or owner enforcement",
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Universal moves",
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Validation rules"
+    ],
+    "excluded_blocks": [
+      {
+        "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+        "reason": "Unit ini TypeScript/Node tanpa target native yang dieksekusi; pustaka native hanya disentuh lewat batas media yang diaudit terpisah."
+      },
+      {
+        "block": "DESKTOP-MOBILE-AND-LOCAL-IPC.md#Core discipline",
+        "reason": "Tidak ada aplikasi desktop/mobile, deep link, atau IPC lokal pada surface ini."
+      },
+      {
+        "block": "AI-AND-LLM.md#Core discipline",
+        "reason": "Batas unit berhenti sebelum pipeline LLM; interaksi model dan tool diaudit di M11/M12/M10."
+      }
+    ],
+    "prior_status": "none",
+    "attempts": [],
+    "wave": 1,
+    "status": "planned",
+    "agent_id": null,
+    "reviewed_paths": [],
+    "local_checks": [],
+    "result_fingerprints": [],
+    "unresolved": [],
+    "module": "M05",
+    "check_ids": [
+      "M05-13"
+    ]
+  },
+  {
+    "coverage_id": "src%2Froutes%2Fstaff.route.ts%23%2Fapi%2Fstaff%2F%2A::src%2Fservices%2Fstaff-auth.service.ts%23role%20resolution::src%2Fservices%2Fstaff-auth.service.ts::ATTACK-CLASSES.md%23Access%20control",
+    "canonical_refs": {
+      "surface": "src/routes/staff.route.ts#/api/staff/*",
+      "boundary": "src/services/staff-auth.service.ts#role resolution",
+      "subsystem": "src/services/staff-auth.service.ts",
+      "attack_class": "ATTACK-CLASSES.md#Access control"
+    },
+    "surface": "src/routes/staff.route.ts#/api/staff/*",
+    "boundary": "src/services/staff-auth.service.ts#role resolution",
+    "subsystem": "src/services/staff-auth.service.ts",
+    "attack_class": "ATTACK-CLASSES.md#Access control",
+    "starting_paths": [
+      "src/services/staff-auth.service.ts"
+    ],
+    "ordinary_attack_class_block": "ATTACK-CLASSES.md#Access control",
+    "selected_companion_blocks": [],
+    "excluded_blocks": [
+      {
+        "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+        "reason": "Unit ini TypeScript/Node tanpa target native yang dieksekusi; pustaka native hanya disentuh lewat batas media yang diaudit terpisah."
+      },
+      {
+        "block": "DESKTOP-MOBILE-AND-LOCAL-IPC.md#Core discipline",
+        "reason": "Tidak ada aplikasi desktop/mobile, deep link, atau IPC lokal pada surface ini."
+      },
+      {
+        "block": "AI-AND-LLM.md#Core discipline",
+        "reason": "Batas unit berhenti sebelum pipeline LLM; interaksi model dan tool diaudit di M11/M12/M10."
+      }
+    ],
+    "prior_status": "none",
+    "attempts": [],
+    "wave": 1,
+    "status": "planned",
+    "agent_id": null,
+    "reviewed_paths": [],
+    "local_checks": [],
+    "result_fingerprints": [],
+    "unresolved": [],
+    "module": "M05",
+    "check_ids": [
+      "M05-03"
+    ]
+  },
+  {
+    "coverage_id": "src%2Froutes%2Fstaff.route.ts%23%2Fapi%2Fstaff%2F%2A::src%2Fservices%2Fstaff-auth.service.ts%23session%20store::src%2Fservices%2Fstaff-auth.service.ts::WEB-PROTOCOL-AND-AUTH.md%23Session%20fixation%20and%20invalidation",
+    "canonical_refs": {
+      "surface": "src/routes/staff.route.ts#/api/staff/*",
+      "boundary": "src/services/staff-auth.service.ts#session store",
+      "subsystem": "src/services/staff-auth.service.ts",
+      "attack_class": "WEB-PROTOCOL-AND-AUTH.md#Session fixation and invalidation"
+    },
+    "surface": "src/routes/staff.route.ts#/api/staff/*",
+    "boundary": "src/services/staff-auth.service.ts#session store",
+    "subsystem": "src/services/staff-auth.service.ts",
+    "attack_class": "WEB-PROTOCOL-AND-AUTH.md#Session fixation and invalidation",
+    "starting_paths": [
+      "src/services/staff-auth.service.ts",
+      "src/routes/staff.route.ts"
+    ],
+    "ordinary_attack_class_block": "ATTACK-CLASSES.md#Access control",
+    "selected_companion_blocks": [
+      "WEB-PROTOCOL-AND-AUTH.md#Core discipline",
+      "WEB-PROTOCOL-AND-AUTH.md#Universal moves",
+      "WEB-PROTOCOL-AND-AUTH.md#Validation rules"
+    ],
+    "excluded_blocks": [
+      {
+        "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+        "reason": "Unit ini TypeScript/Node tanpa target native yang dieksekusi; pustaka native hanya disentuh lewat batas media yang diaudit terpisah."
+      },
+      {
+        "block": "DESKTOP-MOBILE-AND-LOCAL-IPC.md#Core discipline",
+        "reason": "Tidak ada aplikasi desktop/mobile, deep link, atau IPC lokal pada surface ini."
+      },
+      {
+        "block": "AI-AND-LLM.md#Core discipline",
+        "reason": "Batas unit berhenti sebelum pipeline LLM; interaksi model dan tool diaudit di M11/M12/M10."
+      }
+    ],
+    "prior_status": "none",
+    "attempts": [],
+    "wave": 1,
+    "status": "planned",
+    "agent_id": null,
+    "reviewed_paths": [],
+    "local_checks": [],
+    "result_fingerprints": [],
+    "unresolved": [],
+    "module": "M05",
+    "check_ids": [
+      "M05-02"
+    ]
+  },
+  {
+    "coverage_id": "src%2Froutes%2Ftelegram-webhook.route.ts%23%2Fstart%20token::src%2Fservices%2Fstaff-notification.service.ts%23pairing%20token%20lifecycle::src%2Fservices%2Fstaff-notification.service.ts::ATTACK-CLASSES.md%23Access%20control",
+    "canonical_refs": {
+      "surface": "src/routes/telegram-webhook.route.ts#/start token",
+      "boundary": "src/services/staff-notification.service.ts#pairing token lifecycle",
+      "subsystem": "src/services/staff-notification.service.ts",
+      "attack_class": "ATTACK-CLASSES.md#Access control"
+    },
+    "surface": "src/routes/telegram-webhook.route.ts#/start token",
+    "boundary": "src/services/staff-notification.service.ts#pairing token lifecycle",
+    "subsystem": "src/services/staff-notification.service.ts",
+    "attack_class": "ATTACK-CLASSES.md#Access control",
+    "starting_paths": [
+      "src/routes/telegram-webhook.route.ts",
+      "src/services/staff-notification.service.ts"
+    ],
+    "ordinary_attack_class_block": "ATTACK-CLASSES.md#Access control",
+    "selected_companion_blocks": [],
+    "excluded_blocks": [
+      {
+        "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+        "reason": "Unit ini TypeScript/Node tanpa target native yang dieksekusi; pustaka native hanya disentuh lewat batas media yang diaudit terpisah."
+      },
+      {
+        "block": "DESKTOP-MOBILE-AND-LOCAL-IPC.md#Core discipline",
+        "reason": "Tidak ada aplikasi desktop/mobile, deep link, atau IPC lokal pada surface ini."
+      },
+      {
+        "block": "AI-AND-LLM.md#Core discipline",
+        "reason": "Batas unit berhenti sebelum pipeline LLM; interaksi model dan tool diaudit di M11/M12/M10."
+      }
+    ],
+    "prior_status": "none",
+    "attempts": [],
+    "wave": 1,
+    "status": "planned",
+    "agent_id": null,
+    "reviewed_paths": [],
+    "local_checks": [],
+    "result_fingerprints": [],
+    "unresolved": [],
+    "module": "M05",
+    "check_ids": [
+      "M05-14"
+    ]
+  },
+  {
+    "coverage_id": "src%2Froutes%2Ftelegram-webhook.route.ts%23POST%20%2Fapi%2Fwebhook%2Ftelegram::src%2Froutes%2Ftelegram-webhook.route.ts%23%2Fclean%20handler::src%2Froutes%2Ftelegram-webhook.route.ts::ATTACK-CLASSES.md%23Access%20control",
+    "canonical_refs": {
+      "surface": "src/routes/telegram-webhook.route.ts#POST /api/webhook/telegram",
+      "boundary": "src/routes/telegram-webhook.route.ts#/clean handler",
+      "subsystem": "src/routes/telegram-webhook.route.ts",
+      "attack_class": "ATTACK-CLASSES.md#Access control"
+    },
+    "surface": "src/routes/telegram-webhook.route.ts#POST /api/webhook/telegram",
+    "boundary": "src/routes/telegram-webhook.route.ts#/clean handler",
+    "subsystem": "src/routes/telegram-webhook.route.ts",
+    "attack_class": "ATTACK-CLASSES.md#Access control",
+    "starting_paths": [
+      "src/routes/telegram-webhook.route.ts",
+      "scripts/clean-trigger.sh"
+    ],
+    "ordinary_attack_class_block": "ATTACK-CLASSES.md#Access control",
+    "selected_companion_blocks": [],
+    "excluded_blocks": [
+      {
+        "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+        "reason": "Unit ini TypeScript/Node tanpa target native yang dieksekusi; pustaka native hanya disentuh lewat batas media yang diaudit terpisah."
+      },
+      {
+        "block": "DESKTOP-MOBILE-AND-LOCAL-IPC.md#Core discipline",
+        "reason": "Tidak ada aplikasi desktop/mobile, deep link, atau IPC lokal pada surface ini."
+      },
+      {
+        "block": "AI-AND-LLM.md#Core discipline",
+        "reason": "Batas unit berhenti sebelum pipeline LLM; interaksi model dan tool diaudit di M11/M12/M10."
+      }
+    ],
+    "prior_status": "none",
+    "attempts": [],
+    "wave": 1,
+    "status": "planned",
+    "agent_id": null,
+    "reviewed_paths": [],
+    "local_checks": [],
+    "result_fingerprints": [],
+    "unresolved": [],
+    "module": "M03",
+    "check_ids": [
+      "M03-09"
+    ]
+  },
+  {
+    "coverage_id": "src%2Froutes%2Ftelegram-webhook.route.ts%23POST%20%2Fapi%2Fwebhook%2Ftelegram::src%2Froutes%2Ftelegram-webhook.route.ts%23%2Fserver%20handler::src%2Froutes%2Ftelegram-webhook.route.ts::ATTACK-CLASSES.md%23Feature%20abuse%20and%20data%20leakage",
+    "canonical_refs": {
+      "surface": "src/routes/telegram-webhook.route.ts#POST /api/webhook/telegram",
+      "boundary": "src/routes/telegram-webhook.route.ts#/server handler",
+      "subsystem": "src/routes/telegram-webhook.route.ts",
+      "attack_class": "ATTACK-CLASSES.md#Feature abuse and data leakage"
+    },
+    "surface": "src/routes/telegram-webhook.route.ts#POST /api/webhook/telegram",
+    "boundary": "src/routes/telegram-webhook.route.ts#/server handler",
+    "subsystem": "src/routes/telegram-webhook.route.ts",
+    "attack_class": "ATTACK-CLASSES.md#Feature abuse and data leakage",
+    "starting_paths": [
+      "src/routes/telegram-webhook.route.ts"
+    ],
+    "ordinary_attack_class_block": "ATTACK-CLASSES.md#Feature abuse and data leakage",
+    "selected_companion_blocks": [],
+    "excluded_blocks": [
+      {
+        "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+        "reason": "Unit ini TypeScript/Node tanpa target native yang dieksekusi; pustaka native hanya disentuh lewat batas media yang diaudit terpisah."
+      },
+      {
+        "block": "DESKTOP-MOBILE-AND-LOCAL-IPC.md#Core discipline",
+        "reason": "Tidak ada aplikasi desktop/mobile, deep link, atau IPC lokal pada surface ini."
+      },
+      {
+        "block": "AI-AND-LLM.md#Core discipline",
+        "reason": "Batas unit berhenti sebelum pipeline LLM; interaksi model dan tool diaudit di M11/M12/M10."
+      }
+    ],
+    "prior_status": "none",
+    "attempts": [],
+    "wave": 1,
+    "status": "planned",
+    "agent_id": null,
+    "reviewed_paths": [],
+    "local_checks": [],
+    "result_fingerprints": [],
+    "unresolved": [],
+    "module": "M03",
+    "check_ids": [
+      "M03-10"
+    ]
+  },
+  {
+    "coverage_id": "src%2Froutes%2Ftelegram-webhook.route.ts%23POST%20%2Fapi%2Fwebhook%2Ftelegram::src%2Froutes%2Ftelegram-webhook.route.ts%23chat%20allowlist::src%2Froutes%2Ftelegram-webhook.route.ts::ATTACK-CLASSES.md%23Access%20control",
+    "canonical_refs": {
+      "surface": "src/routes/telegram-webhook.route.ts#POST /api/webhook/telegram",
+      "boundary": "src/routes/telegram-webhook.route.ts#chat allowlist",
+      "subsystem": "src/routes/telegram-webhook.route.ts",
+      "attack_class": "ATTACK-CLASSES.md#Access control"
+    },
+    "surface": "src/routes/telegram-webhook.route.ts#POST /api/webhook/telegram",
+    "boundary": "src/routes/telegram-webhook.route.ts#chat allowlist",
+    "subsystem": "src/routes/telegram-webhook.route.ts",
+    "attack_class": "ATTACK-CLASSES.md#Access control",
+    "starting_paths": [
+      "src/routes/telegram-webhook.route.ts"
+    ],
+    "ordinary_attack_class_block": "ATTACK-CLASSES.md#Access control",
+    "selected_companion_blocks": [],
+    "excluded_blocks": [
+      {
+        "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+        "reason": "Unit ini TypeScript/Node tanpa target native yang dieksekusi; pustaka native hanya disentuh lewat batas media yang diaudit terpisah."
+      },
+      {
+        "block": "DESKTOP-MOBILE-AND-LOCAL-IPC.md#Core discipline",
+        "reason": "Tidak ada aplikasi desktop/mobile, deep link, atau IPC lokal pada surface ini."
+      },
+      {
+        "block": "AI-AND-LLM.md#Core discipline",
+        "reason": "Batas unit berhenti sebelum pipeline LLM; interaksi model dan tool diaudit di M11/M12/M10."
+      }
+    ],
+    "prior_status": "none",
+    "attempts": [],
+    "wave": 1,
+    "status": "planned",
+    "agent_id": null,
+    "reviewed_paths": [],
+    "local_checks": [],
+    "result_fingerprints": [],
+    "unresolved": [],
+    "module": "M03",
+    "check_ids": [
+      "M03-02"
+    ]
+  },
+  {
+    "coverage_id": "src%2Froutes%2Ftelegram-webhook.route.ts%23POST%20%2Fapi%2Fwebhook%2Ftelegram::src%2Froutes%2Ftelegram-webhook.route.ts%23secret%20token%20guard::src%2Froutes%2Ftelegram-webhook.route.ts::ATTACK-CLASSES.md%23Access%20control",
+    "canonical_refs": {
+      "surface": "src/routes/telegram-webhook.route.ts#POST /api/webhook/telegram",
+      "boundary": "src/routes/telegram-webhook.route.ts#secret token guard",
+      "subsystem": "src/routes/telegram-webhook.route.ts",
+      "attack_class": "ATTACK-CLASSES.md#Access control"
+    },
+    "surface": "src/routes/telegram-webhook.route.ts#POST /api/webhook/telegram",
+    "boundary": "src/routes/telegram-webhook.route.ts#secret token guard",
+    "subsystem": "src/routes/telegram-webhook.route.ts",
+    "attack_class": "ATTACK-CLASSES.md#Access control",
+    "starting_paths": [
+      "src/routes/telegram-webhook.route.ts"
+    ],
+    "ordinary_attack_class_block": "ATTACK-CLASSES.md#Access control",
+    "selected_companion_blocks": [],
+    "excluded_blocks": [
+      {
+        "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+        "reason": "Unit ini TypeScript/Node tanpa target native yang dieksekusi; pustaka native hanya disentuh lewat batas media yang diaudit terpisah."
+      },
+      {
+        "block": "DESKTOP-MOBILE-AND-LOCAL-IPC.md#Core discipline",
+        "reason": "Tidak ada aplikasi desktop/mobile, deep link, atau IPC lokal pada surface ini."
+      },
+      {
+        "block": "AI-AND-LLM.md#Core discipline",
+        "reason": "Batas unit berhenti sebelum pipeline LLM; interaksi model dan tool diaudit di M11/M12/M10."
+      }
+    ],
+    "prior_status": "none",
+    "attempts": [],
+    "wave": 1,
+    "status": "planned",
+    "agent_id": null,
+    "reviewed_paths": [],
+    "local_checks": [],
+    "result_fingerprints": [],
+    "unresolved": [],
+    "module": "M03",
+    "check_ids": [
+      "M03-01"
+    ]
+  },
+  {
+    "coverage_id": "src%2Froutes%2Ftelegram-webhook.route.ts%23POST%20%2Fapi%2Fwebhook%2Ftelegram::src%2Froutes%2Ftelegram-webhook.route.ts%23update%20replay::src%2Froutes%2Ftelegram-webhook.route.ts::PROTOCOLS-RPC-AND-MESSAGING.md%23Duplicate%20delivery%20and%20idempotency%20gaps",
+    "canonical_refs": {
+      "surface": "src/routes/telegram-webhook.route.ts#POST /api/webhook/telegram",
+      "boundary": "src/routes/telegram-webhook.route.ts#update replay",
+      "subsystem": "src/routes/telegram-webhook.route.ts",
+      "attack_class": "PROTOCOLS-RPC-AND-MESSAGING.md#Duplicate delivery and idempotency gaps"
+    },
+    "surface": "src/routes/telegram-webhook.route.ts#POST /api/webhook/telegram",
+    "boundary": "src/routes/telegram-webhook.route.ts#update replay",
+    "subsystem": "src/routes/telegram-webhook.route.ts",
+    "attack_class": "PROTOCOLS-RPC-AND-MESSAGING.md#Duplicate delivery and idempotency gaps",
+    "starting_paths": [
+      "src/routes/telegram-webhook.route.ts"
+    ],
+    "ordinary_attack_class_block": "ATTACK-CLASSES.md#Business logic",
+    "selected_companion_blocks": [
+      "PROTOCOLS-RPC-AND-MESSAGING.md#Core discipline",
+      "PROTOCOLS-RPC-AND-MESSAGING.md#Universal moves",
+      "PROTOCOLS-RPC-AND-MESSAGING.md#Validation rules"
+    ],
+    "excluded_blocks": [
+      {
+        "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+        "reason": "Unit ini TypeScript/Node tanpa target native yang dieksekusi; pustaka native hanya disentuh lewat batas media yang diaudit terpisah."
+      },
+      {
+        "block": "DESKTOP-MOBILE-AND-LOCAL-IPC.md#Core discipline",
+        "reason": "Tidak ada aplikasi desktop/mobile, deep link, atau IPC lokal pada surface ini."
+      },
+      {
+        "block": "AI-AND-LLM.md#Core discipline",
+        "reason": "Batas unit berhenti sebelum pipeline LLM; interaksi model dan tool diaudit di M11/M12/M10."
+      }
+    ],
+    "prior_status": "none",
+    "attempts": [],
+    "wave": 1,
+    "status": "planned",
+    "agent_id": null,
+    "reviewed_paths": [],
+    "local_checks": [],
+    "result_fingerprints": [],
+    "unresolved": [],
+    "module": "M03",
+    "check_ids": [
+      "M03-07"
+    ]
+  },
+  {
+    "coverage_id": "src%2Froutes%2Ftelegram-webhook.route.ts%23POST%20%2Fapi%2Fwebhook%2Ftelegram::src%2Fservices%2Fcommand.service.ts%23telegram%20commands::src%2Fservices%2Fcommand.service.ts::ATTACK-CLASSES.md%23Injection",
+    "canonical_refs": {
+      "surface": "src/routes/telegram-webhook.route.ts#POST /api/webhook/telegram",
+      "boundary": "src/services/command.service.ts#telegram commands",
+      "subsystem": "src/services/command.service.ts",
+      "attack_class": "ATTACK-CLASSES.md#Injection"
+    },
+    "surface": "src/routes/telegram-webhook.route.ts#POST /api/webhook/telegram",
+    "boundary": "src/services/command.service.ts#telegram commands",
+    "subsystem": "src/services/command.service.ts",
+    "attack_class": "ATTACK-CLASSES.md#Injection",
+    "starting_paths": [
+      "src/services/command.service.ts",
+      "src/routes/telegram-webhook.route.ts"
+    ],
+    "ordinary_attack_class_block": "ATTACK-CLASSES.md#Injection",
+    "selected_companion_blocks": [],
+    "excluded_blocks": [
+      {
+        "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+        "reason": "Unit ini TypeScript/Node tanpa target native yang dieksekusi; pustaka native hanya disentuh lewat batas media yang diaudit terpisah."
+      },
+      {
+        "block": "DESKTOP-MOBILE-AND-LOCAL-IPC.md#Core discipline",
+        "reason": "Tidak ada aplikasi desktop/mobile, deep link, atau IPC lokal pada surface ini."
+      },
+      {
+        "block": "AI-AND-LLM.md#Core discipline",
+        "reason": "Batas unit berhenti sebelum pipeline LLM; interaksi model dan tool diaudit di M11/M12/M10."
+      }
+    ],
+    "prior_status": "none",
+    "attempts": [],
+    "wave": 1,
+    "status": "planned",
+    "agent_id": null,
+    "reviewed_paths": [],
+    "local_checks": [],
+    "result_fingerprints": [],
+    "unresolved": [],
+    "module": "M03",
+    "check_ids": [
+      "M03-03"
+    ]
+  },
+  {
+    "coverage_id": "src%2Froutes%2Fwaba-webhook.route.ts%23GET%20%2Fapi%2Fwebhook%2Fwaba::src%2Froutes%2Fwaba-webhook.route.ts%23hub.verify_token::src%2Froutes%2Fwaba-webhook.route.ts::WEB-PROTOCOL-AND-AUTH.md%23Host%20and%20forwarded-header%20trust",
+    "canonical_refs": {
+      "surface": "src/routes/waba-webhook.route.ts#GET /api/webhook/waba",
+      "boundary": "src/routes/waba-webhook.route.ts#hub.verify_token",
+      "subsystem": "src/routes/waba-webhook.route.ts",
+      "attack_class": "WEB-PROTOCOL-AND-AUTH.md#Host and forwarded-header trust"
+    },
+    "surface": "src/routes/waba-webhook.route.ts#GET /api/webhook/waba",
+    "boundary": "src/routes/waba-webhook.route.ts#hub.verify_token",
+    "subsystem": "src/routes/waba-webhook.route.ts",
+    "attack_class": "WEB-PROTOCOL-AND-AUTH.md#Host and forwarded-header trust",
+    "starting_paths": [
+      "src/routes/waba-webhook.route.ts"
+    ],
+    "ordinary_attack_class_block": "ATTACK-CLASSES.md#Access control",
+    "selected_companion_blocks": [
+      "WEB-PROTOCOL-AND-AUTH.md#Core discipline",
+      "WEB-PROTOCOL-AND-AUTH.md#Universal moves",
+      "WEB-PROTOCOL-AND-AUTH.md#Validation rules"
+    ],
+    "excluded_blocks": [
+      {
+        "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+        "reason": "Unit ini TypeScript/Node tanpa target native yang dieksekusi; pustaka native hanya disentuh lewat batas media yang diaudit terpisah."
+      },
+      {
+        "block": "DESKTOP-MOBILE-AND-LOCAL-IPC.md#Core discipline",
+        "reason": "Tidak ada aplikasi desktop/mobile, deep link, atau IPC lokal pada surface ini."
+      },
+      {
+        "block": "AI-AND-LLM.md#Core discipline",
+        "reason": "Batas unit berhenti sebelum pipeline LLM; interaksi model dan tool diaudit di M11/M12/M10."
+      }
+    ],
+    "prior_status": "none",
+    "attempts": [],
+    "wave": 1,
+    "status": "planned",
+    "agent_id": null,
+    "reviewed_paths": [],
+    "local_checks": [],
+    "result_fingerprints": [],
+    "unresolved": [],
+    "module": "M02",
+    "check_ids": [
+      "M02-01",
+      "M02-10"
+    ]
+  },
+  {
+    "coverage_id": "src%2Froutes%2Fwaba-webhook.route.ts%23POST%20%2Fapi%2Fwebhook%2Fwaba::src%2Fintegrations%2Fwhatsapp%2Fsignature.ts%23verifyMetaSignature::src%2Fintegrations%2Fwhatsapp%2Fsignature.ts::ATTACK-CLASSES.md%23Cryptography%20and%20secrets",
+    "canonical_refs": {
+      "surface": "src/routes/waba-webhook.route.ts#POST /api/webhook/waba",
+      "boundary": "src/integrations/whatsapp/signature.ts#verifyMetaSignature",
+      "subsystem": "src/integrations/whatsapp/signature.ts",
+      "attack_class": "ATTACK-CLASSES.md#Cryptography and secrets"
+    },
+    "surface": "src/routes/waba-webhook.route.ts#POST /api/webhook/waba",
+    "boundary": "src/integrations/whatsapp/signature.ts#verifyMetaSignature",
+    "subsystem": "src/integrations/whatsapp/signature.ts",
+    "attack_class": "ATTACK-CLASSES.md#Cryptography and secrets",
+    "starting_paths": [
+      "src/integrations/whatsapp/signature.ts",
+      "src/routes/waba-webhook.route.ts"
+    ],
+    "ordinary_attack_class_block": "ATTACK-CLASSES.md#Cryptography and secrets",
+    "selected_companion_blocks": [],
+    "excluded_blocks": [
+      {
+        "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+        "reason": "Unit ini TypeScript/Node tanpa target native yang dieksekusi; pustaka native hanya disentuh lewat batas media yang diaudit terpisah."
+      },
+      {
+        "block": "DESKTOP-MOBILE-AND-LOCAL-IPC.md#Core discipline",
+        "reason": "Tidak ada aplikasi desktop/mobile, deep link, atau IPC lokal pada surface ini."
+      },
+      {
+        "block": "AI-AND-LLM.md#Core discipline",
+        "reason": "Batas unit berhenti sebelum pipeline LLM; interaksi model dan tool diaudit di M11/M12/M10."
+      }
+    ],
+    "prior_status": "none",
+    "attempts": [],
+    "wave": 1,
+    "status": "planned",
+    "agent_id": null,
+    "reviewed_paths": [],
+    "local_checks": [],
+    "result_fingerprints": [],
+    "unresolved": [],
+    "module": "M02",
+    "check_ids": [
+      "M02-02"
+    ]
+  },
+  {
+    "coverage_id": "src%2Froutes%2Fwaba-webhook.route.ts%23POST%20%2Fapi%2Fwebhook%2Fwaba::src%2Froutes%2Fwaba-webhook.route.ts%23allowUnsigned::src%2Froutes%2Fwaba-webhook.route.ts::ATTACK-CLASSES.md%23Access%20control",
+    "canonical_refs": {
+      "surface": "src/routes/waba-webhook.route.ts#POST /api/webhook/waba",
+      "boundary": "src/routes/waba-webhook.route.ts#allowUnsigned",
+      "subsystem": "src/routes/waba-webhook.route.ts",
+      "attack_class": "ATTACK-CLASSES.md#Access control"
+    },
+    "surface": "src/routes/waba-webhook.route.ts#POST /api/webhook/waba",
+    "boundary": "src/routes/waba-webhook.route.ts#allowUnsigned",
+    "subsystem": "src/routes/waba-webhook.route.ts",
+    "attack_class": "ATTACK-CLASSES.md#Access control",
+    "starting_paths": [
+      "src/routes/waba-webhook.route.ts",
+      "src/app.ts"
+    ],
+    "ordinary_attack_class_block": "ATTACK-CLASSES.md#Access control",
+    "selected_companion_blocks": [],
+    "excluded_blocks": [
+      {
+        "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+        "reason": "Unit ini TypeScript/Node tanpa target native yang dieksekusi; pustaka native hanya disentuh lewat batas media yang diaudit terpisah."
+      },
+      {
+        "block": "DESKTOP-MOBILE-AND-LOCAL-IPC.md#Core discipline",
+        "reason": "Tidak ada aplikasi desktop/mobile, deep link, atau IPC lokal pada surface ini."
+      },
+      {
+        "block": "AI-AND-LLM.md#Core discipline",
+        "reason": "Batas unit berhenti sebelum pipeline LLM; interaksi model dan tool diaudit di M11/M12/M10."
+      }
+    ],
+    "prior_status": "none",
+    "attempts": [],
+    "wave": 1,
+    "status": "planned",
+    "agent_id": null,
+    "reviewed_paths": [],
+    "local_checks": [],
+    "result_fingerprints": [],
+    "unresolved": [],
+    "module": "M02",
+    "check_ids": [
+      "M02-03",
+      "M02-11"
+    ]
+  },
+  {
+    "coverage_id": "src%2Froutes%2Fwaba-webhook.route.ts%23POST%20%2Fapi%2Fwebhook%2Fwaba::src%2Froutes%2Fwaba-webhook.route.ts%23media%20download::src%2Froutes%2Fwaba-webhook.route.ts::RESOURCE-EXHAUSTION-AND-AVAILABILITY.md%23Unbounded%20buffering%20and%20cardinality",
+    "canonical_refs": {
+      "surface": "src/routes/waba-webhook.route.ts#POST /api/webhook/waba",
+      "boundary": "src/routes/waba-webhook.route.ts#media download",
+      "subsystem": "src/routes/waba-webhook.route.ts",
+      "attack_class": "RESOURCE-EXHAUSTION-AND-AVAILABILITY.md#Unbounded buffering and cardinality"
+    },
+    "surface": "src/routes/waba-webhook.route.ts#POST /api/webhook/waba",
+    "boundary": "src/routes/waba-webhook.route.ts#media download",
+    "subsystem": "src/routes/waba-webhook.route.ts",
+    "attack_class": "RESOURCE-EXHAUSTION-AND-AVAILABILITY.md#Unbounded buffering and cardinality",
+    "starting_paths": [
+      "src/routes/waba-webhook.route.ts",
+      "src/integrations/whatsapp/media.ts"
+    ],
+    "ordinary_attack_class_block": "ATTACK-CLASSES.md#Resource and file handling",
+    "selected_companion_blocks": [
+      "RESOURCE-EXHAUSTION-AND-AVAILABILITY.md#Core discipline",
+      "RESOURCE-EXHAUSTION-AND-AVAILABILITY.md#Universal moves",
+      "RESOURCE-EXHAUSTION-AND-AVAILABILITY.md#Validation rules"
+    ],
+    "excluded_blocks": [
+      {
+        "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+        "reason": "Unit ini TypeScript/Node tanpa target native yang dieksekusi; pustaka native hanya disentuh lewat batas media yang diaudit terpisah."
+      },
+      {
+        "block": "DESKTOP-MOBILE-AND-LOCAL-IPC.md#Core discipline",
+        "reason": "Tidak ada aplikasi desktop/mobile, deep link, atau IPC lokal pada surface ini."
+      },
+      {
+        "block": "AI-AND-LLM.md#Core discipline",
+        "reason": "Batas unit berhenti sebelum pipeline LLM; interaksi model dan tool diaudit di M11/M12/M10."
+      }
+    ],
+    "prior_status": "none",
+    "attempts": [],
+    "wave": 1,
+    "status": "planned",
+    "agent_id": null,
+    "reviewed_paths": [],
+    "local_checks": [],
+    "result_fingerprints": [],
+    "unresolved": [],
+    "module": "M02",
+    "check_ids": [
+      "M02-06",
+      "M02-12"
+    ]
+  },
+  {
+    "coverage_id": "src%2Froutes%2Fwaba-webhook.route.ts%23POST%20%2Fapi%2Fwebhook%2Fwaba::src%2Froutes%2Fwaba-webhook.route.ts%23message%20dedup::src%2Froutes%2Fwaba-webhook.route.ts::PROTOCOLS-RPC-AND-MESSAGING.md%23Duplicate%20delivery%20and%20idempotency%20gaps",
+    "canonical_refs": {
+      "surface": "src/routes/waba-webhook.route.ts#POST /api/webhook/waba",
+      "boundary": "src/routes/waba-webhook.route.ts#message dedup",
+      "subsystem": "src/routes/waba-webhook.route.ts",
+      "attack_class": "PROTOCOLS-RPC-AND-MESSAGING.md#Duplicate delivery and idempotency gaps"
+    },
+    "surface": "src/routes/waba-webhook.route.ts#POST /api/webhook/waba",
+    "boundary": "src/routes/waba-webhook.route.ts#message dedup",
+    "subsystem": "src/routes/waba-webhook.route.ts",
+    "attack_class": "PROTOCOLS-RPC-AND-MESSAGING.md#Duplicate delivery and idempotency gaps",
+    "starting_paths": [
+      "src/routes/waba-webhook.route.ts"
+    ],
+    "ordinary_attack_class_block": "ATTACK-CLASSES.md#Business logic",
+    "selected_companion_blocks": [
+      "PROTOCOLS-RPC-AND-MESSAGING.md#Core discipline",
+      "PROTOCOLS-RPC-AND-MESSAGING.md#Universal moves",
+      "PROTOCOLS-RPC-AND-MESSAGING.md#Validation rules"
+    ],
+    "excluded_blocks": [
+      {
+        "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+        "reason": "Unit ini TypeScript/Node tanpa target native yang dieksekusi; pustaka native hanya disentuh lewat batas media yang diaudit terpisah."
+      },
+      {
+        "block": "DESKTOP-MOBILE-AND-LOCAL-IPC.md#Core discipline",
+        "reason": "Tidak ada aplikasi desktop/mobile, deep link, atau IPC lokal pada surface ini."
+      },
+      {
+        "block": "AI-AND-LLM.md#Core discipline",
+        "reason": "Batas unit berhenti sebelum pipeline LLM; interaksi model dan tool diaudit di M11/M12/M10."
+      }
+    ],
+    "prior_status": "none",
+    "attempts": [],
+    "wave": 1,
+    "status": "planned",
+    "agent_id": null,
+    "reviewed_paths": [],
+    "local_checks": [],
+    "result_fingerprints": [],
+    "unresolved": [],
+    "module": "M02",
+    "check_ids": [
+      "M02-07"
+    ]
+  },
+  {
+    "coverage_id": "src%2Froutes%2Fwaba-webhook.route.ts%23POST%20%2Fapi%2Fwebhook%2Fwaba::src%2Froutes%2Fwaba-webhook.route.ts%23payload%20logging::src%2Froutes%2Fwaba-webhook.route.ts::ATTACK-CLASSES.md%23Feature%20abuse%20and%20data%20leakage",
+    "canonical_refs": {
+      "surface": "src/routes/waba-webhook.route.ts#POST /api/webhook/waba",
+      "boundary": "src/routes/waba-webhook.route.ts#payload logging",
+      "subsystem": "src/routes/waba-webhook.route.ts",
+      "attack_class": "ATTACK-CLASSES.md#Feature abuse and data leakage"
+    },
+    "surface": "src/routes/waba-webhook.route.ts#POST /api/webhook/waba",
+    "boundary": "src/routes/waba-webhook.route.ts#payload logging",
+    "subsystem": "src/routes/waba-webhook.route.ts",
+    "attack_class": "ATTACK-CLASSES.md#Feature abuse and data leakage",
+    "starting_paths": [
+      "src/routes/waba-webhook.route.ts"
+    ],
+    "ordinary_attack_class_block": "ATTACK-CLASSES.md#Feature abuse and data leakage",
+    "selected_companion_blocks": [],
+    "excluded_blocks": [
+      {
+        "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+        "reason": "Unit ini TypeScript/Node tanpa target native yang dieksekusi; pustaka native hanya disentuh lewat batas media yang diaudit terpisah."
+      },
+      {
+        "block": "DESKTOP-MOBILE-AND-LOCAL-IPC.md#Core discipline",
+        "reason": "Tidak ada aplikasi desktop/mobile, deep link, atau IPC lokal pada surface ini."
+      },
+      {
+        "block": "AI-AND-LLM.md#Core discipline",
+        "reason": "Batas unit berhenti sebelum pipeline LLM; interaksi model dan tool diaudit di M11/M12/M10."
+      }
+    ],
+    "prior_status": "none",
+    "attempts": [],
+    "wave": 1,
+    "status": "planned",
+    "agent_id": null,
+    "reviewed_paths": [],
+    "local_checks": [],
+    "result_fingerprints": [],
+    "unresolved": [],
+    "module": "M02",
+    "check_ids": [
+      "M02-09"
+    ]
+  },
+  {
+    "coverage_id": "src%2Froutes%2Fwaba-webhook.route.ts%23POST%20%2Fapi%2Fwebhook%2Fwaba::src%2Froutes%2Fwaba-webhook.route.ts%23status%20callbacks::src%2Froutes%2Fwaba-webhook.route.ts::PROTOCOLS-RPC-AND-MESSAGING.md%23Out-of-order%20and%20stale%20message%20acceptance",
+    "canonical_refs": {
+      "surface": "src/routes/waba-webhook.route.ts#POST /api/webhook/waba",
+      "boundary": "src/routes/waba-webhook.route.ts#status callbacks",
+      "subsystem": "src/routes/waba-webhook.route.ts",
+      "attack_class": "PROTOCOLS-RPC-AND-MESSAGING.md#Out-of-order and stale message acceptance"
+    },
+    "surface": "src/routes/waba-webhook.route.ts#POST /api/webhook/waba",
+    "boundary": "src/routes/waba-webhook.route.ts#status callbacks",
+    "subsystem": "src/routes/waba-webhook.route.ts",
+    "attack_class": "PROTOCOLS-RPC-AND-MESSAGING.md#Out-of-order and stale message acceptance",
+    "starting_paths": [
+      "src/routes/waba-webhook.route.ts"
+    ],
+    "ordinary_attack_class_block": "ATTACK-CLASSES.md#Business logic",
+    "selected_companion_blocks": [
+      "PROTOCOLS-RPC-AND-MESSAGING.md#Core discipline",
+      "PROTOCOLS-RPC-AND-MESSAGING.md#Universal moves",
+      "PROTOCOLS-RPC-AND-MESSAGING.md#Validation rules"
+    ],
+    "excluded_blocks": [
+      {
+        "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+        "reason": "Unit ini TypeScript/Node tanpa target native yang dieksekusi; pustaka native hanya disentuh lewat batas media yang diaudit terpisah."
+      },
+      {
+        "block": "DESKTOP-MOBILE-AND-LOCAL-IPC.md#Core discipline",
+        "reason": "Tidak ada aplikasi desktop/mobile, deep link, atau IPC lokal pada surface ini."
+      },
+      {
+        "block": "AI-AND-LLM.md#Core discipline",
+        "reason": "Batas unit berhenti sebelum pipeline LLM; interaksi model dan tool diaudit di M11/M12/M10."
+      }
+    ],
+    "prior_status": "none",
+    "attempts": [],
+    "wave": 1,
+    "status": "planned",
+    "agent_id": null,
+    "reviewed_paths": [],
+    "local_checks": [],
+    "result_fingerprints": [],
+    "unresolved": [],
+    "module": "M02",
+    "check_ids": [
+      "M02-05"
+    ]
+  },
+  {
+    "coverage_id": "src%2Froutes%2Fwaba-webhook.route.ts%23POST%20%2Fapi%2Fwebhook%2Fwaba::src%2Fservices%2Fwaba-tenant.service.ts%23resolveTenantByPhoneNumberId::src%2Fservices%2Fwaba-tenant.service.ts::DATA-ISOLATION-AND-LIFECYCLE.md%23Missing%20tenant%20or%20owner%20enforcement",
+    "canonical_refs": {
+      "surface": "src/routes/waba-webhook.route.ts#POST /api/webhook/waba",
+      "boundary": "src/services/waba-tenant.service.ts#resolveTenantByPhoneNumberId",
+      "subsystem": "src/services/waba-tenant.service.ts",
+      "attack_class": "DATA-ISOLATION-AND-LIFECYCLE.md#Missing tenant or owner enforcement"
+    },
+    "surface": "src/routes/waba-webhook.route.ts#POST /api/webhook/waba",
+    "boundary": "src/services/waba-tenant.service.ts#resolveTenantByPhoneNumberId",
+    "subsystem": "src/services/waba-tenant.service.ts",
+    "attack_class": "DATA-ISOLATION-AND-LIFECYCLE.md#Missing tenant or owner enforcement",
+    "starting_paths": [
+      "src/services/waba-tenant.service.ts",
+      "src/routes/waba-webhook.route.ts"
+    ],
+    "ordinary_attack_class_block": "ATTACK-CLASSES.md#Access control",
+    "selected_companion_blocks": [
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Core discipline",
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Missing tenant or owner enforcement",
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Universal moves",
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Validation rules"
+    ],
+    "excluded_blocks": [
+      {
+        "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+        "reason": "Unit ini TypeScript/Node tanpa target native yang dieksekusi; pustaka native hanya disentuh lewat batas media yang diaudit terpisah."
+      },
+      {
+        "block": "DESKTOP-MOBILE-AND-LOCAL-IPC.md#Core discipline",
+        "reason": "Tidak ada aplikasi desktop/mobile, deep link, atau IPC lokal pada surface ini."
+      },
+      {
+        "block": "AI-AND-LLM.md#Core discipline",
+        "reason": "Batas unit berhenti sebelum pipeline LLM; interaksi model dan tool diaudit di M11/M12/M10."
+      }
+    ],
+    "prior_status": "none",
+    "attempts": [],
+    "wave": 1,
+    "status": "planned",
+    "agent_id": null,
+    "reviewed_paths": [],
+    "local_checks": [],
+    "result_fingerprints": [],
+    "unresolved": [],
+    "module": "M02",
+    "check_ids": [
+      "M02-04",
+      "M02-13"
+    ]
+  },
+  {
+    "coverage_id": "src%2Froutes%2Fwebhook.route.ts%23POST%20%2Fwebhook::src%2Fconfig%2Fwaha-webhook-auth.ts%23resolveExpectedWebhookSecrets::src%2Froutes%2Fwebhook.route.ts::ATTACK-CLASSES.md%23Access%20control",
+    "canonical_refs": {
+      "surface": "src/routes/webhook.route.ts#POST /webhook",
+      "boundary": "src/config/waha-webhook-auth.ts#resolveExpectedWebhookSecrets",
+      "subsystem": "src/routes/webhook.route.ts",
+      "attack_class": "ATTACK-CLASSES.md#Access control"
+    },
+    "surface": "src/routes/webhook.route.ts#POST /webhook",
+    "boundary": "src/config/waha-webhook-auth.ts#resolveExpectedWebhookSecrets",
+    "subsystem": "src/routes/webhook.route.ts",
+    "attack_class": "ATTACK-CLASSES.md#Access control",
+    "starting_paths": [
+      "src/routes/webhook.route.ts",
+      "src/config/waha-webhook-auth.ts"
+    ],
+    "ordinary_attack_class_block": "ATTACK-CLASSES.md#Access control",
+    "selected_companion_blocks": [],
+    "excluded_blocks": [
+      {
+        "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+        "reason": "Unit ini TypeScript/Node tanpa target native yang dieksekusi; pustaka native hanya disentuh lewat batas media yang diaudit terpisah."
+      },
+      {
+        "block": "DESKTOP-MOBILE-AND-LOCAL-IPC.md#Core discipline",
+        "reason": "Tidak ada aplikasi desktop/mobile, deep link, atau IPC lokal pada surface ini."
+      },
+      {
+        "block": "AI-AND-LLM.md#Core discipline",
+        "reason": "Batas unit berhenti sebelum pipeline LLM; interaksi model dan tool diaudit di M11/M12/M10."
+      }
+    ],
+    "prior_status": "none",
+    "attempts": [],
+    "wave": 1,
+    "status": "planned",
+    "agent_id": null,
+    "reviewed_paths": [],
+    "local_checks": [],
+    "result_fingerprints": [],
+    "unresolved": [],
+    "module": "M01",
+    "check_ids": [
+      "M01-01"
+    ]
+  },
+  {
+    "coverage_id": "src%2Froutes%2Fwebhook.route.ts%23POST%20%2Fwebhook::src%2Fintegrations%2Fwaha%2Fclient.ts%23fetchUrl::src%2Fintegrations%2Fwaha%2Fclient.ts::RESOURCE-EXHAUSTION-AND-AVAILABILITY.md%23Unbounded%20buffering%20and%20cardinality",
+    "canonical_refs": {
+      "surface": "src/routes/webhook.route.ts#POST /webhook",
+      "boundary": "src/integrations/waha/client.ts#fetchUrl",
+      "subsystem": "src/integrations/waha/client.ts",
+      "attack_class": "RESOURCE-EXHAUSTION-AND-AVAILABILITY.md#Unbounded buffering and cardinality"
+    },
+    "surface": "src/routes/webhook.route.ts#POST /webhook",
+    "boundary": "src/integrations/waha/client.ts#fetchUrl",
+    "subsystem": "src/integrations/waha/client.ts",
+    "attack_class": "RESOURCE-EXHAUSTION-AND-AVAILABILITY.md#Unbounded buffering and cardinality",
+    "starting_paths": [
+      "src/integrations/waha/client.ts",
+      "src/services/media.service.ts"
+    ],
+    "ordinary_attack_class_block": "ATTACK-CLASSES.md#Resource and file handling",
+    "selected_companion_blocks": [
+      "RESOURCE-EXHAUSTION-AND-AVAILABILITY.md#Core discipline",
+      "RESOURCE-EXHAUSTION-AND-AVAILABILITY.md#Universal moves",
+      "RESOURCE-EXHAUSTION-AND-AVAILABILITY.md#Validation rules"
+    ],
+    "excluded_blocks": [
+      {
+        "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+        "reason": "Unit ini TypeScript/Node tanpa target native yang dieksekusi; pustaka native hanya disentuh lewat batas media yang diaudit terpisah."
+      },
+      {
+        "block": "DESKTOP-MOBILE-AND-LOCAL-IPC.md#Core discipline",
+        "reason": "Tidak ada aplikasi desktop/mobile, deep link, atau IPC lokal pada surface ini."
+      },
+      {
+        "block": "AI-AND-LLM.md#Core discipline",
+        "reason": "Batas unit berhenti sebelum pipeline LLM; interaksi model dan tool diaudit di M11/M12/M10."
+      }
+    ],
+    "prior_status": "none",
+    "attempts": [],
+    "wave": 1,
+    "status": "planned",
+    "agent_id": null,
+    "reviewed_paths": [],
+    "local_checks": [],
+    "result_fingerprints": [],
+    "unresolved": [],
+    "module": "M01",
+    "check_ids": [
+      "M01-07",
+      "M01-15"
+    ]
+  },
+  {
+    "coverage_id": "src%2Froutes%2Fwebhook.route.ts%23POST%20%2Fwebhook::src%2Froutes%2Fwebhook.route.ts%23unsigned%20webhook%20guard::src%2Froutes%2Fwebhook.route.ts::ATTACK-CLASSES.md%23Access%20control",
+    "canonical_refs": {
+      "surface": "src/routes/webhook.route.ts#POST /webhook",
+      "boundary": "src/routes/webhook.route.ts#unsigned webhook guard",
+      "subsystem": "src/routes/webhook.route.ts",
+      "attack_class": "ATTACK-CLASSES.md#Access control"
+    },
+    "surface": "src/routes/webhook.route.ts#POST /webhook",
+    "boundary": "src/routes/webhook.route.ts#unsigned webhook guard",
+    "subsystem": "src/routes/webhook.route.ts",
+    "attack_class": "ATTACK-CLASSES.md#Access control",
+    "starting_paths": [
+      "src/routes/webhook.route.ts",
+      "src/app.ts"
+    ],
+    "ordinary_attack_class_block": "ATTACK-CLASSES.md#Access control",
+    "selected_companion_blocks": [],
+    "excluded_blocks": [
+      {
+        "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+        "reason": "Unit ini TypeScript/Node tanpa target native yang dieksekusi; pustaka native hanya disentuh lewat batas media yang diaudit terpisah."
+      },
+      {
+        "block": "DESKTOP-MOBILE-AND-LOCAL-IPC.md#Core discipline",
+        "reason": "Tidak ada aplikasi desktop/mobile, deep link, atau IPC lokal pada surface ini."
+      },
+      {
+        "block": "AI-AND-LLM.md#Core discipline",
+        "reason": "Batas unit berhenti sebelum pipeline LLM; interaksi model dan tool diaudit di M11/M12/M10."
+      }
+    ],
+    "prior_status": "none",
+    "attempts": [],
+    "wave": 1,
+    "status": "planned",
+    "agent_id": null,
+    "reviewed_paths": [],
+    "local_checks": [],
+    "result_fingerprints": [],
+    "unresolved": [],
+    "module": "M01",
+    "check_ids": [
+      "M01-14"
+    ]
+  },
+  {
+    "coverage_id": "src%2Froutes%2Fwebhook.route.ts%23POST%20%2Fwebhook::src%2Fservices%2Fburst-coalesce.service.ts%23coalesce::src%2Fservices%2Fburst-coalesce.service.ts::RESOURCE-EXHAUSTION-AND-AVAILABILITY.md%23Unbounded%20buffering%20and%20cardinality",
+    "canonical_refs": {
+      "surface": "src/routes/webhook.route.ts#POST /webhook",
+      "boundary": "src/services/burst-coalesce.service.ts#coalesce",
+      "subsystem": "src/services/burst-coalesce.service.ts",
+      "attack_class": "RESOURCE-EXHAUSTION-AND-AVAILABILITY.md#Unbounded buffering and cardinality"
+    },
+    "surface": "src/routes/webhook.route.ts#POST /webhook",
+    "boundary": "src/services/burst-coalesce.service.ts#coalesce",
+    "subsystem": "src/services/burst-coalesce.service.ts",
+    "attack_class": "RESOURCE-EXHAUSTION-AND-AVAILABILITY.md#Unbounded buffering and cardinality",
+    "starting_paths": [
+      "src/services/burst-coalesce.service.ts",
+      "src/routes/webhook.route.ts"
+    ],
+    "ordinary_attack_class_block": "ATTACK-CLASSES.md#Resource and file handling",
+    "selected_companion_blocks": [
+      "RESOURCE-EXHAUSTION-AND-AVAILABILITY.md#Core discipline",
+      "RESOURCE-EXHAUSTION-AND-AVAILABILITY.md#Universal moves",
+      "RESOURCE-EXHAUSTION-AND-AVAILABILITY.md#Validation rules"
+    ],
+    "excluded_blocks": [
+      {
+        "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+        "reason": "Unit ini TypeScript/Node tanpa target native yang dieksekusi; pustaka native hanya disentuh lewat batas media yang diaudit terpisah."
+      },
+      {
+        "block": "DESKTOP-MOBILE-AND-LOCAL-IPC.md#Core discipline",
+        "reason": "Tidak ada aplikasi desktop/mobile, deep link, atau IPC lokal pada surface ini."
+      },
+      {
+        "block": "AI-AND-LLM.md#Core discipline",
+        "reason": "Batas unit berhenti sebelum pipeline LLM; interaksi model dan tool diaudit di M11/M12/M10."
+      }
+    ],
+    "prior_status": "none",
+    "attempts": [],
+    "wave": 1,
+    "status": "planned",
+    "agent_id": null,
+    "reviewed_paths": [],
+    "local_checks": [],
+    "result_fingerprints": [],
+    "unresolved": [],
+    "module": "M01",
+    "check_ids": [
+      "M01-10"
+    ]
+  },
+  {
+    "coverage_id": "src%2Froutes%2Fwebhook.route.ts%23POST%20%2Fwebhook::src%2Fservices%2Fingress%2Finbound-guard.service.ts%23admin%20bypass::src%2Fservices%2Fingress%2Finbound-guard.service.ts::ATTACK-CLASSES.md%23Access%20control",
+    "canonical_refs": {
+      "surface": "src/routes/webhook.route.ts#POST /webhook",
+      "boundary": "src/services/ingress/inbound-guard.service.ts#admin bypass",
+      "subsystem": "src/services/ingress/inbound-guard.service.ts",
+      "attack_class": "ATTACK-CLASSES.md#Access control"
+    },
+    "surface": "src/routes/webhook.route.ts#POST /webhook",
+    "boundary": "src/services/ingress/inbound-guard.service.ts#admin bypass",
+    "subsystem": "src/services/ingress/inbound-guard.service.ts",
+    "attack_class": "ATTACK-CLASSES.md#Access control",
+    "starting_paths": [
+      "src/services/ingress/inbound-guard.service.ts",
+      "src/routes/webhook.route.ts"
+    ],
+    "ordinary_attack_class_block": "ATTACK-CLASSES.md#Access control",
+    "selected_companion_blocks": [],
+    "excluded_blocks": [
+      {
+        "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+        "reason": "Unit ini TypeScript/Node tanpa target native yang dieksekusi; pustaka native hanya disentuh lewat batas media yang diaudit terpisah."
+      },
+      {
+        "block": "DESKTOP-MOBILE-AND-LOCAL-IPC.md#Core discipline",
+        "reason": "Tidak ada aplikasi desktop/mobile, deep link, atau IPC lokal pada surface ini."
+      },
+      {
+        "block": "AI-AND-LLM.md#Core discipline",
+        "reason": "Batas unit berhenti sebelum pipeline LLM; interaksi model dan tool diaudit di M11/M12/M10."
+      }
+    ],
+    "prior_status": "none",
+    "attempts": [],
+    "wave": 1,
+    "status": "planned",
+    "agent_id": null,
+    "reviewed_paths": [],
+    "local_checks": [],
+    "result_fingerprints": [],
+    "unresolved": [],
+    "module": "M01",
+    "check_ids": [
+      "M01-08"
+    ]
+  },
+  {
+    "coverage_id": "src%2Froutes%2Fwebhook.route.ts%23POST%20%2Fwebhook::src%2Fservices%2Fingress%2Finbound-guard.service.ts%23message%20age%20guard::src%2Fservices%2Fingress%2Finbound-guard.service.ts::PROTOCOLS-RPC-AND-MESSAGING.md%23Out-of-order%20and%20stale%20message%20acceptance",
+    "canonical_refs": {
+      "surface": "src/routes/webhook.route.ts#POST /webhook",
+      "boundary": "src/services/ingress/inbound-guard.service.ts#message age guard",
+      "subsystem": "src/services/ingress/inbound-guard.service.ts",
+      "attack_class": "PROTOCOLS-RPC-AND-MESSAGING.md#Out-of-order and stale message acceptance"
+    },
+    "surface": "src/routes/webhook.route.ts#POST /webhook",
+    "boundary": "src/services/ingress/inbound-guard.service.ts#message age guard",
+    "subsystem": "src/services/ingress/inbound-guard.service.ts",
+    "attack_class": "PROTOCOLS-RPC-AND-MESSAGING.md#Out-of-order and stale message acceptance",
+    "starting_paths": [
+      "src/services/ingress/inbound-guard.service.ts",
+      "src/routes/webhook.route.ts"
+    ],
+    "ordinary_attack_class_block": "ATTACK-CLASSES.md#Business logic",
+    "selected_companion_blocks": [
+      "PROTOCOLS-RPC-AND-MESSAGING.md#Core discipline",
+      "PROTOCOLS-RPC-AND-MESSAGING.md#Universal moves",
+      "PROTOCOLS-RPC-AND-MESSAGING.md#Validation rules"
+    ],
+    "excluded_blocks": [
+      {
+        "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+        "reason": "Unit ini TypeScript/Node tanpa target native yang dieksekusi; pustaka native hanya disentuh lewat batas media yang diaudit terpisah."
+      },
+      {
+        "block": "DESKTOP-MOBILE-AND-LOCAL-IPC.md#Core discipline",
+        "reason": "Tidak ada aplikasi desktop/mobile, deep link, atau IPC lokal pada surface ini."
+      },
+      {
+        "block": "AI-AND-LLM.md#Core discipline",
+        "reason": "Batas unit berhenti sebelum pipeline LLM; interaksi model dan tool diaudit di M11/M12/M10."
+      }
+    ],
+    "prior_status": "none",
+    "attempts": [],
+    "wave": 1,
+    "status": "planned",
+    "agent_id": null,
+    "reviewed_paths": [],
+    "local_checks": [],
+    "result_fingerprints": [],
+    "unresolved": [],
+    "module": "M01",
+    "check_ids": [
+      "M01-05"
+    ]
+  },
+  {
+    "coverage_id": "src%2Froutes%2Fwebhook.route.ts%23POST%20%2Fwebhook::src%2Fservices%2Fturn-recovery.service.ts%23inbound%20turn%20ledger::src%2Fservices%2Fturn-recovery.service.ts::PROTOCOLS-RPC-AND-MESSAGING.md%23Duplicate%20delivery%20and%20idempotency%20gaps",
+    "canonical_refs": {
+      "surface": "src/routes/webhook.route.ts#POST /webhook",
+      "boundary": "src/services/turn-recovery.service.ts#inbound turn ledger",
+      "subsystem": "src/services/turn-recovery.service.ts",
+      "attack_class": "PROTOCOLS-RPC-AND-MESSAGING.md#Duplicate delivery and idempotency gaps"
+    },
+    "surface": "src/routes/webhook.route.ts#POST /webhook",
+    "boundary": "src/services/turn-recovery.service.ts#inbound turn ledger",
+    "subsystem": "src/services/turn-recovery.service.ts",
+    "attack_class": "PROTOCOLS-RPC-AND-MESSAGING.md#Duplicate delivery and idempotency gaps",
+    "starting_paths": [
+      "src/services/turn-recovery.service.ts",
+      "src/routes/webhook.route.ts"
+    ],
+    "ordinary_attack_class_block": "ATTACK-CLASSES.md#Business logic",
+    "selected_companion_blocks": [
+      "PROTOCOLS-RPC-AND-MESSAGING.md#Core discipline",
+      "PROTOCOLS-RPC-AND-MESSAGING.md#Universal moves",
+      "PROTOCOLS-RPC-AND-MESSAGING.md#Validation rules"
+    ],
+    "excluded_blocks": [
+      {
+        "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+        "reason": "Unit ini TypeScript/Node tanpa target native yang dieksekusi; pustaka native hanya disentuh lewat batas media yang diaudit terpisah."
+      },
+      {
+        "block": "DESKTOP-MOBILE-AND-LOCAL-IPC.md#Core discipline",
+        "reason": "Tidak ada aplikasi desktop/mobile, deep link, atau IPC lokal pada surface ini."
+      },
+      {
+        "block": "AI-AND-LLM.md#Core discipline",
+        "reason": "Batas unit berhenti sebelum pipeline LLM; interaksi model dan tool diaudit di M11/M12/M10."
+      }
+    ],
+    "prior_status": "none",
+    "attempts": [],
+    "wave": 1,
+    "status": "planned",
+    "agent_id": null,
+    "reviewed_paths": [],
+    "local_checks": [],
+    "result_fingerprints": [],
+    "unresolved": [],
+    "module": "M01",
+    "check_ids": [
+      "M01-04",
+      "M01-13"
+    ]
+  },
+  {
+    "coverage_id": "src%2Froutes%2Fwebhook.route.ts%23POST%20%2Fwebhook::src%2Fservices%2Fwaba-optout.service.ts%23opt-out%20enforcement::src%2Fservices%2Fwaba-optout.service.ts::ATTACK-CLASSES.md%23Business%20logic",
+    "canonical_refs": {
+      "surface": "src/routes/webhook.route.ts#POST /webhook",
+      "boundary": "src/services/waba-optout.service.ts#opt-out enforcement",
+      "subsystem": "src/services/waba-optout.service.ts",
+      "attack_class": "ATTACK-CLASSES.md#Business logic"
+    },
+    "surface": "src/routes/webhook.route.ts#POST /webhook",
+    "boundary": "src/services/waba-optout.service.ts#opt-out enforcement",
+    "subsystem": "src/services/waba-optout.service.ts",
+    "attack_class": "ATTACK-CLASSES.md#Business logic",
+    "starting_paths": [
+      "src/services/waba-optout.service.ts"
+    ],
+    "ordinary_attack_class_block": "ATTACK-CLASSES.md#Business logic",
+    "selected_companion_blocks": [],
+    "excluded_blocks": [
+      {
+        "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+        "reason": "Unit ini TypeScript/Node tanpa target native yang dieksekusi; pustaka native hanya disentuh lewat batas media yang diaudit terpisah."
+      },
+      {
+        "block": "DESKTOP-MOBILE-AND-LOCAL-IPC.md#Core discipline",
+        "reason": "Tidak ada aplikasi desktop/mobile, deep link, atau IPC lokal pada surface ini."
+      },
+      {
+        "block": "AI-AND-LLM.md#Core discipline",
+        "reason": "Batas unit berhenti sebelum pipeline LLM; interaksi model dan tool diaudit di M11/M12/M10."
+      }
+    ],
+    "prior_status": "none",
+    "attempts": [],
+    "wave": 1,
+    "status": "planned",
+    "agent_id": null,
+    "reviewed_paths": [],
+    "local_checks": [],
+    "result_fingerprints": [],
+    "unresolved": [],
+    "module": "M01",
+    "check_ids": [
+      "M01-09"
+    ]
+  },
+  {
+    "coverage_id": "src%2Froutes%2Fwebhook.route.ts%23POST%20%2Fwebhook::src%2Fservices%2Fwaha-tenant.service.ts%23resolveTenantBySession::src%2Fservices%2Fwaha-tenant.service.ts::DATA-ISOLATION-AND-LIFECYCLE.md%23Missing%20tenant%20or%20owner%20enforcement",
+    "canonical_refs": {
+      "surface": "src/routes/webhook.route.ts#POST /webhook",
+      "boundary": "src/services/waha-tenant.service.ts#resolveTenantBySession",
+      "subsystem": "src/services/waha-tenant.service.ts",
+      "attack_class": "DATA-ISOLATION-AND-LIFECYCLE.md#Missing tenant or owner enforcement"
+    },
+    "surface": "src/routes/webhook.route.ts#POST /webhook",
+    "boundary": "src/services/waha-tenant.service.ts#resolveTenantBySession",
+    "subsystem": "src/services/waha-tenant.service.ts",
+    "attack_class": "DATA-ISOLATION-AND-LIFECYCLE.md#Missing tenant or owner enforcement",
+    "starting_paths": [
+      "src/services/waha-tenant.service.ts",
+      "src/routes/webhook.route.ts"
+    ],
+    "ordinary_attack_class_block": "ATTACK-CLASSES.md#Access control",
+    "selected_companion_blocks": [
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Core discipline",
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Missing tenant or owner enforcement",
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Universal moves",
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Validation rules"
+    ],
+    "excluded_blocks": [
+      {
+        "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+        "reason": "Unit ini TypeScript/Node tanpa target native yang dieksekusi; pustaka native hanya disentuh lewat batas media yang diaudit terpisah."
+      },
+      {
+        "block": "DESKTOP-MOBILE-AND-LOCAL-IPC.md#Core discipline",
+        "reason": "Tidak ada aplikasi desktop/mobile, deep link, atau IPC lokal pada surface ini."
+      },
+      {
+        "block": "AI-AND-LLM.md#Core discipline",
+        "reason": "Batas unit berhenti sebelum pipeline LLM; interaksi model dan tool diaudit di M11/M12/M10."
+      }
+    ],
+    "prior_status": "none",
+    "attempts": [],
+    "wave": 1,
+    "status": "planned",
+    "agent_id": null,
+    "reviewed_paths": [],
+    "local_checks": [],
+    "result_fingerprints": [],
+    "unresolved": [],
+    "module": "M01",
+    "check_ids": [
+      "M01-02",
+      "M01-16"
+    ]
+  },
+  {
+    "coverage_id": "src%2Froutes%2Fwebhook.route.ts%23POST%20%2Fwebhook::src%2Futils%2Fcanonical-message-normalizer.ts%23normalize::src%2Futils%2Fcanonical-message-normalizer.ts::ATTACK-CLASSES.md%23Injection",
+    "canonical_refs": {
+      "surface": "src/routes/webhook.route.ts#POST /webhook",
+      "boundary": "src/utils/canonical-message-normalizer.ts#normalize",
+      "subsystem": "src/utils/canonical-message-normalizer.ts",
+      "attack_class": "ATTACK-CLASSES.md#Injection"
+    },
+    "surface": "src/routes/webhook.route.ts#POST /webhook",
+    "boundary": "src/utils/canonical-message-normalizer.ts#normalize",
+    "subsystem": "src/utils/canonical-message-normalizer.ts",
+    "attack_class": "ATTACK-CLASSES.md#Injection",
+    "starting_paths": [
+      "src/utils/canonical-message-normalizer.ts",
+      "src/routes/webhook.route.ts"
+    ],
+    "ordinary_attack_class_block": "ATTACK-CLASSES.md#Injection",
+    "selected_companion_blocks": [],
+    "excluded_blocks": [
+      {
+        "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+        "reason": "Unit ini TypeScript/Node tanpa target native yang dieksekusi; pustaka native hanya disentuh lewat batas media yang diaudit terpisah."
+      },
+      {
+        "block": "DESKTOP-MOBILE-AND-LOCAL-IPC.md#Core discipline",
+        "reason": "Tidak ada aplikasi desktop/mobile, deep link, atau IPC lokal pada surface ini."
+      },
+      {
+        "block": "AI-AND-LLM.md#Core discipline",
+        "reason": "Batas unit berhenti sebelum pipeline LLM; interaksi model dan tool diaudit di M11/M12/M10."
+      }
+    ],
+    "prior_status": "none",
+    "attempts": [],
+    "wave": 1,
+    "status": "planned",
+    "agent_id": null,
+    "reviewed_paths": [],
+    "local_checks": [],
+    "result_fingerprints": [],
+    "unresolved": [],
+    "module": "M01",
+    "check_ids": [
+      "M01-03"
+    ]
+  },
+  {
+    "coverage_id": "src%2Froutes%2Fwebhook.route.ts%23POST%20%2Fwebhook::src%2Futils%2Fcanonical-message-normalizer.ts%23sender%20identity::src%2Futils%2Fcanonical-message-normalizer.ts::ATTACK-CLASSES.md%23Access%20control",
+    "canonical_refs": {
+      "surface": "src/routes/webhook.route.ts#POST /webhook",
+      "boundary": "src/utils/canonical-message-normalizer.ts#sender identity",
+      "subsystem": "src/utils/canonical-message-normalizer.ts",
+      "attack_class": "ATTACK-CLASSES.md#Access control"
+    },
+    "surface": "src/routes/webhook.route.ts#POST /webhook",
+    "boundary": "src/utils/canonical-message-normalizer.ts#sender identity",
+    "subsystem": "src/utils/canonical-message-normalizer.ts",
+    "attack_class": "ATTACK-CLASSES.md#Access control",
+    "starting_paths": [
+      "src/utils/canonical-message-normalizer.ts"
+    ],
+    "ordinary_attack_class_block": "ATTACK-CLASSES.md#Access control",
+    "selected_companion_blocks": [],
+    "excluded_blocks": [
+      {
+        "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+        "reason": "Unit ini TypeScript/Node tanpa target native yang dieksekusi; pustaka native hanya disentuh lewat batas media yang diaudit terpisah."
+      },
+      {
+        "block": "DESKTOP-MOBILE-AND-LOCAL-IPC.md#Core discipline",
+        "reason": "Tidak ada aplikasi desktop/mobile, deep link, atau IPC lokal pada surface ini."
+      },
+      {
+        "block": "AI-AND-LLM.md#Core discipline",
+        "reason": "Batas unit berhenti sebelum pipeline LLM; interaksi model dan tool diaudit di M11/M12/M10."
+      }
+    ],
+    "prior_status": "none",
+    "attempts": [],
+    "wave": 1,
+    "status": "planned",
+    "agent_id": null,
+    "reviewed_paths": [],
+    "local_checks": [],
+    "result_fingerprints": [],
+    "unresolved": [],
+    "module": "M01",
+    "check_ids": [
+      "M01-06"
+    ]
+  },
+  {
+    "coverage_id": "src%2Froutes%2Fwebhook.route.ts%23POST%20%2Fwebhook::src%2Futils%2Fstage-logger.ts%23stageLog::src%2Futils%2Fstage-logger.ts::ATTACK-CLASSES.md%23Feature%20abuse%20and%20data%20leakage",
+    "canonical_refs": {
+      "surface": "src/routes/webhook.route.ts#POST /webhook",
+      "boundary": "src/utils/stage-logger.ts#stageLog",
+      "subsystem": "src/utils/stage-logger.ts",
+      "attack_class": "ATTACK-CLASSES.md#Feature abuse and data leakage"
+    },
+    "surface": "src/routes/webhook.route.ts#POST /webhook",
+    "boundary": "src/utils/stage-logger.ts#stageLog",
+    "subsystem": "src/utils/stage-logger.ts",
+    "attack_class": "ATTACK-CLASSES.md#Feature abuse and data leakage",
+    "starting_paths": [
+      "src/utils/stage-logger.ts",
+      "src/routes/webhook.route.ts"
+    ],
+    "ordinary_attack_class_block": "ATTACK-CLASSES.md#Feature abuse and data leakage",
+    "selected_companion_blocks": [],
+    "excluded_blocks": [
+      {
+        "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+        "reason": "Unit ini TypeScript/Node tanpa target native yang dieksekusi; pustaka native hanya disentuh lewat batas media yang diaudit terpisah."
+      },
+      {
+        "block": "DESKTOP-MOBILE-AND-LOCAL-IPC.md#Core discipline",
+        "reason": "Tidak ada aplikasi desktop/mobile, deep link, atau IPC lokal pada surface ini."
+      },
+      {
+        "block": "AI-AND-LLM.md#Core discipline",
+        "reason": "Batas unit berhenti sebelum pipeline LLM; interaksi model dan tool diaudit di M11/M12/M10."
+      }
+    ],
+    "prior_status": "none",
+    "attempts": [],
+    "wave": 1,
+    "status": "planned",
+    "agent_id": null,
+    "reviewed_paths": [],
+    "local_checks": [],
+    "result_fingerprints": [],
+    "unresolved": [],
+    "module": "M01",
+    "check_ids": [
+      "M01-11"
+    ]
+  },
+  {
+    "coverage_id": "src%2Fservices%23cache%20keys::src%2Fservices%23cache%20tenant%20key::src%2Fservices::DATA-ISOLATION-AND-LIFECYCLE.md%23Missing%20tenant%20or%20owner%20enforcement",
+    "canonical_refs": {
+      "surface": "src/services#cache keys",
+      "boundary": "src/services#cache tenant key",
+      "subsystem": "src/services",
+      "attack_class": "DATA-ISOLATION-AND-LIFECYCLE.md#Missing tenant or owner enforcement"
+    },
+    "surface": "src/services#cache keys",
+    "boundary": "src/services#cache tenant key",
+    "subsystem": "src/services",
+    "attack_class": "DATA-ISOLATION-AND-LIFECYCLE.md#Missing tenant or owner enforcement",
+    "starting_paths": [
+      "src/services/live-chat.service.ts",
+      "src/services/tenant-settings.store.ts"
+    ],
+    "ordinary_attack_class_block": "ATTACK-CLASSES.md#Access control",
+    "selected_companion_blocks": [
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Core discipline",
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Missing tenant or owner enforcement",
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Universal moves",
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Validation rules"
+    ],
+    "excluded_blocks": [
+      {
+        "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+        "reason": "Unit ini TypeScript/Node tanpa target native yang dieksekusi; pustaka native hanya disentuh lewat batas media yang diaudit terpisah."
+      },
+      {
+        "block": "DESKTOP-MOBILE-AND-LOCAL-IPC.md#Core discipline",
+        "reason": "Tidak ada aplikasi desktop/mobile, deep link, atau IPC lokal pada surface ini."
+      },
+      {
+        "block": "AI-AND-LLM.md#Core discipline",
+        "reason": "Batas unit berhenti sebelum pipeline LLM; interaksi model dan tool diaudit di M11/M12/M10."
+      }
+    ],
+    "prior_status": "none",
+    "attempts": [],
+    "wave": 1,
+    "status": "planned",
+    "agent_id": null,
+    "reviewed_paths": [],
+    "local_checks": [],
+    "result_fingerprints": [],
+    "unresolved": [],
+    "module": "M07",
+    "check_ids": [
+      "M07-05"
+    ]
+  },
+  {
+    "coverage_id": "src%2Fservices%23prisma%20queries::src%2Futils%2Ftenant-scope.ts%23tenant%20filter::src%2Futils%2Ftenant-scope.ts::DATA-ISOLATION-AND-LIFECYCLE.md%23Missing%20tenant%20or%20owner%20enforcement",
+    "canonical_refs": {
+      "surface": "src/services#prisma queries",
+      "boundary": "src/utils/tenant-scope.ts#tenant filter",
+      "subsystem": "src/utils/tenant-scope.ts",
+      "attack_class": "DATA-ISOLATION-AND-LIFECYCLE.md#Missing tenant or owner enforcement"
+    },
+    "surface": "src/services#prisma queries",
+    "boundary": "src/utils/tenant-scope.ts#tenant filter",
+    "subsystem": "src/utils/tenant-scope.ts",
+    "attack_class": "DATA-ISOLATION-AND-LIFECYCLE.md#Missing tenant or owner enforcement",
+    "starting_paths": [
+      "src/utils/tenant-scope.ts",
+      "src/repositories/customer.repository.ts"
+    ],
+    "ordinary_attack_class_block": "ATTACK-CLASSES.md#Access control",
+    "selected_companion_blocks": [
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Core discipline",
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Missing tenant or owner enforcement",
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Universal moves",
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Validation rules"
+    ],
+    "excluded_blocks": [
+      {
+        "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+        "reason": "Unit ini TypeScript/Node tanpa target native yang dieksekusi; pustaka native hanya disentuh lewat batas media yang diaudit terpisah."
+      },
+      {
+        "block": "DESKTOP-MOBILE-AND-LOCAL-IPC.md#Core discipline",
+        "reason": "Tidak ada aplikasi desktop/mobile, deep link, atau IPC lokal pada surface ini."
+      },
+      {
+        "block": "AI-AND-LLM.md#Core discipline",
+        "reason": "Batas unit berhenti sebelum pipeline LLM; interaksi model dan tool diaudit di M11/M12/M10."
+      }
+    ],
+    "prior_status": "none",
+    "attempts": [],
+    "wave": 1,
+    "status": "planned",
+    "agent_id": null,
+    "reviewed_paths": [],
+    "local_checks": [],
+    "result_fingerprints": [],
+    "unresolved": [],
+    "module": "M07",
+    "check_ids": [
+      "M07-02"
+    ]
+  },
+  {
+    "coverage_id": "src%2Fservices%2Fadmin-session.service.ts%23revokeSession::src%2Fservices%2Fadmin-session.service.ts%23session%20invalidation::src%2Fservices%2Fadmin-session.service.ts::WEB-PROTOCOL-AND-AUTH.md%23Session%20fixation%20and%20invalidation",
+    "canonical_refs": {
+      "surface": "src/services/admin-session.service.ts#revokeSession",
+      "boundary": "src/services/admin-session.service.ts#session invalidation",
+      "subsystem": "src/services/admin-session.service.ts",
+      "attack_class": "WEB-PROTOCOL-AND-AUTH.md#Session fixation and invalidation"
+    },
+    "surface": "src/services/admin-session.service.ts#revokeSession",
+    "boundary": "src/services/admin-session.service.ts#session invalidation",
+    "subsystem": "src/services/admin-session.service.ts",
+    "attack_class": "WEB-PROTOCOL-AND-AUTH.md#Session fixation and invalidation",
+    "starting_paths": [
+      "src/services/admin-session.service.ts",
+      "src/routes/admin/auth.subroute.ts"
+    ],
+    "ordinary_attack_class_block": "ATTACK-CLASSES.md#Access control",
+    "selected_companion_blocks": [
+      "WEB-PROTOCOL-AND-AUTH.md#Core discipline",
+      "WEB-PROTOCOL-AND-AUTH.md#Universal moves",
+      "WEB-PROTOCOL-AND-AUTH.md#Validation rules"
+    ],
+    "excluded_blocks": [
+      {
+        "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+        "reason": "Unit ini TypeScript/Node tanpa target native yang dieksekusi; pustaka native hanya disentuh lewat batas media yang diaudit terpisah."
+      },
+      {
+        "block": "DESKTOP-MOBILE-AND-LOCAL-IPC.md#Core discipline",
+        "reason": "Tidak ada aplikasi desktop/mobile, deep link, atau IPC lokal pada surface ini."
+      },
+      {
+        "block": "AI-AND-LLM.md#Core discipline",
+        "reason": "Batas unit berhenti sebelum pipeline LLM; interaksi model dan tool diaudit di M11/M12/M10."
+      }
+    ],
+    "prior_status": "none",
+    "attempts": [],
+    "wave": 1,
+    "status": "planned",
+    "agent_id": null,
+    "reviewed_paths": [],
+    "local_checks": [],
+    "result_fingerprints": [],
+    "unresolved": [],
+    "module": "M04",
+    "check_ids": [
+      "M04-05"
+    ]
+  },
+  {
+    "coverage_id": "src%2Fservices%2Fcommand.service.ts%23%2Fstate%20and%20%2Freset::src%2Fservices%2Fcommand.service.ts%23command%20authorization::src%2Fservices%2Fcommand.service.ts::ATTACK-CLASSES.md%23Access%20control",
+    "canonical_refs": {
+      "surface": "src/services/command.service.ts#/state and /reset",
+      "boundary": "src/services/command.service.ts#command authorization",
+      "subsystem": "src/services/command.service.ts",
+      "attack_class": "ATTACK-CLASSES.md#Access control"
+    },
+    "surface": "src/services/command.service.ts#/state and /reset",
+    "boundary": "src/services/command.service.ts#command authorization",
+    "subsystem": "src/services/command.service.ts",
+    "attack_class": "ATTACK-CLASSES.md#Access control",
+    "starting_paths": [
+      "src/services/command.service.ts"
+    ],
+    "ordinary_attack_class_block": "ATTACK-CLASSES.md#Access control",
+    "selected_companion_blocks": [],
+    "excluded_blocks": [
+      {
+        "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+        "reason": "Unit ini TypeScript/Node tanpa target native yang dieksekusi; pustaka native hanya disentuh lewat batas media yang diaudit terpisah."
+      },
+      {
+        "block": "DESKTOP-MOBILE-AND-LOCAL-IPC.md#Core discipline",
+        "reason": "Tidak ada aplikasi desktop/mobile, deep link, atau IPC lokal pada surface ini."
+      },
+      {
+        "block": "AI-AND-LLM.md#Core discipline",
+        "reason": "Batas unit berhenti sebelum pipeline LLM; interaksi model dan tool diaudit di M11/M12/M10."
+      }
+    ],
+    "prior_status": "none",
+    "attempts": [],
+    "wave": 1,
+    "status": "planned",
+    "agent_id": null,
+    "reviewed_paths": [],
+    "local_checks": [],
+    "result_fingerprints": [],
+    "unresolved": [],
+    "module": "M01",
+    "check_ids": [
+      "M01-12"
+    ]
+  },
+  {
+    "coverage_id": "src%2Fservices%2Fcron.service.ts%23ALERT_WEBHOOK_URL::src%2Fservices%2Fcron.service.ts%23alert%20webhook%20target::src%2Fservices%2Fcron.service.ts::RESOURCE-EXHAUSTION-AND-AVAILABILITY.md%23Unbounded%20buffering%20and%20cardinality",
+    "canonical_refs": {
+      "surface": "src/services/cron.service.ts#ALERT_WEBHOOK_URL",
+      "boundary": "src/services/cron.service.ts#alert webhook target",
+      "subsystem": "src/services/cron.service.ts",
+      "attack_class": "RESOURCE-EXHAUSTION-AND-AVAILABILITY.md#Unbounded buffering and cardinality"
+    },
+    "surface": "src/services/cron.service.ts#ALERT_WEBHOOK_URL",
+    "boundary": "src/services/cron.service.ts#alert webhook target",
+    "subsystem": "src/services/cron.service.ts",
+    "attack_class": "RESOURCE-EXHAUSTION-AND-AVAILABILITY.md#Unbounded buffering and cardinality",
+    "starting_paths": [
+      "src/services/cron.service.ts"
+    ],
+    "ordinary_attack_class_block": "ATTACK-CLASSES.md#Resource and file handling",
+    "selected_companion_blocks": [
+      "RESOURCE-EXHAUSTION-AND-AVAILABILITY.md#Core discipline",
+      "RESOURCE-EXHAUSTION-AND-AVAILABILITY.md#Universal moves",
+      "RESOURCE-EXHAUSTION-AND-AVAILABILITY.md#Validation rules"
+    ],
+    "excluded_blocks": [
+      {
+        "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+        "reason": "Unit ini TypeScript/Node tanpa target native yang dieksekusi; pustaka native hanya disentuh lewat batas media yang diaudit terpisah."
+      },
+      {
+        "block": "DESKTOP-MOBILE-AND-LOCAL-IPC.md#Core discipline",
+        "reason": "Tidak ada aplikasi desktop/mobile, deep link, atau IPC lokal pada surface ini."
+      },
+      {
+        "block": "AI-AND-LLM.md#Core discipline",
+        "reason": "Batas unit berhenti sebelum pipeline LLM; interaksi model dan tool diaudit di M11/M12/M10."
+      }
+    ],
+    "prior_status": "none",
+    "attempts": [],
+    "wave": 1,
+    "status": "planned",
+    "agent_id": null,
+    "reviewed_paths": [],
+    "local_checks": [],
+    "result_fingerprints": [],
+    "unresolved": [],
+    "module": "M03",
+    "check_ids": [
+      "M03-08"
+    ]
+  },
+  {
+    "coverage_id": "src%2Fservices%2Fcustomer.service.ts%23tenant_id%20writes::src%2Fservices%2Fcustomer.service.ts%23tenant_id%20denormalization::src%2Fservices%2Fcustomer.service.ts::DATA-ISOLATION-AND-LIFECYCLE.md%23Missing%20tenant%20or%20owner%20enforcement",
+    "canonical_refs": {
+      "surface": "src/services/customer.service.ts#tenant_id writes",
+      "boundary": "src/services/customer.service.ts#tenant_id denormalization",
+      "subsystem": "src/services/customer.service.ts",
+      "attack_class": "DATA-ISOLATION-AND-LIFECYCLE.md#Missing tenant or owner enforcement"
+    },
+    "surface": "src/services/customer.service.ts#tenant_id writes",
+    "boundary": "src/services/customer.service.ts#tenant_id denormalization",
+    "subsystem": "src/services/customer.service.ts",
+    "attack_class": "DATA-ISOLATION-AND-LIFECYCLE.md#Missing tenant or owner enforcement",
+    "starting_paths": [
+      "src/services/customer.service.ts"
+    ],
+    "ordinary_attack_class_block": "ATTACK-CLASSES.md#Access control",
+    "selected_companion_blocks": [
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Core discipline",
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Missing tenant or owner enforcement",
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Universal moves",
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Validation rules"
+    ],
+    "excluded_blocks": [
+      {
+        "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+        "reason": "Unit ini TypeScript/Node tanpa target native yang dieksekusi; pustaka native hanya disentuh lewat batas media yang diaudit terpisah."
+      },
+      {
+        "block": "DESKTOP-MOBILE-AND-LOCAL-IPC.md#Core discipline",
+        "reason": "Tidak ada aplikasi desktop/mobile, deep link, atau IPC lokal pada surface ini."
+      },
+      {
+        "block": "AI-AND-LLM.md#Core discipline",
+        "reason": "Batas unit berhenti sebelum pipeline LLM; interaksi model dan tool diaudit di M11/M12/M10."
+      }
+    ],
+    "prior_status": "none",
+    "attempts": [],
+    "wave": 1,
+    "status": "planned",
+    "agent_id": null,
+    "reviewed_paths": [],
+    "local_checks": [],
+    "result_fingerprints": [],
+    "unresolved": [],
+    "module": "M07",
+    "check_ids": [
+      "M07-10"
+    ]
+  },
+  {
+    "coverage_id": "src%2Fservices%2Frole-scope.service.ts%23invalidateScopeCache::src%2Fservices%2Frole-scope.service.ts%23cache%20invalidation::src%2Fservices%2Frole-scope.service.ts::ATTACK-CLASSES.md%23Access%20control",
+    "canonical_refs": {
+      "surface": "src/services/role-scope.service.ts#invalidateScopeCache",
+      "boundary": "src/services/role-scope.service.ts#cache invalidation",
+      "subsystem": "src/services/role-scope.service.ts",
+      "attack_class": "ATTACK-CLASSES.md#Access control"
+    },
+    "surface": "src/services/role-scope.service.ts#invalidateScopeCache",
+    "boundary": "src/services/role-scope.service.ts#cache invalidation",
+    "subsystem": "src/services/role-scope.service.ts",
+    "attack_class": "ATTACK-CLASSES.md#Access control",
+    "starting_paths": [
+      "src/services/role-scope.service.ts"
+    ],
+    "ordinary_attack_class_block": "ATTACK-CLASSES.md#Access control",
+    "selected_companion_blocks": [],
+    "excluded_blocks": [
+      {
+        "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+        "reason": "Unit ini TypeScript/Node tanpa target native yang dieksekusi; pustaka native hanya disentuh lewat batas media yang diaudit terpisah."
+      },
+      {
+        "block": "DESKTOP-MOBILE-AND-LOCAL-IPC.md#Core discipline",
+        "reason": "Tidak ada aplikasi desktop/mobile, deep link, atau IPC lokal pada surface ini."
+      },
+      {
+        "block": "AI-AND-LLM.md#Core discipline",
+        "reason": "Batas unit berhenti sebelum pipeline LLM; interaksi model dan tool diaudit di M11/M12/M10."
+      }
+    ],
+    "prior_status": "none",
+    "attempts": [],
+    "wave": 1,
+    "status": "planned",
+    "agent_id": null,
+    "reviewed_paths": [],
+    "local_checks": [],
+    "result_fingerprints": [],
+    "unresolved": [],
+    "module": "M06",
+    "check_ids": [
+      "M06-05"
+    ]
+  },
+  {
+    "coverage_id": "src%2Fservices%2Frole-scope.service.ts%23scope%20matching::src%2Fservices%2Frole-scope.service.ts%23param%20scope%20escalation::src%2Fservices%2Frole-scope.service.ts::ATTACK-CLASSES.md%23Access%20control",
+    "canonical_refs": {
+      "surface": "src/services/role-scope.service.ts#scope matching",
+      "boundary": "src/services/role-scope.service.ts#param scope escalation",
+      "subsystem": "src/services/role-scope.service.ts",
+      "attack_class": "ATTACK-CLASSES.md#Access control"
+    },
+    "surface": "src/services/role-scope.service.ts#scope matching",
+    "boundary": "src/services/role-scope.service.ts#param scope escalation",
+    "subsystem": "src/services/role-scope.service.ts",
+    "attack_class": "ATTACK-CLASSES.md#Access control",
+    "starting_paths": [
+      "src/services/role-scope.service.ts"
+    ],
+    "ordinary_attack_class_block": "ATTACK-CLASSES.md#Access control",
+    "selected_companion_blocks": [],
+    "excluded_blocks": [
+      {
+        "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+        "reason": "Unit ini TypeScript/Node tanpa target native yang dieksekusi; pustaka native hanya disentuh lewat batas media yang diaudit terpisah."
+      },
+      {
+        "block": "DESKTOP-MOBILE-AND-LOCAL-IPC.md#Core discipline",
+        "reason": "Tidak ada aplikasi desktop/mobile, deep link, atau IPC lokal pada surface ini."
+      },
+      {
+        "block": "AI-AND-LLM.md#Core discipline",
+        "reason": "Batas unit berhenti sebelum pipeline LLM; interaksi model dan tool diaudit di M11/M12/M10."
+      }
+    ],
+    "prior_status": "none",
+    "attempts": [],
+    "wave": 1,
+    "status": "planned",
+    "agent_id": null,
+    "reviewed_paths": [],
+    "local_checks": [],
+    "result_fingerprints": [],
+    "unresolved": [],
+    "module": "M06",
+    "check_ids": [
+      "M06-03"
+    ]
+  },
+  {
+    "coverage_id": "src%2Fservices%2Ftelegram.service.ts%23sendMessage::src%2Fservices%2Ftelegram.service.ts%23message%20formatting::src%2Fservices%2Ftelegram.service.ts::ATTACK-CLASSES.md%23Injection",
+    "canonical_refs": {
+      "surface": "src/services/telegram.service.ts#sendMessage",
+      "boundary": "src/services/telegram.service.ts#message formatting",
+      "subsystem": "src/services/telegram.service.ts",
+      "attack_class": "ATTACK-CLASSES.md#Injection"
+    },
+    "surface": "src/services/telegram.service.ts#sendMessage",
+    "boundary": "src/services/telegram.service.ts#message formatting",
+    "subsystem": "src/services/telegram.service.ts",
+    "attack_class": "ATTACK-CLASSES.md#Injection",
+    "starting_paths": [
+      "src/services/telegram.service.ts"
+    ],
+    "ordinary_attack_class_block": "ATTACK-CLASSES.md#Injection",
+    "selected_companion_blocks": [],
+    "excluded_blocks": [
+      {
+        "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+        "reason": "Unit ini TypeScript/Node tanpa target native yang dieksekusi; pustaka native hanya disentuh lewat batas media yang diaudit terpisah."
+      },
+      {
+        "block": "DESKTOP-MOBILE-AND-LOCAL-IPC.md#Core discipline",
+        "reason": "Tidak ada aplikasi desktop/mobile, deep link, atau IPC lokal pada surface ini."
+      },
+      {
+        "block": "AI-AND-LLM.md#Core discipline",
+        "reason": "Batas unit berhenti sebelum pipeline LLM; interaksi model dan tool diaudit di M11/M12/M10."
+      }
+    ],
+    "prior_status": "none",
+    "attempts": [],
+    "wave": 1,
+    "status": "planned",
+    "agent_id": null,
+    "reviewed_paths": [],
+    "local_checks": [],
+    "result_fingerprints": [],
+    "unresolved": [],
+    "module": "M03",
+    "check_ids": [
+      "M03-04"
+    ]
+  },
+  {
+    "coverage_id": "src%2Fservices%2Fwaha-tenant.service.ts%23ingress%20and%20worker::src%2Fservices%2Fwaha-tenant.service.ts%23unknown%20tenant%20fail-closed::src%2Fservices%2Fwaha-tenant.service.ts::DATA-ISOLATION-AND-LIFECYCLE.md%23Missing%20tenant%20or%20owner%20enforcement",
+    "canonical_refs": {
+      "surface": "src/services/waha-tenant.service.ts#ingress and worker",
+      "boundary": "src/services/waha-tenant.service.ts#unknown tenant fail-closed",
+      "subsystem": "src/services/waha-tenant.service.ts",
+      "attack_class": "DATA-ISOLATION-AND-LIFECYCLE.md#Missing tenant or owner enforcement"
+    },
+    "surface": "src/services/waha-tenant.service.ts#ingress and worker",
+    "boundary": "src/services/waha-tenant.service.ts#unknown tenant fail-closed",
+    "subsystem": "src/services/waha-tenant.service.ts",
+    "attack_class": "DATA-ISOLATION-AND-LIFECYCLE.md#Missing tenant or owner enforcement",
+    "starting_paths": [
+      "src/services/waha-tenant.service.ts"
+    ],
+    "ordinary_attack_class_block": "ATTACK-CLASSES.md#Access control",
+    "selected_companion_blocks": [
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Core discipline",
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Missing tenant or owner enforcement",
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Universal moves",
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Validation rules"
+    ],
+    "excluded_blocks": [
+      {
+        "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+        "reason": "Unit ini TypeScript/Node tanpa target native yang dieksekusi; pustaka native hanya disentuh lewat batas media yang diaudit terpisah."
+      },
+      {
+        "block": "DESKTOP-MOBILE-AND-LOCAL-IPC.md#Core discipline",
+        "reason": "Tidak ada aplikasi desktop/mobile, deep link, atau IPC lokal pada surface ini."
+      },
+      {
+        "block": "AI-AND-LLM.md#Core discipline",
+        "reason": "Batas unit berhenti sebelum pipeline LLM; interaksi model dan tool diaudit di M11/M12/M10."
+      }
+    ],
+    "prior_status": "none",
+    "attempts": [],
+    "wave": 1,
+    "status": "planned",
+    "agent_id": null,
+    "reviewed_paths": [],
+    "local_checks": [],
+    "result_fingerprints": [],
+    "unresolved": [],
+    "module": "M07",
+    "check_ids": [
+      "M07-11"
+    ]
+  },
+  {
+    "coverage_id": "src%2Futils%2Fauth-access-log.ts%23401%2F503::src%2Futils%2Fauth-access-log.ts%23credential%20redaction::src%2Futils%2Fauth-access-log.ts::ATTACK-CLASSES.md%23Feature%20abuse%20and%20data%20leakage",
+    "canonical_refs": {
+      "surface": "src/utils/auth-access-log.ts#401/503",
+      "boundary": "src/utils/auth-access-log.ts#credential redaction",
+      "subsystem": "src/utils/auth-access-log.ts",
+      "attack_class": "ATTACK-CLASSES.md#Feature abuse and data leakage"
+    },
+    "surface": "src/utils/auth-access-log.ts#401/503",
+    "boundary": "src/utils/auth-access-log.ts#credential redaction",
+    "subsystem": "src/utils/auth-access-log.ts",
+    "attack_class": "ATTACK-CLASSES.md#Feature abuse and data leakage",
+    "starting_paths": [
+      "src/utils/auth-access-log.ts"
+    ],
+    "ordinary_attack_class_block": "ATTACK-CLASSES.md#Feature abuse and data leakage",
+    "selected_companion_blocks": [],
+    "excluded_blocks": [
+      {
+        "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+        "reason": "Unit ini TypeScript/Node tanpa target native yang dieksekusi; pustaka native hanya disentuh lewat batas media yang diaudit terpisah."
+      },
+      {
+        "block": "DESKTOP-MOBILE-AND-LOCAL-IPC.md#Core discipline",
+        "reason": "Tidak ada aplikasi desktop/mobile, deep link, atau IPC lokal pada surface ini."
+      },
+      {
+        "block": "AI-AND-LLM.md#Core discipline",
+        "reason": "Batas unit berhenti sebelum pipeline LLM; interaksi model dan tool diaudit di M11/M12/M10."
+      }
+    ],
+    "prior_status": "none",
+    "attempts": [],
+    "wave": 1,
+    "status": "planned",
+    "agent_id": null,
+    "reviewed_paths": [],
+    "local_checks": [],
+    "result_fingerprints": [],
+    "unresolved": [],
+    "module": "M04",
+    "check_ids": [
+      "M04-12"
+    ]
+  }
+]

@@ -79,3 +79,17 @@ Endpoint real-time: `GET /api/admin/live-chat/events` (Server-Sent Events, satu 
 5.  **Konek WAHA via QR (Fitur 1):** `GET /api/admin/whatsapp-provider/qr` + `POST /api/admin/whatsapp-provider/session/start`
     memakai session id per-tenant (`tenant.waha_session_id`, fallback env `WAHA_SESSION` saat DB down).
     Asumsi v1: satu instance WAHA (`WAHA_BASE_URL` global).
+
+## Digest Pinning Image (F7 / M17-08, 2026-11-27)
+Seluruh image runtime dipin ke digest sha256 (tag tetap ditulis untuk keterbacaan):
+- `Dockerfile`: `node:20-slim@sha256:2cf067cfed83...` (builder + runner)
+- `docker-compose.yml`: `redis:7-alpine@sha256:7f7d30b7fdd0...`, `postgres:16-alpine@sha256:f2f98726820d...`,
+  `caddy:2@sha256:4851e54a46b2...`, `devlikeapro/waha:noweb-2026.7.2@sha256:33ecd1b782b2...`
+- Script migrasi memakai `alpine:3@sha256:f59abe656b69...` (bukan `alpine` unpinned).
+
+Prosedur update digest (lakukan sengaja, jangan otomatis):
+1. `docker buildx imagetools inspect <image:tag> --format '{{.Manifest.Digest}}'`
+2. Ganti digit setelah `@sha256:` di file terkait; pertahankan tag asli.
+3. Uji di staging: `docker compose build app worker && docker compose up -d`.
+4. WAHA: upgrade digest HANYA lewat jendela staging + 2-step verification (G12);
+   jangan pernah memakai tag `:latest`.

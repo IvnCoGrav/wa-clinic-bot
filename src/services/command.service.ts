@@ -45,8 +45,38 @@ const START_OVER_FALLBACK =
   'Baik Bunda, kita mulai dari awal. Silakan ketik *Halo* untuk memulai percakapan baru. 😊';
 
 export class CommandService {
-  /** Daftar konfirmasi /reset yang menunggu balasan YA (key: customer id). */
-  private pendingResets = new Map<string, { expiresAt: number }>();
+  /**
+   * Apakah percakapan sedang menunggu konfirmasi /reset. Status disimpan di
+   * `Conversation.session_data.reset_pending_at` (persisten, per tenant), BUKAN
+   * variabel proses: app & worker / beberapa replika harus melihat status yang sama.
+   */
+  public isResetConfirmationPending(conversation: any, now: number = Date.now()): boolean {
+    const raw = conversation?.session_data?.reset_pending_at;
+    const at = raw ? Date.parse(String(raw)) : NaN;
+    return Number.isFinite(at) && at > 0 && now - at <= RESET_PENDING_TTL_MS;
+  }
+
+  private hasResetPendingField(conversation: any): boolean {
+    return Boolean(conversation?.session_data?.reset_pending_at);
+  }
+
+  /** Tulis/hapus penanda konfirmasi /reset (merge utuh dengan session_data lain). */
+  private async writeResetPending(conversation: any, tenantId: string, atIso: string | null): Promise<void> {
+    const base =
+      conversation?.session_data && typeof conversation.session_data === 'object'
+        ? { ...(conversation.session_data as any) }
+        : {};
+    if (atIso) base.reset_pending_at = atIso;
+    else delete base.reset_pending_at;
+    // Mutasi snapshot dulu: bila DB sedang offline, service tetap konsisten dalam
+    // proses ini (degradasi jujur) alih-alih kehilangan status konfirmasi.
+    conversation.session_data = base;
+    try {
+      await getConversationRepository().updateState(conversation.id, { sessionData: base }, tenantId);
+    } catch (err: any) {
+      console.warn('[COMMAND /reset] Gagal menyimpan status konfirmasi (DB):', err?.message || err);
+    }
+  }
 
   /**
    * Deteksi apakah pesan berupa perintah slash (diawali "/"). Dipakai juga oleh
@@ -79,26 +109,38 @@ export class CommandService {
     const { customer, conversation } = ctx;
     const tId = tenantId || customer.tenant_id || DEFAULT_TENANT_ID;
 
-    // 1. Konfirmasi /reset pending (balasan YA) → eksekusi hard wipe.
-    const pending = this.pendingResets.get(customer.id);
-    if (pending) {
-      this.pendingResets.delete(customer.id); // konsumsi sekali pakai
-      if (pending.expiresAt >= Date.now() && CONFIRM_KEYWORDS.has(text)) {
-        const newConversationId = await this.hardWipe(customer, conversation, tId);
+    // `ctx.conversation` berasal dari job yang SELALU di-re-fetch dari DB oleh
+    // queue consumer sebelum state machine berjalan, jadi session_data di sini
+    // sudah segar (tidak perlu query tambahan per pesan).
+    const currentConversation = conversation;
+
+    // 1. Konfirmasi /reset pending (balasan YA) → eksekusi soft wipe.
+    if (this.isResetConfirmationPending(currentConversation)) {
+      // Konsumsi sekali pakai SEBELUM aksi, sehingga retry pesan yang sama
+      // tidak memicu wipe kedua.
+      await this.writeResetPending(currentConversation, tId, null);
+      if (CONFIRM_KEYWORDS.has(text)) {
+        const newConversationId = await this.hardWipe(customer, currentConversation, tId);
         return { replyText: RESET_DONE_REPLY, conversationId: newConversationId };
       }
-      // Bukan keyword konfirmasi (atau sudah expired) → batal, proses ulang sebagai pesan biasa.
+      // Bukan keyword konfirmasi → batal, proses ulang sebagai pesan biasa.
       return null;
+    }
+
+    // Sisa penanda kedaluwarsa dibersihkan agar session_data tidak menumpuk.
+    if (this.hasResetPendingField(currentConversation)) {
+      await this.writeResetPending(currentConversation, tId, null);
     }
 
     switch (text) {
       case '/reset':
-      case '/reset konfirm':
-        this.pendingResets.set(customer.id, { expiresAt: Date.now() + RESET_PENDING_TTL_MS });
+      case '/reset konfirm': {
+        await this.writeResetPending(currentConversation, tId, new Date().toISOString());
         const { getBrandIdentityAsync } = await import('../config/brand');
         const brand = await getBrandIdentityAsync(tId);
         const salutation = brand.addressTermForCustomer || 'Bunda';
-        return { replyText: this.getResetConfirmReply(salutation), conversationId: conversation.id };
+        return { replyText: this.getResetConfirmReply(salutation), conversationId: currentConversation.id };
+      }
 
       case '/state':
         // SEC-AUDIT-14: /state membocorkan state machine internal. Hanya

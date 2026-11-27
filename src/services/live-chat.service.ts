@@ -114,7 +114,7 @@ export class LiveChatService {
         const text = r.treatment_detail || r.raw_text;
         if (text) {
           if (!treatmentPriceCache.has(text)) {
-            const val = (await resolveTreatmentValue(text)) || 0;
+            const val = (await resolveTreatmentValue(text, tenantId)) || 0;
             treatmentPriceCache.set(text, val);
           }
           ltv += treatmentPriceCache.get(text) || 0;
@@ -251,7 +251,7 @@ export class LiveChatService {
     let ltv = 0;
     const resList = cust?.reservations || [];
     for (const r of resList) {
-      const val = await resolveTreatmentValue(r.treatment_detail || r.raw_text);
+      const val = await resolveTreatmentValue(r.treatment_detail || r.raw_text, tenantId);
       ltv += val || 0;
     }
 
@@ -1289,7 +1289,7 @@ export class LiveChatService {
       // percakapan customer; mencegah koordinasi staf bocor ke draf balasan.
       const recentReal = recent.filter((m: any) => m?.sender_type !== 'INTERNAL_NOTE');
       const historyFormatted = recentReal.map((m) => `${m.direction === 'INBOUND' ? 'Customer' : 'Bidan'}: ${m.content}`).join('\n');
-      const cfg = getLlmEndpointConfig({ modelConfigKey: 'CHAT_REPLY' });
+      const cfg = getLlmEndpointConfig({ modelConfigKey: 'CHAT_REPLY', tenantId });
 
       const resp = await callChatCompletionsWithFallback({
         model: cfg.model,

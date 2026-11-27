@@ -1532,3 +1532,17 @@ model CronLease {
 
   @@map("cron_leases")
 }
+
+/// Heartbeat job cron lintas proses (G8). Ditulis worker, dibaca /ready di app.
+model CronJobHeartbeat {
+  job_name             String   @id
+  instance_id          String
+  last_started_at      DateTime?
+  last_finished_at     DateTime?
+  last_status          String?
+  last_error           String?
+  consecutive_failures Int      @default(0)
+  updated_at           DateTime @updatedAt
+
+  @@map("cron_job_heartbeats")
+}

@@ -30,7 +30,7 @@ import { calculateOngkirFromTiers, DeliveryTierItem } from '../../utils/delivery
 import { useFormDraft } from '../../hooks/useFormDraft';
 import { apiRequest } from '../../services/api';
 import { formatRupiah as formatRp } from '../../utils/money';
-import { formatWibClock } from '../../utils/dateWib';
+import { formatWibClock, getTomorrowWibDate } from '../../utils/dateWib';
 
 interface InvoiceGeneratorModalProps {
   isOpen: boolean;
@@ -603,7 +603,7 @@ export const InvoiceGeneratorModal: React.FC<InvoiceGeneratorModalProps> = ({
                     type="text"
                     value={dateDisplay}
                     onChange={(e) => setDateDisplay(e.target.value)}
-                    placeholder="Contoh: Minggu 30 Agustus 2026"
+                    placeholder={`Contoh: ${formatIndonesianDate(getTomorrowWibDate())}`}
                     className="w-full px-3 py-1.5 bg-surface-2 border border-divider rounded-lg text-xs text-ink focus:outline-none focus:border-accent"
                   />
                 </div>

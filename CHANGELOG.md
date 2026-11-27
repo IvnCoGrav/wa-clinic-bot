@@ -49,6 +49,17 @@ dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.
   4. **Kontrol Interaktif (`FinancialAnalytics.tsx`):** Segmented control mode (Akumulasi MTD vs Harian, tersimpan di `localStorage`), toggle metrik (Omset vs Reservasi), selector jendela baseline (`Auto`, `3 Bln`, `6 Bln`, `12 Bln`), dan integrasi `ChartSeriesToggle`.
 - **Pengujian & Kualitas:** 45 tes targeted hijau (domain baseline kumulatif, service baseline, config baseline, admin analytics subroute, mapper dashboard metrics), typecheck & dashboard build sukses, `check:reuse` bersih.
 
+#### 2026-11-25 - Feat: Unifikasi Gestur Swipe & Optimalisasi Pull-to-Refresh (#343)
+
+- **Konteks:** Pull-to-refresh terasa patah-patah karena `usePullToRefresh` memanggil `setDistance` pada setiap `touchmove` di halaman 3.787 baris; indikator punya dead zone 28 px dan dinding keras di kurva linear. Gestur swipe horizontal tersebar ad-hoc di tiga komponen dan state `slideDirection` tidak pernah dipakai.
+- **Perbaikan Fondasional:**
+  1. **Modul kanonis `gesture.swipe` (`swipeGesture.ts`):** `applyRubberBand` (redaman eksponensial tanpa dinding keras), `isDominantHorizontal` (rasio 1.8x/2.2x), `resolveSwipeDirection`, `slideClassFor`, dan konstanta tepi/ambang — terdaftar di `scripts/module-registry.json` + `MODULE_INDEX.md`.
+  2. **PTR 0-render per frame (`usePullToRefresh.ts` + `PullToRefreshIndicator.tsx`):** jarak visual ditulis ke CSS custom property `--ptr-y`/`--ptr-progress` via ref DOM; React hanya re-render pada fase diskret. Indikator selalu ter-mount (`forwardRef`), transisi 220 ms `out-expo`, dan fase `done` tetap opak.
+  3. **Hook `useSwipeGesture.ts`:** listener native passive (tidak memicu larangan `preventDefault` React 18), mengabaikan form/`[data-horizontal-scroll]`/`[data-no-swipe]`.
+  4. **Tab directional (`StaffToday.tsx`):** `animate-slideInFromRight`/`Left` aktif dengan `key={activeTab}` di tiap cabang; guard modal, tepi kiri, dan area gulir horizontal dipertahankan.
+  5. **Konsolidasi gestur (`Layout.tsx`, `LiveChatThreadList.tsx`, `LiveChatMonitor.tsx`):** edge swipe-back memakai `--sb-x` tanpa re-attach listener per frame; `data-swipe-menu-owner` mencegah dua drawer terbuka bersamaan; handler `preventDefault` mati di daftar thread dihapus.
+- **Verifikasi:** 23 tes gestur hijau (`pull-to-refresh` 7 + `swipe-gesture` 16; 1 kasus duplikat dihapus), `npm run typecheck` 0, dashboard build sukses, `check:reuse` 189 baseline/0 baru, `check:tokens` 275/275. **Catatan:** `check:design` masih gagal pre-existing di `check:dark-parity` (3 file tak tersentuh, lihat #373); suite penuh 8.495/8.497 lulus dengan 2 kegagalan pre-existing (#368). Baseline Profiler/FPS perangkat belum diukur.
+
 #### 2026-11-25 - Feat: Spesialisasi Notifikasi Keterlambatan Khusus Staff Terapis (#376)
 
 - **Konteks:** Menindaklanjuti audit operasional bahwa Departure Watchdog sebelumnya menyerap seluruh jadwal tanpa filter peran, memicu alarm palsu "Bidan Belum Ditugaskan terlambat" dan menghitung keterlambatan untuk staf kantor non-lapangan (Admin CS, Advertiser, SPV).

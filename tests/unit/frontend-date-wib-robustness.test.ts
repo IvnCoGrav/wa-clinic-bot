@@ -10,6 +10,10 @@ import {
   formatWibDate,
   buildWibIso,
   wibDayStartEnd,
+  getTodayWibDateKey,
+  getTodayWibDate,
+  getTomorrowWibDateKey,
+  getTomorrowWibDate,
 } from '../../packages/admin-dashboard/src/utils/dateWib';
 import { formatWibClock } from '../../packages/admin-dashboard/src/utils/geoUtils';
 
@@ -163,6 +167,25 @@ describe('Frontend dateWib Robustness & Adversarial Tests', () => {
       const base = new Date('2026-10-10T03:00:00Z');
       expect(formatWibClock(base, 0)).toBe('10:00');
       expect(formatWibClock(base, 25)).toBe('10:25');
+    });
+  });
+
+  describe('getTomorrowWibDateKey & getTomorrowWibDate', () => {
+    it('returns a valid YYYY-MM-DD date key representing tomorrow', () => {
+      const tomorrowKey = getTomorrowWibDateKey();
+      expect(tomorrowKey).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+
+      const todayKey = getTodayWibDateKey();
+      expect(diffCalendarDaysWib(todayKey, tomorrowKey)).toBe(1);
+    });
+
+    it('returns a valid Date object set to 12:00 WIB tomorrow to avoid midnight shifts', () => {
+      const tomorrowDate = getTomorrowWibDate();
+      expect(tomorrowDate).toBeInstanceOf(Date);
+      expect(isNaN(tomorrowDate.getTime())).toBe(false);
+
+      const keyFromDate = getWibDateKey(tomorrowDate);
+      expect(keyFromDate).toBe(getTomorrowWibDateKey());
     });
   });
 });

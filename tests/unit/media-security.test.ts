@@ -34,14 +34,32 @@ describe('Media & Proxy Security Tests (SEC-02 & SEC-06)', () => {
   });
 
   describe('2. Customer Avatar SSRF Protection (SEC-06 Fix)', () => {
-    it('serves dynamic UI avatar fallback if customer is not found or url is invalid', async () => {
+    it('menolak avatar anonim', async () => {
       const res = await app.inject({
         method: 'GET',
         url: '/media/avatar/non_existent_customer_id',
       });
+      expect(res.statusCode).toBe(401);
+    });
 
-      // Should return 200 image/png fallback or redirect to safe ui-avatars.com
-      expect([200, 302]).toContain(res.statusCode);
+    it('fallback avatar lokal untuk customer tanpa foto (tanpa redirect pihak ketiga)', async () => {
+      const { prisma } = await import('../../src/db/client');
+      vi.mocked((prisma as any).customer.findUnique).mockResolvedValue({
+        id: 'cust-avatar',
+        tenant_id: 'default-tenant',
+        name: 'Bunda Sari',
+        profile_picture_url: null,
+      });
+
+      const res = await app.inject({
+        method: 'GET',
+        url: '/media/avatar/cust-avatar',
+        headers: { 'x-api-key': superAdminKey },
+      });
+
+      expect(res.statusCode).toBe(200);
+      expect(String(res.headers['content-type'])).toContain('image/svg+xml');
+      expect(res.headers['location']).toBeUndefined();
     });
   });
 });

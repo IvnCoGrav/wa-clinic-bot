@@ -2,6 +2,7 @@ import { COPILOT_TOOLS, getCopilotTool, CopilotToolResult } from './copilot-tool
 import { getWibDayName, formatWibDateYYYYMMDD, wibDayBoundsUtc } from '../../utils/wib-time';
 import { escapeRegex } from '../../utils/regex-escape';
 import { parsePositiveInt } from '../../utils/env-numeric';
+import { maxTokensPerTurn } from './copilot-budget';
 import { requestHermesRouter, requestHermesSummarize, resolveHermesConfig } from './hermes-adapter';
 import { isCopilotTenantAllowed, COPILOT_DEPRECATED_ERROR } from '../../config/copilot-tenant';
 
@@ -55,6 +56,8 @@ export interface CopilotChatResult {
   grounded: boolean;
   /** Observabilitas: jumlah panggilan LLM (router + summarize) — untuk uji budget. */
   llmCalls?: number;
+  /** Total token LLM yang terpakai pada turn ini (semua engine). */
+  tokensUsed?: number;
   /** Observabilitas/audit: jumlah baris per tool yang dieksekusi. */
   rowCounts?: Record<string, number>;
   error?: string;
@@ -514,6 +517,16 @@ Pertanyaan admin: "${message}"`;
 }
 
 /**
+ * Netralkan sintaks tautan Markdown pada nilai yang berasal dari data pelanggan.
+ * Pesan masuk WA bisa berisi `[Klik hadiah](https://…)`; tanpa ini jawaban
+ * degradasi menjadi tautan klik-able di dashboard admin (vektor phishing).
+ * Hanya label yang disisakan — tidak ada pemotongan kata di tengah kalimat.
+ */
+function neutralizeMarkdownLinks(value: unknown): string {
+  return String(value ?? '').replace(/\[([^\]]*)\]\s*\(\s*[^)]*\)/g, '$1');
+}
+
+/**
  * Bangun jawaban degradasi jujur dari data yang SUDAH terkumpul — dipakai ketika
  * anggaran waktu habis sebelum summarize. Deterministik (tanpa LLM) sehingga TIDAK
  * bisa berhalusinasi: hanya menyalin nama + field dari baris tool nyata.
@@ -523,7 +536,7 @@ export function buildDegradedAnswer(collected: Array<{ tool: string; rows: any[]
   for (const c of collected) {
     if (!c.rows.length) continue;
     const shown = c.rows.slice(0, 10).map((r) => {
-      const name = r.customerName || r.title || r.name || '—';
+      const name = neutralizeMarkdownLinks(r.customerName || r.title || r.name || '—');
       const bits: string[] = [];
       if (r.bookingDateWib || r.bookingTimeWib) {
         bits.push(`${r.bookingDateWib || ''} ${r.bookingTimeWib ? `${r.bookingTimeWib} WIB` : ''}`.trim());
@@ -536,7 +549,7 @@ export function buildDegradedAnswer(collected: Array<{ tool: string; rows: any[]
       if (r.requestedTime) bits.push(`minta ${r.requestedTime}`);
       if (r.offeredTime) bits.push(`ditawari ${r.offeredTime}`);
       if (typeof r.waitingMinutes === 'number') bits.push(formatWaitTime(r.waitingMinutes));
-      if (r.lastMessage) bits.push(`"${String(r.lastMessage).slice(0, 60)}"`);
+      if (r.lastMessage) bits.push(`"${neutralizeMarkdownLinks(String(r.lastMessage).slice(0, 60))}"`);
       return `- ${name}${bits.length ? ` — ${bits.join(' · ')}` : ''}`;
     });
     const more = c.rows.length > shown.length ? `\n- … (${c.rows.length - shown.length} baris lain)` : '';
@@ -550,6 +563,8 @@ export function buildDegradedAnswer(collected: Array<{ tool: string; rows: any[]
 
 /** Penanda error khusus batas waktu Copilot (bukan kegagalan LLM nyata). */
 const COPILOT_DEADLINE_ERROR = 'COPILOT_DEADLINE_EXCEEDED';
+/** Penanda plafon token per turn tercapai sebelum ada data yang bisa disajikan. */
+const COPILOT_TOKEN_BUDGET_ERROR = 'COPILOT_TOKEN_BUDGET_EXCEEDED';
 
 /** Gaya ringkasan Copilot yang bersumber dari DB per-tenant (bukan hardcode). */
 export interface CopilotStyleConfig {
@@ -729,14 +744,49 @@ export class CopilotService {
     };
 
     let timedOut = false;
+    /** Loop berhenti karena plafon token per turn — bukan karena deadline. */
+    let tokenCapReached = false;
     // Jejak fallback Hermes → internal (observabilitas uji; lihat interface).
     let hermesFallback = false;
     // resolveHermesConfig murni baca env (tanpa throw) → aman sebelum try.
     const hermesCfg = resolveHermesConfig();
     const useHermes = hermesCfg.engine === 'hermes';
-    const engineTag = (): Pick<CopilotChatResult, 'engine' | 'hermesFallback'> => ({
+    let totalTokens = 0;
+    /**
+     * Akuntansi token tidak boleh bergantung pada bentuk respons provider:
+     * sebagian hanya mengirim prompt/completion tanpa total_tokens, dan jalur
+     * Hermes "bridge" tidak mengirim usage sama sekali. Tanpa normalisasi ini
+     * plafon harian bisa dilewati hanya dengan memakai mode bridge.
+     */
+    const usageTokens = (usage: any): number => {
+      if (!usage) return 0;
+      const total = Number(usage.total_tokens);
+      if (Number.isFinite(total) && total > 0) return total;
+      const prompt = Number(usage.prompt_tokens);
+      const completion = Number(usage.completion_tokens);
+      const sum =
+        (Number.isFinite(prompt) ? prompt : 0) + (Number.isFinite(completion) ? completion : 0);
+      return sum > 0 ? sum : 0;
+    };
+    const estimateUsage = (prompt: string, completionFloor = 64) => {
+      const promptTokens = Math.max(1, Math.ceil(String(prompt || '').length / 4));
+      return {
+        prompt_tokens: promptTokens,
+        completion_tokens: completionFloor,
+        total_tokens: promptTokens + completionFloor,
+      };
+    };
+    const trackUsage = (usage: any) => {
+      const t = usageTokens(usage);
+      if (t > 0) totalTokens += t;
+    };
+    /** Normalisasi usage provider; estimasi deterministik bila provider bisu. */
+    const usageOrEstimate = (usage: any, prompt: string, completionFloor = 64) =>
+      usageTokens(usage) > 0 ? usage : estimateUsage(prompt, completionFloor);
+    const engineTag = (): Pick<CopilotChatResult, 'engine' | 'hermesFallback' | 'tokensUsed'> => ({
       engine: hermesCfg.engine,
       hermesFallback,
+      tokensUsed: totalTokens,
     });
 
     // ADR-001: gerbang single-tenant lapis-2 — tolak tenant non-owner SEBELUM
@@ -793,6 +843,8 @@ export class CopilotService {
         openaiUrl: hermesCfg.openaiUrl,
         openaiKey: hermesCfg.openaiKey,
         openaiModel: hermesCfg.openaiModel,
+        signal: params.signal,
+        onUsage: trackUsage,
       };
 
       const toolMenu = COPILOT_TOOLS.map(
@@ -815,6 +867,7 @@ export class CopilotService {
       const seenSignatures = new Set<string>();
       let llmCalls = 0;
       let totalRows = 0;
+      const perTurnTokenCap = maxTokensPerTurn();
 
       for (let iteration = 0; iteration < cop.maxIterations; iteration++) {
         // Klien membatalkan di tengah loop → berhenti sebelum panggilan LLM berikutnya.
@@ -833,6 +886,11 @@ export class CopilotService {
         // Gerbang anggaran: hentikan loop bila waktu tersisa terlalu tipis untuk
         // satu panggilan LLM lagi (cegah request melewati deadline klien).
         if (remainingMs() < minCallBudget) break;
+        // Plafon token per turn (G9): 20k default, dapat diatur env.
+        if (totalTokens >= perTurnTokenCap) {
+          tokenCapReached = true;
+          break;
+        }
 
         params.onEvent?.({
           type: 'stage',
@@ -866,21 +924,41 @@ export class CopilotService {
           }));
         } catch {}
 
-        llmCalls++;
         let toolName: string | null = null;
         let toolArgs: Record<string, any> = {};
         let hermesRouted = false;
         // Jalur Hermes dulu (bila aktif); gagal → jatuh ke router internal di bawah.
         if (useHermes) {
+          let hermesUsage: any = null;
           try {
+            const hermesCallStart = Date.now();
             const d = await requestHermesRouter(routerPrompt, {
               ...hermesOpts,
               timeoutMs: callTimeout(cfg.timeoutMs),
+              onUsage: (u: any) => {
+                trackUsage(u);
+                hermesUsage = u;
+              },
             });
             if (d) {
               toolName = d.tool;
               toolArgs = d.args;
               hermesRouted = true;
+              // Bridge tidak mengirim usage → estimasi deterministik, jangan 0.
+              const bridgeUsage =
+                usageTokens(hermesUsage) > 0 ? hermesUsage : estimateUsage(routerPrompt, 80);
+              if (usageTokens(hermesUsage) === 0) trackUsage(bridgeUsage);
+              llmCalls++;
+              auditLlmCall({
+                customer_phone: 'ADMIN_COPILOT',
+                tenant_id: tenantId,
+                conversation_id: params.activeContext?.conversationId || null,
+                task_type: 'AI_COPILOT_CHAT',
+                model_name: hermesCfg.openaiModel || 'hermes-agent',
+                baseUrl: hermesCfg.openaiUrl,
+                startedAt: hermesCallStart,
+                usage: bridgeUsage,
+              });
             }
           } catch {
             hermesRouted = false;
@@ -910,6 +988,9 @@ export class CopilotService {
                 }),
               remainingMs()
             );
+            const routerUsage = usageOrEstimate(routerResp?.data?.usage, routerPrompt, 80);
+            trackUsage(routerUsage);
+            llmCalls++;
             auditLlmCall({
               customer_phone: 'ADMIN_COPILOT',
               tenant_id: tenantId,
@@ -918,7 +999,7 @@ export class CopilotService {
               model_name: routerResp?.model || cfg.model,
               baseUrl: routerResp?.baseUrl || cfg.baseUrl,
               startedAt: routerCallStart,
-              usage: routerResp?.data?.usage,
+              usage: routerUsage,
             });
           } catch (e: any) {
             if (isCopilotDeadlineError(e)) {
@@ -979,6 +1060,13 @@ export class CopilotService {
 
       const toolsUsed = collected.map((c) => c.tool);
       const unionRows = collected.flatMap((c) => c.rows);
+      // Degradasi WAJIB melewati pipeline output kanonis yang sama dengan jalur normal:
+      // sanitizer → perbaikan tautan → grounding dihitung (bukan hardcode true).
+      const finalizeDegraded = () => {
+        const raw = buildDegradedAnswer(collected);
+        const answer = stripOrphanChatLinks(repairCopilotChatLinks(sanitizeCopilotAnswer(raw), unionRows));
+        return { answer, grounded: this.validateGrounding(answer, unionRows) };
+      };
       // Observabilitas audit: jumlah baris per tool (dipakai payload AuditLog).
       const rowCounts: Record<string, number> = {};
       for (const c of collected) rowCounts[c.tool] = c.rows.length;
@@ -986,24 +1074,27 @@ export class CopilotService {
       // Gerbang anggaran (prioritas tertinggi): bila deadline tersentuh, kembalikan
       // jawaban degradasi deterministik dari baris yang sudah dikumpulkan — jangan
       // menembak LLM yang pasti melewati deadline klien.
-      if (timedOut) {
+      if (timedOut || tokenCapReached) {
         if (collected.length === 0) {
           return {
             success: false,
-            answer: 'Copilot melebihi batas waktu sebelum sempat mengambil data. Coba lagi atau persempit pertanyaan.',
+            answer: tokenCapReached
+              ? 'Kuota token untuk percakapan ini habis sebelum data terkumpul. Coba persempit pertanyaan.'
+              : 'Copilot melebihi batas waktu sebelum sempat mengambil data. Coba lagi atau persempit pertanyaan.',
             toolsUsed: [],
             grounded: false,
-            error: COPILOT_DEADLINE_ERROR,
+            error: tokenCapReached ? COPILOT_TOKEN_BUDGET_ERROR : COPILOT_DEADLINE_ERROR,
             llmCalls,
             rowCounts,
             ...engineTag(),
           };
         }
+        const degraded = finalizeDegraded();
         return {
           success: true,
-          answer: buildDegradedAnswer(collected),
+          answer: degraded.answer,
           toolsUsed,
-          grounded: true,
+          grounded: degraded.grounded,
           llmCalls,
           rowCounts,
           ...engineTag(),
@@ -1029,13 +1120,14 @@ export class CopilotService {
 
       // Gerbang anggaran: bila sisa waktu tak cukup untuk summarize, sajikan data
       // mentah (degradasi jujur) daripada menembak LLM yang melewati deadline.
-      if (remainingMs() < minCallBudget) {
+      if (remainingMs() < minCallBudget || totalTokens >= perTurnTokenCap) {
         logTurn({ degraded: true, toolsUsed, rowCounts, llmCalls });
+        const degraded = finalizeDegraded();
         return {
           success: true,
-          answer: buildDegradedAnswer(collected),
+          answer: degraded.answer,
           toolsUsed,
-          grounded: true,
+          grounded: degraded.grounded,
           llmCalls,
           rowCounts,
           ...engineTag(),
@@ -1068,15 +1160,38 @@ export class CopilotService {
         }));
       } catch {}
 
-      llmCalls++;
       // Jalur Hermes dulu (bila aktif); gagal → jatuh ke summarize internal di bawah.
       let hermesSummary: string | null = null;
       if (useHermes) {
+        let hermesSummaryUsage: any = null;
         try {
+          const hermesSummaryStart = Date.now();
           hermesSummary = await requestHermesSummarize(summarizePrompt, {
             ...hermesOpts,
             timeoutMs: callTimeout(cfg.timeoutMs),
+            onUsage: (u: any) => {
+              trackUsage(u);
+              hermesSummaryUsage = u;
+            },
           });
+          if (hermesSummary) {
+            const bridgeUsage =
+              usageTokens(hermesSummaryUsage) > 0
+                ? hermesSummaryUsage
+                : estimateUsage(summarizePrompt, 300);
+            if (usageTokens(hermesSummaryUsage) === 0) trackUsage(bridgeUsage);
+            llmCalls++;
+            auditLlmCall({
+              customer_phone: 'ADMIN_COPILOT',
+              tenant_id: tenantId,
+              conversation_id: params.activeContext?.conversationId || null,
+              task_type: 'AI_COPILOT_CHAT',
+              model_name: hermesCfg.openaiModel || 'hermes-agent',
+              baseUrl: hermesCfg.openaiUrl,
+              startedAt: hermesSummaryStart,
+              usage: bridgeUsage,
+            });
+          }
         } catch {
           hermesSummary = null;
         }
@@ -1113,6 +1228,9 @@ export class CopilotService {
             
             remainingMs()
           );
+          const summaryUsage = usageOrEstimate(summaryResp?.data?.usage, summarizePrompt, 300);
+          trackUsage(summaryUsage);
+          llmCalls++;
           auditLlmCall({
             customer_phone: 'ADMIN_COPILOT',
             tenant_id: tenantId,
@@ -1121,18 +1239,19 @@ export class CopilotService {
             model_name: summaryResp?.model || cfg.model,
             baseUrl: summaryResp?.baseUrl || cfg.baseUrl,
             startedAt: summaryCallStart,
-            usage: summaryResp?.data?.usage,
+            usage: summaryUsage,
           });
         } catch (e: any) {
           // Batas waktu pada tahap ringkasan → tetap sajikan data mentah (degradasi jujur),
           // bukan pesan "layanan AI gangguan" yang menyesatkan.
           if (isCopilotDeadlineError(e)) {
             logTurn({ degraded: true, toolsUsed, rowCounts, llmCalls });
+            const degraded = finalizeDegraded();
             return {
               success: true,
-              answer: buildDegradedAnswer(collected),
+              answer: degraded.answer,
               toolsUsed,
-              grounded: true,
+              grounded: degraded.grounded,
               llmCalls,
               rowCounts,
               ...engineTag(),
@@ -1180,6 +1299,13 @@ export class CopilotService {
             if (continueAnswer) {
               rawAnswer = stitchCopilotAnswer(rawAnswer, continueAnswer);
             }
+            // Lanjutan juga memakai token — sebelumnya tidak pernah dicatat.
+            const continueUsage = usageOrEstimate(
+              continueResp?.data?.usage,
+              `${summarizePrompt}\n${rawAnswer}`,
+              300
+            );
+            trackUsage(continueUsage);
             auditLlmCall({
               customer_phone: 'ADMIN_COPILOT',
               tenant_id: tenantId,
@@ -1188,7 +1314,7 @@ export class CopilotService {
               model_name: continueResp?.model || cfg.model,
               baseUrl: continueResp?.baseUrl || cfg.baseUrl,
               startedAt: continueCallStart,
-              usage: continueResp?.data?.usage,
+              usage: continueUsage,
             });
           } catch {
             // Jika panggilan lanjutan timeout/gagal, rawAnswer tetap dipakai dan dipangkas deterministik di bawah

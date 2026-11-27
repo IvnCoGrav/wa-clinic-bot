@@ -386,6 +386,15 @@ describe('RBAC Live Chat & Operational CS Contract (KNOWN #358 Fase 0+1)', () =>
       mockStaffSession('ADMIN_CS');
       (prisma as any).roleApiScope = { findMany: vi.fn().mockResolvedValue(mergedScopes) };
 
+      // Test ini menguji RBAC, bukan LLM. Jangan biarkan panggilan provider nyata
+      // (timeout/retry) menggantung test.
+      const { copilotService } = await import('../../src/services/copilot/copilot.service');
+      vi.spyOn(copilotService, 'chat').mockResolvedValue({
+        answer: 'ok',
+        grounded: false,
+        citations: [],
+      } as any);
+
       for (const url of ['/api/admin/settings/payment-info', '/api/admin/settings/pricelist-image', '/api/admin/customer-service']) {
         const res = await app.inject({
           method: 'GET',

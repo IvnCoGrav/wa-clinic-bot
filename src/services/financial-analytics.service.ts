@@ -30,6 +30,10 @@ import {
   type ForecastSummary,
   type MonthPosition,
 } from '../domain/daily-baseline';
+import { escapeCsvCell } from '../utils/spreadsheet-escape';
+
+export { escapeCsvCell };
+
 function buildMonthlyAnalyticsCacheKey(
   tenantId: string,
   year: number,
@@ -56,18 +60,10 @@ function isCancelledStatus(status: unknown): boolean {
 }
 
 /**
- * SEC-AUDIT-12: netralkan formula injection CSV (CWE-1236). Nilai yang diawali
- * = + - @ TAB CR diberi prefix kutip tunggal agar spreadsheet memperlakukannya
- * sebagai teks murni, lalu dibungkus kutip ganda dengan escape standar.
+ * SEC-AUDIT-12: netralkan formula injection CSV (CWE-1236).
+ * Implementasi kanonis ada di `src/utils/spreadsheet-escape.ts`; diekspor ulang
+ * di sini agar pemanggil lama tetap kompatibel.
  */
-export function escapeCsvCell(val: any): string {
-  let s = String(val ?? '');
-  if (/^[=+\-@\t\r]/.test(s)) {
-    s = `'${s}`;
-  }
-  s = s.replace(/"/g, '""');
-  return `"${s}"`;
-}
 
 export interface MonthlyKpiSummary {
   totalRevenue: number;

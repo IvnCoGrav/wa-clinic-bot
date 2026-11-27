@@ -1,4 +1,4 @@
-FROM node:20-slim AS builder
+FROM node:20-slim@sha256:2cf067cfed83d5ea958367df9f966191a942351a2df77d6f0193e162b5febfc0 AS builder
 
 WORKDIR /app
 
@@ -18,11 +18,9 @@ RUN npx prisma generate
 RUN NODE_OPTIONS="--max-old-space-size=2048" npm run build
 
 # Build Admin Dashboard SPA (base '/admin/', diserve bot di /admin/*)
-# VITE_CARTO_API_KEY disuntikkan sebagai build-arg (tidak disalin dari .env karena
-# .env di-.dockerignore). Kosong → dashboard otomatis pakai fallback Esri (tanpa key).
+# M17-11: kunci peta (CARTO) TIDAK lagi disuntikkan lewat build-arg; dashboard
+# mengambilnya runtime dari GET /api/config/public agar rotasi tidak butuh rebuild.
 WORKDIR /app/packages/admin-dashboard
-ARG VITE_CARTO_API_KEY=""
-ENV VITE_CARTO_API_KEY=$VITE_CARTO_API_KEY
 # F8 rollout gate portal bidan. Default OFF; isi "true" hanya setelah angka
 # raport divalidasi owner. Backend memakai env runtime bernama sama.
 ARG VITE_SCORECARD_STAFF_UI_ENABLED=""
@@ -31,7 +29,7 @@ RUN npm ci --prefer-offline && npm run build
 WORKDIR /app
 
 # --- STAGE 2: PRODUCTION RUNNER ---
-FROM node:20-slim AS runner
+FROM node:20-slim@sha256:2cf067cfed83d5ea958367df9f966191a942351a2df77d6f0193e162b5febfc0 AS runner
 
 WORKDIR /app
 

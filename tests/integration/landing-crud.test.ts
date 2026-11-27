@@ -182,18 +182,20 @@ describe('Multi Landing Page — Admin CRUD & Serving (offline/in-memory fallbac
     const body = JSON.parse(res.body);
 
     expect(body.title).toBe('Promo Bayi Spesial');
-    expect(body.landing_type).toBe('RAW_HTML');
-    expect(body.events).toEqual(['ViewContent', 'Lead']);
-    expect(body.meta_pixel_id).toBe('LP_PIXEL_OVERRIDE');
+    expect(body.structured_content.clinic_name).toBe('Klinik Kenanga');
     expect(body.whatsapp_number).toBe('628111');
-    expect(body.raw_html_content).toContain('wa-cta');
+    // DTO publik: field internal tidak boleh bocor.
+    expect(body.meta_pixel_id).toBeUndefined();
+    expect(body.raw_html_content).toBeUndefined();
+    expect(body.tenant_id).toBeUndefined();
+    expect(body.landing_type).toBeUndefined();
 
     const serialized = JSON.stringify(body);
     expect(serialized).not.toContain('SHOULD_NEVER_LEAK');
     expect(serialized).not.toContain('access_token');
   });
 
-  it('14. GET /api/tenant/:slug fallback tenant legacy → events default []', async () => {
+  it('14. GET /api/tenant/:slug fallback tenant legacy → DTO publik', async () => {
     vi.mocked(prisma.landingPage.findFirst).mockRejectedValueOnce(new Error('Database offline'));
     vi.mocked(prisma.tenant.findFirst).mockResolvedValueOnce({
       id: 'default-tenant',
@@ -210,16 +212,15 @@ describe('Multi Landing Page — Admin CRUD & Serving (offline/in-memory fallbac
     expect(res.statusCode).toBe(200);
     const body = JSON.parse(res.body);
     expect(body.title).toBe('Klinik Kenanga');
-    expect(body.events).toEqual([]);
-    expect(body.meta_pixel_id).toBe('TENANT_PIXEL');
+    expect(body.meta_pixel_id).toBeUndefined();
+    expect(body.structured_content).toBeDefined();
   });
 
-  it('15. GET /api/tenant/:slug fail-open saat semuanya gagal (DB offline)', async () => {
+  it('15. GET /api/tenant/:slug 404 saat semuanya gagal (DB offline)', async () => {
     const res = await app.inject({ method: 'GET', url: '/api/tenant/anything-unknown' });
-    expect(res.statusCode).toBe(200);
+    expect(res.statusCode).toBe(404);
     const body = JSON.parse(res.body);
-    expect(body.title).toBe('');
-    expect(body.events).toEqual([]);
-    expect(body.tenant_id).toBe('default-tenant');
+    expect(body.tenant_id).toBeUndefined();
+    expect(body.error).toBeDefined();
   });
 });

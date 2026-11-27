@@ -126,6 +126,20 @@ export function getTodayWibDate(): Date {
   return new Date(y, m - 1, d, 12, 0, 0);
 }
 
+/** Ambil tanggal besok dalam format YYYY-MM-DD (WIB) */
+export function getTomorrowWibDateKey(): string {
+  const t = getTodayWibDate();
+  t.setDate(t.getDate() + 1);
+  return getWibDateKey(t);
+}
+
+/** Ambil Date object yang tepat merepresentasikan besok di WIB (pukul 12:00 siang WIB) */
+export function getTomorrowWibDate(): Date {
+  const t = getTodayWibDate();
+  t.setDate(t.getDate() + 1);
+  return t;
+}
+
 /** Format tanggal dengan zona waktu Asia/Jakarta (WIB) */
 export function formatWibDate(dateStr?: string | Date | null, options?: Intl.DateTimeFormatOptions): string {
   if (!dateStr || (typeof dateStr === 'string' && dateStr.trim() === '')) return '';

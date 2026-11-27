@@ -24,7 +24,7 @@
     t.src=v;s=b.getElementsByTagName(e)[0];
     s.parentNode.insertBefore(t,s)}(window, document,'script',
     'https://connect.facebook.net/en_US/fbevents.js');
-    fbq('init', '__FB_PIXEL_ID__');
+    fbq('init', __FB_PIXEL_ID_JS__);
     (function(){
       var pvEventId = 'pv_' + Date.now() + '_' + Math.random().toString(36).substring(2, 8);
       window._kala_pv_event_id = pvEventId;
@@ -49,8 +49,8 @@
           utm_term: params.get('utm_term') || null,
           utm_content: params.get('utm_content') || null,
           utm_id: params.get('utm_id') || null,
-          tenantId: '__TENANT_ID__',
-          tenant_id: '__TENANT_ID__'
+          tenantId: __TENANT_ID_JS__,
+          tenant_id: __TENANT_ID_JS__
         };
         var body = JSON.stringify(payload);
         if (navigator.sendBeacon) {
@@ -253,9 +253,9 @@
     (function() {
       const trackingApiBaseUrl = '__TRACKING_API_BASE_URL__';
       const trackingApiKey = '__TRACKING_API_KEY__';
-      const defaultPhone = '__DEFAULT_WHATSAPP_PHONE__';
-      const tenantId = '__TENANT_ID__';
-      const tenantSlug = '__TENANT_SLUG__';
+      const defaultPhone = __DEFAULT_WHATSAPP_PHONE_JS__;
+      const tenantId = __TENANT_ID_JS__;
+      const tenantSlug = __TENANT_SLUG_JS__;
 
       // Fallback beacon PageView untuk kasus pixel dihapus (isolasi multi-tenant tanpa pixel) atau fbq gagal
       (function(){

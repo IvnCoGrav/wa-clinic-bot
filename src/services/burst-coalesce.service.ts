@@ -5,6 +5,7 @@ import { queueService } from './queue.service';
 import { commandService } from './command.service';
 import { trackTimeout, clearTimeoutTracked } from '../lifecycle/interval-registry';
 import { distributedKv, DistributedKv, KV_LOCK_TTL_MS } from '../utils/distributed-kv';
+import { wabaOptOutService } from './waba-optout.service';
 
 /**
  * Burst Coalescing Service — gabungkan pesan text beruntun dari customer menjadi
@@ -116,6 +117,17 @@ export class BurstCoalesceService {
   }
 
   /**
+   * M02-12: pesan berprioritas TIDAK boleh di-merge. STOP/UNSUBSCRIBE harus
+   * dibaca utuh oleh gerbang opt-out; bila digabung jadi "halo\nSTOP" pencocokan
+   * opt-out gagal dan customer tetap menerima promo.
+   */
+  private isPriorityText(text: string): boolean {
+    if (!text) return false;
+    if (this.isCommandText(text)) return true;
+    return wabaOptOutService.isOptOutMessage(text).matched;
+  }
+
+  /**
    * W-006: tentukan jalur. Percobaan pertama menyentuh KV untuk memicu koneksi
    * Redis (lazy), lalu hasilnya di-cache per proses.
    */
@@ -165,10 +177,19 @@ export class BurstCoalesceService {
       return { handled: false };
     }
 
-    // 2b. Pesan perintah slash (contoh /reset, /state, /mulai) → jangan di-merge supaya
-    // exact-match perintah tidak hilang saat digabung dengan pesan lain. Flush lalu
-    // passthrough ke machine command gate.
-    if (this.isCommandText(incomingMessage.text?.body || '')) {
+    // 2b. Pesan perintah slash (contoh /reset, /state, /mulai) ATAU pesan opt-out
+    // (STOP/UNSUBSCRIBE) → jangan di-merge supaya pencocokan verbatim tidak hilang.
+    // Flush lalu passthrough ke machine command/opt-out gate.
+    if (this.isPriorityText(incomingMessage.text?.body || '')) {
+      if (existing) {
+        await this.flushLocal(key);
+      }
+      return { handled: false };
+    }
+
+    // 2c. M01-14: sedang menunggu konfirmasi /reset (state persisten) → semua pesan
+    // harus dibaca utuh oleh command gate, jangan ditunda/digabung.
+    if (commandService.isResetConfirmationPending(conversation)) {
       if (existing) {
         await this.flushLocal(key);
       }
@@ -230,7 +251,12 @@ export class BurstCoalesceService {
       return { handled: false };
     }
 
-    if (this.isCommandText(incomingMessage.text?.body || '')) {
+    if (this.isPriorityText(incomingMessage.text?.body || '')) {
+      if (buffered.length > 0) await this.flushDistributed(key, true);
+      return { handled: false };
+    }
+
+    if (commandService.isResetConfirmationPending(conversation)) {
       if (buffered.length > 0) await this.flushDistributed(key, true);
       return { handled: false };
     }
@@ -387,6 +413,18 @@ export class BurstCoalesceService {
     messages: any[]
   ): Promise<void> {
     if (messages.length === 0) return;
+
+    // M02-12 (defensif): batch yang terlanjur berisi opt-out (mis. buffer lama
+    // lintas deploy) TIDAK boleh digabung — kirim tiap pesan utuh berurutan.
+    if (
+      messages.length > 1 &&
+      messages.some((m) => wabaOptOutService.isOptOutMessage(m?.text?.body || '').matched)
+    ) {
+      for (const m of messages) {
+        await this.enqueueMerged(meta, [m]);
+      }
+      return;
+    }
 
     const { tenantId, customerId, phone, chatId, conversationId } = meta;
     const last = messages[messages.length - 1];
