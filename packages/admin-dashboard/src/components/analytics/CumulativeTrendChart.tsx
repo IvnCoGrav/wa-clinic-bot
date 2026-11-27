@@ -215,6 +215,19 @@ export const CumulativeTrendChart: React.FC<CumulativeTrendChartProps> = ({
                 connectNulls={false}
               />
             )}
+
+            {/* 7. Pace Target Bulanan (Garis Putus-Putus Merah/Danger Halus) */}
+            {metricType === 'revenue' && visible.targetPace && (
+              <Line
+                type="linear"
+                dataKey="targetPaceRevenue"
+                stroke="rgb(var(--c-danger))"
+                strokeDasharray="5 5"
+                strokeWidth={2}
+                dot={false}
+                connectNulls={false}
+              />
+            )}
           </ComposedChart>
         </ResponsiveContainer>
       </div>
@@ -226,6 +239,9 @@ export const CumulativeTrendChart: React.FC<CumulativeTrendChartProps> = ({
             ? `Basis baseline ${monthsUsed} bulan historis (diminta ${monthsRequested})`
             : 'Baseline historis dinonaktifkan (data belum cukup)'}
           {forecastSummary?.method === 'RUN_RATE_FLAT' && ' · Proyeksi memakai run-rate harian (riwayat baseline belum cukup)'}
+          {forecastSummary?.cancellationRate
+            ? ` · Base forecast memakai cancellation rate historis ${forecastSummary.cancellationRate}%`
+            : ''}
         </span>
         <span className="italic">Garis putus-putus = proyeksi statistik berjalan, bukan jaminan mutlak.</span>
       </div>

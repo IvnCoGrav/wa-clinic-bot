@@ -39,6 +39,12 @@ vi.mock('../../src/config/ai-models.config', () => ({
   }
 }));
 
+vi.mock('../../src/services/treatment-value.service', () => ({
+  resolveTreatmentValue: vi.fn(),
+}));
+
+import { resolveTreatmentValue } from '../../src/services/treatment-value.service';
+
 describe('DailyReportService', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -106,24 +112,24 @@ describe('DailyReportService', () => {
     expect(callCount).toBe(2);
   });
 
-  it('should correctly flag revenue as (estimasi) using fuzzy matching', async () => {
-    // Mock reservation with slightly typoed treatment
+  it('should correctly flag revenue as (estimasi katalog) using catalog fallback', async () => {
+    vi.mocked(resolveTreatmentValue).mockResolvedValue(150000);
+
+    // Mock reservation with missing purchase_value / items (catalog fallback)
     vi.mocked(prisma.reservation.findMany).mockResolvedValue([
       { treatment_detail: 'spa bayii', customer: { created_at: new Date() } }
-    ] as any);
-
-    // Mock clinic service with correct name
-    vi.mocked(prisma.clinicService.findMany).mockResolvedValue([
-      { service_id: 'spa-bayi', name: 'Spa Bayi', promo_price: 150000, original_price: 200000 }
     ] as any);
 
     const reportData = await dailyReportService.generateReport('tenant-1', new Date(), '2026-01-01');
     
     expect(reportData.sales.totalRevenue).toBe(150000);
     expect(reportData.sales.revenueIsEstimated).toBe(true);
+    expect(reportData.sales.basis).toBe('created_at');
+    expect(reportData.sales.statusFilter).toBe('confirmed_and_completed');
 
     const formatted = dailyReportService.formatForTelegram('Tenant Test', reportData);
-    expect(formatted).toContain('(estimasi)');
+    expect(formatted).toContain('(estimasi katalog)');
+    expect(formatted).toContain('Nilai Booking Dibuat Hari Ini');
   });
 
   describe('sendTestDailyReport (QA Dummy Mode)', () => {

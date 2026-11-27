@@ -19,6 +19,7 @@ import {
   fmtNum,
   fmtCompactCurrency,
 } from './types';
+import { MetricBasisBadge } from '../analytics/MetricBasisBadge';
 
 interface CohortRetentionTableProps {
   report: MetaPerformanceReport;
@@ -136,8 +137,16 @@ export const CohortRetentionTable: React.FC<CohortRetentionTableProps> = ({ repo
             <Users size={16} className="text-accent" /> Retensi Repeat Order &amp; Performa Unit Economics (Kohort)
           </h3>
           <p className="text-[11px] text-ink-3 mt-0.5">
-            Kohort berbasis tanggal kunjungan riil (<code className="text-ink-2">booking_date</code>). Omzet hanya menghitung biaya perawatan yang telah selesai (<code className="text-ink-2">completed</code>), ongkir dipisahkan.
+            KPI di atas memakai <code className="text-ink-2">created_at</code> / non-cancelled. Tabel kohort ini memakai tanggal kunjungan riil (<code className="text-ink-2">booking_date</code>), hanya kunjungan selesai (<code className="text-ink-2">completed</code>), dan nilai treatment saja — ongkir dipisahkan.
           </p>
+          <MetricBasisBadge
+            label="Kohort: booking_date; completed-only; treatment-only"
+            basis="booking_date"
+            statusFilter="completed_only"
+            includesPending={false}
+            includesUpcoming={false}
+            includesDeliveryFee={false}
+          />
         </div>
 
         {/* Toggle Tampilan Waktu */}
@@ -171,7 +180,7 @@ export const CohortRetentionTable: React.FC<CohortRetentionTableProps> = ({ repo
         <div className="bg-surface border border-divider rounded-xl p-3.5 space-y-1.5 shadow-2xs">
           <div className="flex items-center justify-between">
             <span className="text-[11px] uppercase font-bold text-ink-2 tracking-wider flex items-center gap-1.5">
-              <Sparkles size={13} className="text-accent" /> LTV 60-Hari (Iklan)
+              <Sparkles size={13} className="text-accent" /> LTV 60-Hari (Cohort)
             </span>
             {hasEnoughData ? (
               <span className="text-[10px] font-bold text-success bg-success-soft border border-success-line px-1.5 py-0.5 rounded">
@@ -280,13 +289,13 @@ export const CohortRetentionTable: React.FC<CohortRetentionTableProps> = ({ repo
               <th className="py-2.5 px-3 text-right">Biaya Iklan</th>
               <th className="py-2.5 px-3 text-right">Real CAC</th>
               <th className="py-2.5 px-3 text-right">Kunjungan #1</th>
-              <th className="py-2.5 px-3 text-right">Repeat M+1</th>
-              <th className="py-2.5 px-3 text-right">Repeat M+2</th>
-              <th className="py-2.5 px-3 text-right">Repeat M+3</th>
-              <th className="py-2.5 px-3 text-right">Repeat M+4</th>
-              <th className="py-2.5 px-3 text-right">Repeat M+5</th>
-              <th className="py-2.5 px-3 text-right">Total Omzet</th>
-              <th className="py-2.5 px-3 text-right">Nilai/Pasien</th>
+              <th className="py-2.5 px-3 text-right">Repeat Cohort M+1</th>
+              <th className="py-2.5 px-3 text-right">Repeat Cohort M+2</th>
+              <th className="py-2.5 px-3 text-right">Repeat Cohort M+3</th>
+              <th className="py-2.5 px-3 text-right">Repeat Cohort M+4</th>
+              <th className="py-2.5 px-3 text-right">Repeat Cohort M+5</th>
+              <th className="py-2.5 px-3 text-right">Total Nilai Booking Cohort</th>
+              <th className="py-2.5 px-3 text-right">LTV Cohort</th>
               <th className="py-2.5 px-3 text-right">Laba Kotor ({marginInput}%)</th>
               <th className="py-2.5 px-3 text-right">Laba Bersih</th>
               <th className="py-2.5 px-3 text-right">ROAS</th>

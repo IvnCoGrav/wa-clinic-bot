@@ -560,6 +560,9 @@ describe('meta-performance-analytics: ketahanan & isolasi', () => {
     expect(r.kpiSummary.newCustomersAcquired).toBe(0);
     expect(r.funnel.totalClicks).toBe(0);
     expect(r.meta.revenueBasis.errors.length).toBeGreaterThan(0);
+    expect(r.meta.revenueBasis.basis).toBe('created_at');
+    expect(r.meta.revenueBasis.statusFilter).toBe('all_non_cancelled');
+    expect(r.meta.revenueBasis.label).toContain('Basis tanggal booking dibuat');
   });
 });
 

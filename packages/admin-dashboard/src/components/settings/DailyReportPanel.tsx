@@ -336,7 +336,7 @@ export const DailyReportPanel: React.FC = () => {
       </div>
 
       <p className="text-xs text-ink-3 leading-relaxed">
-        Kirim ringkasan performa operasional (Sales, Omzet, Customer Baru, Atribusi Iklan, &amp; Kesehatan Bot) secara otomatis ke Telegram setiap pagi tanpa perlu konfigurasi teknis yang rumit.
+        Kirim ringkasan performa operasional (Sales, Nilai Booking, Customer Baru, Atribusi Iklan, &amp; Kesehatan Bot) secara otomatis ke Telegram setiap pagi tanpa perlu konfigurasi teknis yang rumit.
       </p>
 
       {loading ? (

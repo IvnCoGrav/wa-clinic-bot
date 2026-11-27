@@ -357,7 +357,7 @@ export function StaffScorecard() {
 
               <ComponentCard
                 icon={<Repeat2 size={15} />}
-                title="Retensi Pasien"
+                title="Retensi 60 Hari (Bidan)"
                 pct={item.retention.eligible ? item.retention.pct : null}
                 weight={item.usedWeights.retention}
                 tone="violet"

@@ -47,7 +47,7 @@ import {
 } from '../../utils/treatmentParser';
 import { StaffScheduleTimelineStrip } from './StaffScheduleTimelineStrip';
 import { matchCatalogService } from '../../utils/treatmentStringParser';
-import { formatWib, formatWibClock, getWibDateKey, getTodayWibDateKey, getTodayWibDate, getWibHoursAndMinutes, buildWibIso } from '../../utils/dateWib';
+import { formatWib, formatWibClock, getWibDateKey, getTodayWibDateKey, getTomorrowWibDateKey, getTodayWibDate, getWibHoursAndMinutes, buildWibIso } from '../../utils/dateWib';
 import { resolveStreetAddress } from '../../utils/reservationAddress';
 import { parseSavedAddresses, resolveActiveAddress, buildAddressKey } from '../../utils/addressMatch';
 import { resolveReservationAddress } from '../../utils/reservationAddressSelection';
@@ -718,8 +718,8 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
       try {
         const todayKey = getWibDateKey(new Date());
         if (sanitizedDate < todayKey) {
-          sanitizedDate = todayKey;
-          toast(`Tanggal draf sudah lewat: disesuaikan ke hari ini (${todayKey}).`, 'info');
+          sanitizedDate = getTomorrowWibDateKey();
+          toast(`Tanggal draf sudah lewat: disesuaikan ke besok (${sanitizedDate}).`, 'info');
         }
       } catch {
         // Format draf lama tidak terbaca: biarkan tanggal apa adanya.
@@ -1072,10 +1072,11 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
         setAssignedStaffId((initialSlotTarget as any).staffId);
       }
     } else if (isOpen && !bookingDate && mode !== 'edit' && slotTargetKeyRef.current === null) {
-      // Fallback hari ini HANYA untuk mode pembuatan baru, JANGAN untuk mode edit.
+      // Fallback besok HANYA untuk mode pembuatan baru, JANGAN untuk mode edit.
+      // Default H+1 (besok dari today) untuk kenyamanan pemesanan kunjungan.
       // Fase 2R: jam dibiarkan kosong (required) — anti silent 09:00.
-      slotTargetKeyRef.current = '__today__';
-      setBookingDate(getTodayWibDateKey());
+      slotTargetKeyRef.current = '__tomorrow__';
+      setBookingDate(getTomorrowWibDateKey());
       setBookingTime('');
     }
   }, [isOpen, initialSlotTarget, mode]);
@@ -1395,9 +1396,7 @@ export const CreateReservationModal: React.FC<CreateReservationModalProps> = ({
       const isNewborn2Days = (srv.name || '').toLowerCase().includes('2 hari') || (srv.name || '').toLowerCase().includes('newborn');
       const defaultInterval: SeriesIntervalPreset = isNewborn2Days ? 'EVERY_2_DAYS' : 'DAILY';
       setSeriesInterval(defaultInterval);
-      const tomorrow = getTodayWibDate();
-      tomorrow.setDate(tomorrow.getDate() + 1);
-      const tomorrowStr = getWibDateKey(tomorrow);
+      const tomorrowStr = getTomorrowWibDateKey();
       const schedule = buildSeriesSchedule(srv.totalSessions, defaultInterval, tomorrowStr, '09:00', assignedStaffId || '');
       setMultiSessionSchedule(schedule);
     }

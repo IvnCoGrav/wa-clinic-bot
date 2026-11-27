@@ -3,7 +3,7 @@ import { apiRequest } from '../../services/api';
 import { useUiFeedback } from '../common/UiFeedback';
 import { Modal } from '../ui/Modal';
 import { Calendar as CalendarIcon, Clock, Zap, AlertCircle, Loader2, MapPin, User, Phone, AlertTriangle } from 'lucide-react';
-import { buildWibIso, getWibDateKey, getTodayWibDateKey, getTodayWibDate } from '../../utils/dateWib';
+import { buildWibIso, getWibDateKey, getTodayWibDateKey, getTomorrowWibDateKey, getTodayWibDate } from '../../utils/dateWib';
 import { resolveStaffName } from '../../utils/resolveStaffName';
 
 interface QuickHoldModalProps {
@@ -66,7 +66,7 @@ export const QuickHoldModal: React.FC<QuickHoldModalProps> = ({
     } else if (initialDate) {
       setBookingDate(getWibDateKey(initialDate as any));
     } else {
-      setBookingDate(getTodayWibDateKey());
+      setBookingDate(getTomorrowWibDateKey());
     }
     if (initialTime) {
       setBookingTime(initialTime);

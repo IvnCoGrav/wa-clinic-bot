@@ -1,123 +1,84 @@
-# METRIC_DEFINITIONS.md — Kamus & Kontrak Definisi Metrik Bisnis & Analitik
+# METRIC_DEFINITIONS: Standar Definisi & Penyelarasan Metrik Analytics
 
-Dokumen ini adalah satu-satunya sumber kebenaran (*single source of truth*) untuk seluruh istilah, rumus, dan batas periode kalkulasi performa pemasaran dan analitik klinis di sistem chatbot dan dashboard admin.
-
----
-
-## 1. Saluran Akuisisi (Acquisition Channels)
-
-| Kanal | Definisi Teknis | Sumber Identifikasi |
-|---|---|---|
-| **CTWA** (Click-to-WhatsApp Ads) | Prospek yang masuk melalui iklan Meta Click-to-WhatsApp langsung. | Memiliki referral payload Meta CAPI, parameter `ctwa_*`, atau teks sambutan template CTWA. |
-| **LPWA** (Landing Page to WhatsApp) | Prospek yang mengunjungi landing page web lalu mengklik tombol WhatsApp. | Parameter tracking `lpwa_*` pada URL referer / redirect chat. |
-| **PROMO_CTA** | Prospek yang masuk dari broadcast promo berkala atau materi promosi spesifik. | Tagging pesan masuk dari tombol CTA promo template. |
-| **ORGANIC / DIRECT** | Prospek yang menghubungi nomor WhatsApp klinik secara langsung atau melalui kontak rujukan. | Default jika tidak terdeteksi parameter iklan atau tracking landing page. |
+Dokumen ini adalah **sumber kebenaran tunggal (single source of truth)** untuk seluruh metrik finansial, operasional, dan retensi pada dashboard analitik WhatsApp Clinic Bot.
 
 ---
 
-## 2. Marketing Qualified Lead (MQL)
+## 1. Target State — Tabel Definisi Metrik Kanonis
 
-### Definisi & Perubahan Periode (A-008)
-- **Sebelum 2026-10-28 (Legacy Definition):**
-  Customer ditandai sebagai MQL secara seumur hidup (*lifetime flag* `is_mql = true`) saat memenuhi salah satu kriteria kualifikasi awal (misalnya konsultasi tarif, tanya jadwal, atau share location). Akibatnya, pada filter rentang tanggal laporan, customer lama yang pernah MQL di masa lalu dihitung kembali di bulan berjalan jika terdapat interaksi apa pun.
-- **Mulai 2026-10-28 (Periode-Bound MQL — Commit `8c1dd757` & `4e366631`):**
-  MQL dievaluasi secara terikat periode (*time-bounded*). Prospek hanya dihitung sebagai MQL untuk bulan/periode tertentu jika kualifikasi atau interaksi kualifikasinya terjadi pada rentang waktu yang sedang difilter.
-  > [!IMPORTANT]
-  > Perubahan definisi pada 2026-10-28 ini berdampak pada angka historis laporan dashboard (re-kalkulasi dinamis). Disarankan mengambil snapshot CSV/PDF bulanan jika manajemen membutuhkan pembukuan statis per akhir bulan.
-
----
-
-## 3. Customer Acquisition Cost (CAC) & Customer Lifetime Value (LTV)
-
-### Formula CAC (Blended & Per-Channel)
-$$\text{CAC} = \frac{\text{Total Biaya Iklan (Ad Spend)}}{\text{Jumlah Pelanggan Baru yang Membeli (First-Time Buyers)}}$$
-- **Ad Spend**: Diambil dari konfigurasi `Tenant.settings.metaPerformanceSettings.monthlySpends[YYYY-MM]` untuk pengeluaran riil LPWA & CTWA.
-- **First-Time Buyers**: Pelanggan yang tanggal reservasi pertamanya jatuh pada periode tersebut.
-
-### Formula LTV (Lifetime Value)
-$$\text{LTV} = \sum \text{Purchase Value Reservasi Selesai (Completed / Paid)}$$
-- Dihitung dari akumulasi nilai transaksi riil layanan pasien yang berstatus `confirmed` atau `completed` (net/gross sesuai catatan transaksi klinik).
+| Metrik | Definisi / Formula | Basis Tanggal | Status Filter | Ongkir | Diskon | Label Wajib |
+|---|---|---|---|---|---|---|
+| `bookingValue` | `resolveReservationBilling().totalFee` (`netFee + deliveryFee`) | `booking_date` (jadwal treatment) | non-cancelled | Termasuk | Diterapkan | **Nilai Booking** |
+| `paidRevenue` | Subset `isReservationPaid() === true` | `booking_date` | non-cancelled | Termasuk | Diterapkan | **Lunas** |
+| `pendingRevenue` | Subset `isReservationPaid() === false` | `booking_date` | non-cancelled | Termasuk | Diterapkan | **Tagih** |
+| `completedRevenue` | Hanya reservasi dengan status `completed` | `booking_date` | completed only | Termasuk | Diterapkan | **Omzet Kunjungan Selesai** |
+| `cohortRevenue` | Nilai first-ever + repeat cohort dari pelanggan yang diakuisisi | `created_at` (saat booking dibuat) | Bukan cancelled/rejected | Termasuk | Tidak | **Nilai Booking Cohort (Created At)** |
+| `dailyEstimate` | Nilai layanan aktual atau fallback harga katalog | `created_at` | confirmed / en_route / completed | Tidak | Tidak | **Estimasi Nilai Booking Harian (Katalog)** |
+| `customerTotalSpend` | `_sum(purchase_value)` pada tabel reservasi per pasien | all-time | Semua reservasi pasien | Tidak | Tidak | **Total Belanja Pasien (All-Time)** |
+| `repeatBookingShare` | `is_repeat_order / activeBookings` | `booking_date` | non-cancelled | N/A | N/A | **Reservasi Repeat** |
+| `cohortRetention` | Pasien yang kembali booking pada 30 / 60 / 90 hari | Cohort `created_at` | Qualifying non-cancelled | N/A | N/A | **Retensi Cohort** |
+| `bidanRetention` | Pasien repeat dalam 60 hari ke bidan yang sama vs bidan lain | First visit `completed` | completed only | N/A | N/A | **Retensi Pasien per Bidan (60 hari)** |
+| `aov` | `bookingValue / activeBookings` | `booking_date` | non-cancelled | Termasuk | Diterapkan | **AOV Bulanan** |
+| `cancellationRate` | `cancelledBookings / totalBookings` (operasional bulan berjalan) | `booking_date` | Semua status (termasuk cancelled) | N/A | N/A | **Cancellation Rate** |
+| `historicalCancellationRate` | `cancelled / total` dari 3 bulan tertutup; dipakai forecast | `booking_date` | Semua status historis | N/A | N/A | **Cancellation Rate Historis (3 Bln)** |
+| `target` | Disimpan di `Tenant.settings.financialTargets`; gap & required pace memakai realisasi s/d hari ini | Bulan kalender | N/A | N/A | N/A | **Target Bulanan** |
 
 ---
 
-## 4. Analisis Kohort & Repeat Order
+## 2. Aturan Emas Pelabelan & Larangan "Omset" Tanpa Basis
 
-### Kohort Pelanggan (Customer Cohort)
-- Pengelompokan pelanggan berdasarkan **bulan transaksi pertama** mereka (*First Reservation Month*).
-- **Periode Awal Kohort (`cohortStartMonth`)**: Default `null` (dinamis). Dapat dikonfigurasi per tenant di `Tenant.settings.metaPerformanceSettings.cohortStartMonth` (misal `'2026-01'`) untuk membatasi data awal yang belum terstandarisasi.
-- **Bulan Dikecualikan (`excludedCohortMonths`)**: Array bulan-bulan yang memiliki distorsi data ekstrim (misal masa migrasi sistem `'2025-08'`) yang dapat diatur via settings tenant, bukan hardcode.
+> [!CAUTION]
+> **DILARANG KERAS menggunakan kata "Omset" secara telanjang / tanpa kualifikasi basis.**
+> LLM, developer, dan UI dilarang menampilkan kata "Omset" atau "Revenue" tanpa menyertakan basis kalkulasi dan filter statusnya.
 
-### Repeat Order Rate
-$$\text{Repeat Order Rate} = \frac{\text{Jumlah Pelanggan dengan } \ge 2 \text{ Transaksi}}{\text{Total Pelanggan Unik}}$$
-
----
-
-## 4A. Retensi per Bidan (Staff Retention)
-
-- **Kunjungan**: satu tanggal unik (WIB) per pasien dengan minimal satu reservasi `completed`. Dua reservasi di tanggal sama = 1 kunjungan.
-- **Sesi paket**: kunjungan series selain sesi pertama (`session_number > 1`) TIDAK dihitung sebagai kunjungan retensi.
-- **First-touch attribution**: repeat dihitung ke bidan yang menangani kunjungan pertama seumur hidup pasien.
-- **Jendela (W)**: 60 hari. **Pool**: 6 bulan bergulir, hanya cohort matang (`first_visit <= asOf - W`).
-- **Indeks Retensi (IR)** = retensi bidan / benchmark klinik.
-- **Benchmark**: 34,6% (60 hari), dibekukan dari cohort Apr–Okt 2026, direview kuartalan.
-- **Tingkat**: IR < 0,90 → 50:50; 0,90–1,10 → 55:45; ≥ 1,10 → 60:40.
-- **Sampel minimum** 40 pasien matang; di bawah itu status `INSUFFICIENT_SAMPLE`.
-- Dikecualikan: `is_sandbox_test`, `is_internal_staff`, customer terhapus.
+Setiap tampilan angka pendapatan wajib menggunakan salah satu label eksplisit berikut:
+1. **Nilai Booking**: Untuk pendapatan berbasis tanggal booking treatment (`booking_date`), mencakup seluruh jadwal aktif non-cancelled (sudah lunas maupun pending bayar).
+2. **Lunas**: Untuk porsi Nilai Booking yang sudah diverifikasi pembayarannya (`purchase_occurred_at`).
+3. **Tagih**: Untuk porsi Nilai Booking yang belum diverifikasi bayar (menunggu kunjungan / penagihan di tempat).
+4. **Omzet Kunjungan Selesai**: Khusus untuk kunjungan yang status operasionalnya sudah `completed`.
+5. **Nilai Booking Cohort (Created At)**: Untuk analitik pemasaran/Meta performance berbasis tanggal interaksi / pembuatan booking pertama kali (`created_at`).
+6. **Estimasi Nilai Booking Harian (Katalog)**: Untuk laporan harian cepat / bot daily report yang mengandalkan snapshot awal atau estimasi katalog.
 
 ---
 
-## 5. Utilisasi Kapasitas Terapis (Capacity Utilization)
+## 3. Matriks 11 Surface Dashboard → Metrik → Basis
 
-### Formula Utilisasi
-$$\text{Utilisasi (\%)} = \frac{\text{Total Sesi Layanan Selesai / Terjadwal}}{\text{Hari Kerja} \times \text{Jumlah Terapis Aktif} \times \text{Kapasitas Slot Harian}}$$
-- **Kapasitas Slot Harian per Terapis (`dailySlotsPerTherapist`)**:
-  - Dikonfigurasi dinamis per tenant melalui `Tenant.settings.metaPerformanceSettings.dailySlotsPerTherapist`.
-  - Jika belum dikonfigurasi (nilai `null`), sistem menahan penghitungan utilitas hingga admin menentukan standar operasional kliniknya, mencegah bias angka asumsi sepihak.
+Berikut adalah rincian 11 surface dashboard dan bagaimana masing-masing memetakan metriknya:
 
----
-
-## 6. Riwayat Perubahan & Rujukan Komit
-
-| Tanggal | Komit | Deskripsi Perubahan |
-|---|---|---|
-| **2026-10-27** | `ffece481` | Implementasi awal agregasi metrik performa iklan Meta & analitik kohort. |
-| **2026-10-28** | `8c1dd757` | Penyesuaian batas waktu kualifikasi MQL berbasis tanggal percakapan/interaksi. |
-| **2026-10-28** | `4e366631` | Rekonsiliasi data bentrok kapasitas terapis dan penambahan kalkulasi margin laba kotor kohort. |
-| **2026-10-29** | `a496c813` | Eliminasi hardcode periode kohort dan slot terapis; migrasi penuh ke konfigurasi dinamis `Tenant.settings.metaPerformanceSettings` (A-001). |
-| **2026-11-04** | pending | Penambahan kontrak definisi metrik 4A Retensi per Bidan (Staff Retention) jendela 60 hari pool 6 bulan. |
-| **2026-11-06** | pending | Penambahan §7 Funnel Watchdog: definisi kanonis paidViews, uniquePaidClicks, paidAgedClicks, paidMatchedLeads, inboundChats, dan baseline jam-sama. |
+| No | Surface / Fitur | Lokasi Komponen / File | Metrik Utama | Basis Tanggal | Status Filter | Label yang Wajib Tampil |
+|---|---|---|---|---|---|---|
+| 1 | **Overview Dashboard** | `packages/admin-dashboard/src/pages/tenant/Overview.tsx` | Nilai Booking Bulan Ini, AOV | `booking_date` | `all_non_cancelled` | **Nilai Booking Bulan Ini** |
+| 2 | **Financial Analytics: Monthly Trends** | `packages/admin-dashboard/src/pages/tenant/FinancialAnalytics.tsx` | Total Nilai Booking, Lunas, Tagih, AOV, Repeat Share | `booking_date` | `all_non_cancelled` | **Total Nilai Booking**, **Reservasi Repeat** |
+| 3 | **Financial Analytics: Treatment Heatmap** | `packages/admin-dashboard/src/components/analytics/TreatmentHeatmapTab.tsx` | Omzet Periode Heatmap | `booking_date` | `completed_only` | **Omzet Kunjungan Selesai** |
+| 4 | **Financial Analytics: Bidan Retention** | `packages/admin-dashboard/src/components/analytics/RetentionTab.tsx` | Retensi 60 hari Bidan | First visit date | `completed_only` | **Retensi Pasien per Bidan (60 hari)** |
+| 5 | **Marketing Performance (Meta Click Catcher)** | `packages/admin-dashboard/src/pages/tenant/MetaClickCatcher.tsx` | Nilai Booking Cohort, CAC, ROAS, LTV Cohort | `created_at` (KPI) / `booking_date` (tabel kohort) | non-cancelled (KPI) / `completed_only` (tabel kohort) | **Nilai Booking Cohort (Created At)**, **LTV Cohort** |
+| 6 | **Customer Database** | `packages/admin-dashboard/src/pages/tenant/CustomerDatabase.tsx` | Total Belanja Pasien | All-time | Semua riwayat | **Total Belanja Pasien (All-Time)** |
+| 7 | **Follow-up Analytics** | `packages/admin-dashboard/src/pages/tenant/FollowUpAnalytics.tsx` | Konversi Follow-up & Booking Value | `booking_date` / `followup_date` | non-cancelled | **Nilai Booking Terkonversi** |
+| 8 | **Today Treatments** | `packages/admin-dashboard/src/pages/staff/TodayTreatments.tsx` | Status Penyelesaian & Tagihan Hari Ini | `booking_date` (hari ini) | Operasional | **Tagihan Treatment Hari Ini** |
+| 9 | **Staff Scorecard** | `packages/admin-dashboard/src/pages/staff/StaffScorecard.tsx` | Tindakan Selesai, Retensi Bidan | Visit date | `completed_only` | **Kunjungan Selesai**, **Retensi 60 Hari (Bidan)** |
+| 10 | **Daily Report Service** | `src/services/daily-report.service.ts` | Estimasi Booking Masuk Hari Ini | `created_at` (hari ini) | `confirmed_and_completed` | **Nilai Booking Dibuat Hari Ini** |
+| 11 | **Copilot AI (`query_revenue`)** | `src/services/copilot/copilot-tools.ts` | Pendapatan Teragregasi | `booking_date` (default) | `all_non_cancelled` | **Nilai Booking** (dengan rincian gross, diskon, ongkir) |
 
 ---
 
-## 7. Funnel Watchdog (Early Warning System & Deteksi Kebocoran Corong Iklan)
+## 4. Denominator & Aturan Perhitungan Pembagi
 
-Kontrak kanonis perhitungan corong iklan (*Ad Funnel Metrics*) yang bersumber dari seam tunggal `src/services/ad-funnel-metrics.service.ts`:
-
-| Metrik | Definisi Teknis & Filter | Sumber Data |
-|---|---|---|
-| **paidViews** | Jumlah kunjungan landing page pada jendela waktu tertentu dengan `source IN ('beacon', 'cta-fallback')` dan memiliki parameter `fbclid != null` ATAU `utmMedium IN ('cpc','paid','ctwa','ctwa_fuzzy')`. Dikecualikan: baris `source='meta-reconciliation'` dan `backfill-synthetic`. | `LandingPageView` (`schema.prisma:741-768`) |
-| **uniquePaidClicks** | Jumlah klik tombol CTA WhatsApp dari trafik berbayar (`fbclid != null` OR `utmMedium IN paidMediums`), dideduplikasi distinct per `COALESCE(fbclid, id)`. | `AdClick` (`schema.prisma:691-715`) |
-| **paidAgedClicks** | Subset dari `uniquePaidClicks` yang belum terhubung ke percakapan (`matchedAt IS NULL`) dan telah berusia lebih dari atau sama dengan `graceMinutes` (default: 20 menit). Menandakan pengunjung yang membatalkan niat chat. | `AdClick` (`schema.prisma:691-715`) |
-| **paidMatchedLeads** | Jumlah prospek unik (`distinct customerId`) dari `uniquePaidClicks` yang berhasil terhubung dengan chat WhatsApp (`matchedAt != null`). | `AdClick` (`schema.prisma:691-715`) |
-| **inboundChats** | Jumlah pelanggan riil (`distinct conversation.customer_id`) yang mengirim pesan masuk (`direction='INBOUND'`, `sender_type != 'INTERNAL_NOTE'`) pada jendela waktu tersebut, dengan mengecualikan akun sandbox dan staf internal (`is_sandbox_test=false`, `is_internal_staff=false`). Ground truth percakapan nyata. | `Message` & `Conversation` (`schema.prisma:185, 243`) |
-| **baselineViewsAtHour** | Nilai tengah (*median*) jumlah `paidViews` pada jendela jam operasional yang sama selama 7 hari terakhir (WIB). Digunakan sebagai pembanding dinamis untuk mendeteksi penurunan trafik abnormal (*low traffic ratio*). | Perhitungan historis dinamis |
-| **ctr** | Rasio klik terhadap kunjungan: $\text{CTR} = \frac{\text{uniquePaidClicks}}{\text{paidViews}}$ (bernilai 0 jika `paidViews = 0`). | Turunan |
-
----
-
-## 8. Baseline Harian Multi-Bulan (Daily Baseline)
-
-Kontrak kanonis perhitungan pembanding historis harian (*Daily Baseline*) yang bersumber dari seam tunggal `src/domain/daily-baseline.ts` dan diorkestrasi oleh `src/services/financial-analytics.service.ts`:
-
-### Definisi Metrik
-- **avg6mRevenue**: Rata-rata omset historis harian dari jendela multi-bulan (default 6 bulan, rentang $M-1$ s/d $M-6$).
-  - **Mode `weekday` (Default)**: Rata-rata omset per hari-dalam-pekan (semua Minggu, semua Senin, dst.) dari bulan-bulan terpakai dalam jendela. Menghilangkan bias fluktuasi hari kerja vs akhir pekan.
-  - **Mode `calendar`**: Rata-rata omset per tanggal kalender $1 \dots 31$ dari bulan-bulan dalam jendela yang memiliki tanggal tersebut. Jika `smoothingWindowDays` dikonfigurasi (3, 5, atau 7 hari), moving average terpusat diterapkan untuk menghilangkan lonjakan anomali satu hari (*spike smoothing*).
-- **avg6mBookings**: Rata-rata jumlah reservasi/pasien harian yang dihitung dengan metode dan mode yang sama seperti `avg6mRevenue`.
-- **lastMonthRevenue / lastMonthBookings**: Realisasi omset dan reservasi pada tanggal yang sama pada bulan $M-1$ (bernilai `null` bila tanggal tersebut tidak ada di bulan sebelumnya, misal tanggal 31 pada bulan 30 hari, **atau** bila bulan $M-1$ sama sekali tidak memiliki transaksi sehingga tidak digambar sebagai garis rata nol).
-- **Status Transaksi yang Dikecualikan**: Transaksi berstatus `cancelled` / `CANCELLED` dikecualikan dari perhitungan omset dan kunjungan baseline.
-- **Aturan Bulan Kosong**: Bulan historis tanpa transaksi sama sekali dihitung sebagai *missing data* (tidak dimasukkan ke pembagi rata-rata).
-- **Ambang Ketersediaan Data (`minMonths`)**: Baseline hanya dinyatakan aktif (`available: true`) bila jumlah bulan yang memiliki transaksi aktif $\ge \text{minMonths}$ (default 3 bulan). Bila kurang, baseline diberi tanda `available: false` dengan alasan `INSUFFICIENT_HISTORY` agar tidak menampilkan kurva semu pada klinik baru.
-- **Catatan Snapshot**: Baseline dihitung dinamis dari data transaksi dengan caching 10 menit (TTL 600 detik). Angka historis mencerminkan resolusi billing terkini.
-
-
+1. **AOV (Average Order Value)**:
+   - Formula: `bookingValue / activeBookings`
+   - Denominator **WAJIB** `activeBookings` (yaitu reservasi non-cancelled). Reservasi yang dibatalkan (`cancelled` / `rejected`) dilarang dimasukkan ke denominator AOV karena tidak mencerminkan order riil yang berjalan.
+2. **Repeat Booking Share**:
+   - Formula: `repeatBookingsCount / activeBookings`
+   - Menghitung persentase porsi order berulang dari seluruh reservasi aktif di periode tersebut.
+3. **Cancellation Rate**:
+   - Formula operasional: `cancelledBookings / totalBookings` (bulan berjalan).
+   - Formula forecast: `cancelled / total` dari **3 bulan tertutup** (`historicalCancellationRate`), di-clamp 0–50%.
+   - Denominator adalah `totalBookings` (semua reservasi yang pernah tercatat di sistem pada periode tersebut termasuk yang batal).
+4. **Target & Risk-Adjusted Forecast**:
+   - Progress target dan `requiredDailyRevenue` / `requiredDailyBookings` **WAJIB** memakai realisasi s/d hari ini (`revenueToDate`, `bookingsToDate`), bukan total booking sebulan yang masih memuat jadwal mendatang.
+   - Base forecast menerapkan `historicalCancellationRate` ke **seluruh booking terjadwal** sisa bulan.
+   - Skenario: konservatif = cancel rate ×1,5 dan expected pace ×0,9; optimis = cancel rate ×0,5 dan expected pace ×1,1. Invariant: `konservatif <= base <= optimis`.
+   - Garis forecast pada grafik akumulasi adalah **base risk-adjusted**; kartu ringkasan menampilkan tiga skenario.
+5. **Meta Performance — Dua Basis**:
+   - KPI grid memakai `created_at` / non-cancelled / treatment+ongkir.
+   - Tabel kohort memakai `booking_date` / completed-only / treatment-only (ongkir dipisah).
+   - Kedua basis wajib memiliki badge/label masing-masing; jangan memakai satu badge untuk seluruh panel.

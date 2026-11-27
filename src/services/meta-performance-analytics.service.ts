@@ -46,7 +46,7 @@ import {
  * DILARANG memakai flag `is_repeat_order` sebagai otoritas (computeIsRepeatOrder di
  * reservation-core.service.ts:343 hanya hint saat create, tidak tahan cancel kemudian).
  *
- * ── KANONIS OMZET (anti-KNOWN_ISSUES #179) ─────────────────────────────────
+ * ── KANONIS NILAI BOOKING (anti-KNOWN_ISSUES #179) ─────────────────────────
  *   treatmentFee = (purchase_value > 0) ? purchase_value
  *                : (await resolveTreatmentValue(treatment_detail, tenantId) ?? 0)
  *   deliveryFee  = resolveDeliveryFeeSnapshot(r)  // snapshot delivery_fee > fallback Customer.ongkir
@@ -109,6 +109,9 @@ export interface RevenueBasis {
   pendingHoldIncluded: false;
   truncated: boolean;
   errors: string[];
+  basis?: 'created_at';
+  statusFilter?: 'all_non_cancelled';
+  label?: string;
 }
 
 export type CohortChannel = 'ALL' | 'LPWA' | 'CTWA' | 'ORGANIC';
@@ -289,6 +292,9 @@ export function buildZeroMetaPerformanceReport(
         pendingHoldIncluded: false,
         truncated: false,
         errors: opts.errors ?? [],
+        basis: 'created_at',
+        statusFilter: 'all_non_cancelled',
+        label: 'Basis tanggal booking dibuat (cohort); semua non-cancelled; termasuk ongkir; tanpa diskon',
       },
       dbNote: opts.dbNote,
     },
@@ -1419,6 +1425,9 @@ export async function getMetaPerformanceReport(
         pendingHoldIncluded: false,
         truncated,
         errors,
+        basis: 'created_at',
+        statusFilter: 'all_non_cancelled',
+        label: 'Basis tanggal booking dibuat (cohort); semua non-cancelled; termasuk ongkir; tanpa diskon',
       },
       dbNote,
     },

@@ -230,6 +230,12 @@ export const RetentionTab: React.FC<RetentionTabProps> = ({ year, month }) => {
         <div>
           <div className="flex flex-wrap items-center gap-2.5">
             <h2 className="text-lg font-bold text-ink">Skema Insentif Retensi Pasien 60 Hari</h2>
+            <span
+              className="px-2 py-0.5 rounded-full text-xs font-semibold bg-info-soft text-info border border-info-line"
+              title="Cohort first-visit 6 bulan bergulir; same-staff vs other-staff; bukan LTV marketing."
+            >
+              Retensi Pasien per Bidan (60 hari)
+            </span>
             {report && (
               <span
                 className={`px-2.5 py-0.5 rounded-full text-xs font-black uppercase tracking-wider ${

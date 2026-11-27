@@ -470,7 +470,7 @@ export const MetaClickCatcher: React.FC = () => {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-divider">
         <div>
           <h1 className="text-xl font-bold text-ink flex items-center gap-2">
-            <MousePointerClick size={22} className="text-accent" /> Meta Click Catcher &amp; CAPI Debug
+            <MousePointerClick size={22} className="text-accent" /> Marketing Performance &amp; Attribution
           </h1>
           <p className="text-xs text-ink-3 mt-0.5">Pantau performa iklan Meta Ads, atribusi chat WhatsApp, dan kesehatan Conversion API.</p>
         </div>

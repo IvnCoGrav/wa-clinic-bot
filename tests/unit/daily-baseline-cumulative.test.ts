@@ -286,4 +286,79 @@ describe('computeCumulativeAndForecast - Domain Engine Murni (Fase 1)', () => {
       expect(p.cumulativeLastMonthBookings).toBeNull();
     }
   });
+
+  it('13. Target revenue diset: targetPaceRevenue terhitung linear dari hari 1 s/d D', () => {
+    const dailyPoints = createMockDailyPoints(30);
+    const baseline = createMockBaseline();
+
+    const { points } = computeCumulativeAndForecast({
+      dailyPoints,
+      baseline,
+      daysInMonth: 30,
+      context: { monthPosition: 'current', asOfDay: 15 },
+      targetRevenue: 30000000,
+    });
+
+    expect(points[0].targetPaceRevenue).toBe(1000000); // 30jt / 30 * 1
+    expect(points[14].targetPaceRevenue).toBe(15000000); // 30jt / 30 * 15
+    expect(points[29].targetPaceRevenue).toBe(30000000); // 30jt / 30 * 30
+  });
+
+  it('14. Target & required pace memakai realisasi s/d hari ini, bukan total booking sebulan', () => {
+    const dailyPoints = createMockDailyPoints(30);
+    const baseline = createMockBaseline();
+
+    const { summary } = computeCumulativeAndForecast({
+      dailyPoints,
+      baseline,
+      daysInMonth: 30,
+      context: { monthPosition: 'current', asOfDay: 15 },
+      targetRevenue: 30000000,
+      targetBookings: 150,
+      cancellationRate: 0.1,
+    });
+
+    // Realisasi 15 hari = 15 x 100k
+    expect(summary.revenueToDate).toBe(1500000);
+    expect(summary.bookingsToDate).toBe(15);
+    expect(summary.daysRemaining).toBe(15);
+    // BUKAN (30jt - total bulan 3jt) / 15 = 1,8jt
+    expect(summary.requiredDailyRevenue).toBe(1900000);
+    // BUKAN (150 - activeBookings 30) / 15 = 8
+    expect(summary.requiredDailyBookings).toBe(9);
+    expect(summary.cancellationRate).toBe(10);
+  });
+
+  it('15. Cancellation rate historis mengurangi booking terjadwal & menjaga urutan skenario', () => {
+    const dailyPoints = createMockDailyPoints(30, {
+      20: { revenue: 5000000, bookingsCount: 10 },
+    });
+    const baseline = createMockBaseline();
+
+    const noCancel = computeCumulativeAndForecast({
+      dailyPoints,
+      baseline,
+      daysInMonth: 30,
+      context: { monthPosition: 'current', asOfDay: 15 },
+      targetRevenue: 30000000,
+      targetBookings: 150,
+      cancellationRate: 0,
+    });
+    const withCancel = computeCumulativeAndForecast({
+      dailyPoints,
+      baseline,
+      daysInMonth: 30,
+      context: { monthPosition: 'current', asOfDay: 15 },
+      targetRevenue: 30000000,
+      targetBookings: 150,
+      cancellationRate: 0.1,
+    });
+
+    // Booking terjadwal hari 20 (5jt) harus ikut terkena cancellation.
+    expect(withCancel.summary.baseRevenue!).toBeLessThan(noCancel.summary.baseRevenue!);
+    expect(withCancel.summary.conservativeRevenue!).toBeLessThanOrEqual(withCancel.summary.baseRevenue!);
+    expect(withCancel.summary.baseRevenue!).toBeLessThanOrEqual(withCancel.summary.optimisticRevenue!);
+    // Gap target dihitung dari base risk-adjusted.
+    expect(withCancel.summary.gapToTargetRevenue).toBe(30000000 - withCancel.summary.baseRevenue!);
+  });
 });

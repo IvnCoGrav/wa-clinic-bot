@@ -1,5 +1,6 @@
 import React, { Suspense, useCallback, useEffect, useState } from 'react';
-import { AlertTriangle, Loader, RefreshCw, Activity, Settings, ChevronUp, ChevronDown } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { AlertTriangle, Loader, RefreshCw, Activity, Settings, ChevronUp, ChevronDown, TrendingUp } from 'lucide-react';
 import {
   fetchMetaPerformance,
   fetchMetaPerformanceSettings,
@@ -15,6 +16,7 @@ import { CampaignTable } from './CampaignTable';
 import { LeakageGrid } from './LeakageGrid';
 import { TherapistUtilizationCard } from './TherapistUtilizationCard';
 import { CohortRetentionTable } from './CohortRetentionTable';
+import { MetricBasisBadge } from '../analytics/MetricBasisBadge';
 
 const JourneyHistogram = React.lazy(() => import('./JourneyHistogram'));
 
@@ -167,14 +169,24 @@ export const MetaPerformancePanel: React.FC<Props> = ({ startDate, endDate }) =>
           Rentang: <span className="font-semibold text-ink">{startDate}</span> s/d{' '}
           <span className="font-semibold text-ink">{endDate}</span>
         </p>
-        <button
-          onClick={() => load(totalSpendNum > 0 ? totalSpendNum : undefined)}
-          disabled={loading}
-          className="px-3.5 py-2 bg-accent hover:bg-accent-hover text-accent-ink rounded-xl text-xs font-semibold transition flex items-center gap-1.5 shadow-xs disabled:opacity-50"
-        >
-          <RefreshCw size={13} className={loading ? 'animate-spin' : ''} />
-          <span>Segarkan</span>
-        </button>
+        <div className="flex items-center gap-2">
+          <Link
+            to="/admin/financial-analytics"
+            className="px-3 py-2 bg-surface hover:bg-surface-2 text-ink border border-divider rounded-xl text-xs font-semibold transition flex items-center gap-1.5 shadow-xs"
+            title="Buka Dasbor Transaksi & Pendapatan"
+          >
+            <TrendingUp size={13} className="text-accent" />
+            <span>Detail Nilai Booking &rarr;</span>
+          </Link>
+          <button
+            onClick={() => load(totalSpendNum > 0 ? totalSpendNum : undefined)}
+            disabled={loading}
+            className="px-3.5 py-2 bg-accent hover:bg-accent-hover text-accent-ink rounded-xl text-xs font-semibold transition flex items-center gap-1.5 shadow-xs disabled:opacity-50"
+          >
+            <RefreshCw size={13} className={loading ? 'animate-spin' : ''} />
+            <span>Segarkan</span>
+          </button>
+        </div>
       </div>
 
       {report?.meta?.dbNote && (
@@ -278,6 +290,18 @@ export const MetaPerformancePanel: React.FC<Props> = ({ startDate, endDate }) =>
         </div>
       ) : report ? (
         <>
+          <div className="flex items-center justify-between gap-2 flex-wrap pb-1">
+            <h2 className="text-sm font-bold text-ink">Performa Marketing &amp; Kohort</h2>
+            <div className="flex items-center gap-1.5">
+              <span className="text-[11px] text-ink-3">Basis KPI:</span>
+              <MetricBasisBadge
+                label={(report.meta?.revenueBasis as any)?.label || 'Nilai Booking Cohort (Created At)'}
+                basis="created_at"
+                statusFilter="all_non_cancelled"
+                includesDeliveryFee={true}
+              />
+            </div>
+          </div>
           <KpiGrid report={report} />
           <TherapistUtilizationCard report={report} />
           <FunnelBars report={report} />

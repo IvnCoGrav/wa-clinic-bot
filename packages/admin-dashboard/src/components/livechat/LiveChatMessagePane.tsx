@@ -15,6 +15,7 @@ import {
   ChevronLeft,
   ChevronUp,
   ChevronDown,
+  ArrowDown,
   ExternalLink,
   Plus,
   Radar,
@@ -90,6 +91,9 @@ export interface LiveChatMessagePaneProps {
   hasMoreOlderMessages: boolean;
   isLoadingOlder: boolean;
   loadOlderMessages: () => Promise<void>;
+  hasNewerMessages: boolean;
+  isLoadingNewer: boolean;
+  loadNewerMessages: (maxPages?: number, jumpToBottom?: boolean) => void | Promise<void>;
   loadThread: (conversationId: string, focusId?: string) => Promise<void>;
   chatContainerRef: React.RefObject<HTMLDivElement>;
   messagesEndRef: React.RefObject<HTMLDivElement>;
@@ -205,6 +209,9 @@ export const LiveChatMessagePane: React.FC<LiveChatMessagePaneProps> = ({
   hasMoreOlderMessages,
   isLoadingOlder,
   loadOlderMessages,
+  hasNewerMessages,
+  isLoadingNewer,
+  loadNewerMessages,
   loadThread,
   chatContainerRef,
   messagesEndRef,
@@ -1406,6 +1413,20 @@ export const LiveChatMessagePane: React.FC<LiveChatMessagePaneProps> = ({
                         </React.Fragment>
                       );
                     })
+                  )}
+                  {/* Ada pesan lebih baru di luar jendela yang dimuat (mis. setelah lompat ke hasil pencarian) */}
+                  {hasNewerMessages && (
+                    <div className="sticky bottom-1 z-30 mx-auto w-fit animate-fadeIn">
+                      <button
+                        type="button"
+                        onClick={() => void loadNewerMessages(20, true)}
+                        disabled={isLoadingNewer}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-accent hover:bg-accent-hover disabled:opacity-60 text-on-solid text-[11px] font-bold shadow-md transition active:scale-95 cursor-pointer"
+                      >
+                        {isLoadingNewer ? <Loader size={13} className="animate-spin" /> : <ArrowDown size={13} />}
+                        <span>{isLoadingNewer ? 'Memuat pesan terbaru...' : 'Ada pesan lebih baru — ke pesan terbaru'}</span>
+                      </button>
+                    </div>
                   )}
                   <div ref={messagesEndRef} className="h-0 w-0 pointer-events-none" />
                 </div>

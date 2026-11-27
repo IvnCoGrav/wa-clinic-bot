@@ -102,4 +102,55 @@ describe('query_revenue tool (Fase 4 — rekap pendapatan & omzet)', () => {
     expect(result.rows[0].bucket).toBe('Bidan Siti');
     expect(result.rows[0].purchaseValue).toBe(180_000);
   });
+
+  it('Fase 3: menyertakan bookingValue, grossRevenue, paid/pending, basis, dan statusFilter kanonis', async () => {
+    vi.spyOn(prisma.reservation, 'findMany').mockResolvedValueOnce([
+      {
+        booking_date: new Date('2026-11-04T03:00:00Z'),
+        purchase_value: 200_000,
+        discount_amount: 25_000,
+        delivery_fee: 15_000,
+        purchase_occurred_at: new Date('2026-11-04T04:00:00Z'), // Lunas
+        treatment_detail: 'Pijat Bayi',
+        assigned_staff: { id: 's1', name: 'Bidan Rina' },
+      } as any,
+      {
+        booking_date: new Date('2026-11-04T05:00:00Z'),
+        purchase_value: 150_000,
+        discount_amount: 0,
+        delivery_fee: 10_000,
+        purchase_occurred_at: null, // Pending
+        treatment_detail: 'Baby Spa',
+        assigned_staff: { id: 's2', name: 'Bidan Siti' },
+      } as any,
+    ]);
+
+    const result = await queryRevenue.run(tenantId, { dateFrom: '2026-11-04', groupBy: 'day' });
+
+    expect(result.summaryFacts).toBeDefined();
+    // Res 1: gross 200k, diskon 25k, net 175k + ongkir 15k = 190k (lunas)
+    // Res 2: gross 150k, diskon 0, net 150k + ongkir 10k = 160k (pending)
+    // Total gross = 350k
+    // Total discount = 25k
+    // Total bookingValue = 190k + 160k = 350k
+    // Total paid = 190k, total pending = 160k
+    expect(result.summaryFacts.grossRevenue).toBe(350_000);
+    expect(result.summaryFacts.totalDiscount).toBe(25_000);
+    expect(result.summaryFacts.bookingValue).toBe(350_000);
+    expect(result.summaryFacts.totalRevenue).toBe(350_000);
+    expect(result.summaryFacts.paidAmount).toBe(190_000);
+    expect(result.summaryFacts.pendingAmount).toBe(160_000);
+    expect(result.summaryFacts.paidAmount + result.summaryFacts.pendingAmount).toBe(result.summaryFacts.bookingValue);
+    expect(result.summaryFacts.basis).toBe('booking_date');
+    expect(result.summaryFacts.statusFilter).toBe('all_non_cancelled');
+
+    const row = result.rows[0];
+    expect(row.bookingValue).toBe(350_000);
+    expect(row.grossRevenue).toBe(350_000);
+    expect(row.discount).toBe(25_000);
+    expect(row.paidAmount).toBe(190_000);
+    expect(row.pendingAmount).toBe(160_000);
+    expect(row.basis).toBe('booking_date');
+    expect(row.statusFilter).toBe('all_non_cancelled');
+  });
 });

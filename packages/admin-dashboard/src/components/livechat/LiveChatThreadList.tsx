@@ -83,13 +83,10 @@ export interface LiveChatThreadListProps {
   loadingMore: boolean;
   draftTick: number;
   replyTextRef: React.MutableRefObject<string>;
-  handleSelect: (convId: string) => void;
+  handleSelect: (convId: string, opts?: { searchQuery?: string; focusMessageId?: string }) => void;
   setContextMenu: (ctx: { x: number; y: number; chat: LiveChatItem } | null) => void;
   handleRelease: (chat: LiveChatItem) => void;
   releasingId: string | null;
-  setInChatSearchQuery: (q: string) => void;
-  setInChatSearchOpen: (v: boolean) => void;
-  pendingFocusMessageIdRef: React.MutableRefObject<string | null>;
   selectedIdRef: React.MutableRefObject<string | null>;
   loadThread: (convId: string, focusId?: string) => Promise<void>;
   searchDebounceTimerRef: React.MutableRefObject<any>;
@@ -143,9 +140,6 @@ export const LiveChatThreadList: React.FC<LiveChatThreadListProps> = ({
   setContextMenu,
   handleRelease,
   releasingId,
-  setInChatSearchQuery,
-  setInChatSearchOpen,
-  pendingFocusMessageIdRef,
   selectedIdRef,
   loadThread,
   searchDebounceTimerRef,
@@ -561,21 +555,20 @@ export const LiveChatThreadList: React.FC<LiveChatThreadListProps> = ({
                     }
                     const matchedId = (chat as any).matchedMessage?.id || null;
                     const wasSameConversation = selectedIdRef.current === chat.conversationId;
-                    if (searchQuery.trim() && matchedId) {
-                      setInChatSearchQuery(searchQuery);
-                      setInChatSearchOpen(true);
-                      pendingFocusMessageIdRef.current = matchedId;
-                    } else if (searchQuery.trim()) {
-                      const q = searchQuery.trim().toLowerCase();
-                      const localMatch = (chat.lastMessages || []).find((m: any) =>
-                        (m.content || '').toLowerCase().includes(q)
-                      );
-                      if (localMatch) {
-                        setInChatSearchQuery(searchQuery);
-                        setInChatSearchOpen(true);
-                      }
-                    }
-                    handleSelect(chat.conversationId);
+                    const query = searchQuery.trim();
+                    const localMatch = query
+                      ? (chat.lastMessages || []).find((m: any) =>
+                          (m.content || '').toLowerCase().includes(query.toLowerCase())
+                        )
+                      : null;
+                    // Kata kunci diwariskan hanya untuk chat yang punya hasil; pindah
+                    // ke chat lain tanpa hasil selalu mulai dari pesan terbaru.
+                    handleSelect(
+                      chat.conversationId,
+                      query && (matchedId || localMatch)
+                        ? { searchQuery, focusMessageId: matchedId || undefined }
+                        : undefined
+                    );
                     if (matchedId && wasSameConversation) {
                       loadThread(chat.conversationId, matchedId);
                     }

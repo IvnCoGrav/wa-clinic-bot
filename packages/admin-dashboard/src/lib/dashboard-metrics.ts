@@ -70,6 +70,15 @@ export interface ForecastSummaryDto {
   projectedEndRevenue: number | null;
   projectedEndBookings: number | null;
   scheduledFutureRevenue: number;
+  revenueToDate?: number;
+  bookingsToDate?: number;
+  cancellationRate?: number;
+  conservativeRevenue?: number | null;
+  baseRevenue?: number | null;
+  optimisticRevenue?: number | null;
+  gapToTargetRevenue?: number | null;
+  requiredDailyRevenue?: number | null;
+  requiredDailyBookings?: number | null;
 }
 
 export interface CumulativeChartPoint {
@@ -92,6 +101,7 @@ export interface CumulativeChartPoint {
   cumulativeAvgBookings: number | null;
   cumulativeForecastRevenue: number | null;
   cumulativeForecastBookings: number | null;
+  targetPaceRevenue?: number | null;
 }
 
 export function mapCumulativeTrendToChart(cumulativeTrend: any[]): CumulativeChartPoint[] {
@@ -116,6 +126,7 @@ export function mapCumulativeTrendToChart(cumulativeTrend: any[]): CumulativeCha
     cumulativeAvgBookings: pickNumber(p?.cumulativeAvgBookings),
     cumulativeForecastRevenue: pickNumber(p?.cumulativeForecastRevenue),
     cumulativeForecastBookings: pickNumber(p?.cumulativeForecastBookings),
+    targetPaceRevenue: pickNumber(p?.targetPaceRevenue),
   }));
 }
 

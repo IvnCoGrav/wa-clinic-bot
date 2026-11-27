@@ -440,14 +440,14 @@ export const StitchShowcase: React.FC = () => {
                   <div className="flex items-center justify-between border-b border-[#e9edef] pb-3 mb-4">
                     <div className="flex items-center gap-2">
                       <TrendingUp className="h-5 w-5 text-[#008069]" />
-                      <h3 className="text-sm font-bold text-[#111b21]">4. Dashboard Overview & Omset</h3>
+                      <h3 className="text-sm font-bold text-[#111b21]">4. Dashboard Overview & Nilai Booking</h3>
                     </div>
                     <span className="text-xs text-[#54656f]">Hari Ini (WIB)</span>
                   </div>
 
                   <div className="grid grid-cols-2 gap-3 mb-4">
                     <div className="rounded-xl bg-[#f8fafc] border border-[#e9edef] p-3">
-                      <span className="text-[11px] text-[#54656f]">Total Omset Hari Ini</span>
+                      <span className="text-[11px] text-[#54656f]">Total Nilai Booking Hari Ini</span>
                       <div className="text-lg font-bold text-[#111b21]">Rp 2.450.000</div>
                       <span className="text-[10px] font-semibold text-emerald-700">↑ +14% vs kemarin</span>
                     </div>
@@ -459,7 +459,7 @@ export const StitchShowcase: React.FC = () => {
                   </div>
 
                   <div className="rounded-xl border border-dashed border-[#d1d7db] bg-slate-50 p-4 text-center">
-                    <div className="text-xs text-[#54656f] font-medium">Grafik Omset & Kunjungan 7 Hari Terakhir</div>
+                    <div className="text-xs text-[#54656f] font-medium">Grafik Nilai Booking & Kunjungan 7 Hari Terakhir</div>
                     <div className="mt-2 flex items-end justify-center gap-2 h-16">
                       <div className="w-6 bg-emerald-200 rounded-t h-8"></div>
                       <div className="w-6 bg-emerald-200 rounded-t h-10"></div>

@@ -4,6 +4,33 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### 2026-11-27 - Feat: Sentralisasi & Penyelarasan Seluruh Dashboard Analytics (#379)
+
+- **Konteks:** Menyelaraskan seluruh surface analitik (Overview, Financial Analytics, Meta Performance, Customer Database, Heatmap Treatment, Staff Scorecard, Copilot, dan Telegram Daily Report) agar memiliki satu definisi kanonis per metrik, basis tanggal & status eksplisit, denominator rasional (AOV & Repeat berbasis reservasi non-cancelled), serta eliminasi kata "Omset" tanpa kualifikasi basis.
+- **Kontrak Kanonis & Service Agregasi (Fase 0 & Fase 1):**
+  1. **Dokumentasi & ADR (`docs/METRIC_DEFINITIONS.md` & `docs/adr/ADR-001-canonical-revenue-contract.md`):** Matriks 13 definisi metrik kanonis pada 11 dashboard surface dan ADR keputusan arsitektur revenue multi-basis.
+  2. **Domain Contract (`src/domain/analytics-contract.ts`):** Tipe kanonis `RevenueBasis`, `RevenueStatusFilter`, `RevenueQuery`, `RevenueAmounts`, `RevenueBasisMeta`, dan predikat filter `isRevenueStatusIncluded`. Terdaftar di `scripts/module-registry.json` (`analytics.revenue_contract`).
+  3. **Service Agregasi Kanonis (`src/services/revenue-analytics.service.ts`):** `resolveRevenueAmounts`, `createRevenueAccumulator`, dan `addRevenueAmounts` sebagai satu-satunya seam kalkulasi pendapatan dari reservasi (termasuk diskon, ongkir, paid vs pending).
+- **Penyelarasan Dashboard Surface (Fase 2, 3, & 4):**
+  1. **Financial Analytics & Overview (`financial-analytics.service.ts`, `FinancialAnalytics.tsx`, `Overview.tsx`):** AOV dan Rasio Repeat dihitung menggunakan denominator `activeBookings` (non-cancelled: `totalBookings - cancelledBookings`). Label diubah menjadi "Total Nilai Booking" dan "Rasio Reservasi Repeat". Menyertakan komponen `MetricBasisBadge.tsx`.
+  2. **Copilot & Daily Report (`copilot-tools.ts`, `copilot.service.ts`, `daily-report.service.ts`):** `queryRevenue` mengembalikan `bookingValue` resmi dan breakdown multi-seam. Laporan Telegram harian menyaring reservasi `created_at` non-cancelled dan menandai estimasi katalog secara transparan.
+  3. **Meta Performance & Atribusi (`meta-performance-analytics.service.ts`, `KpiGrid.tsx`, `CohortRetentionTable.tsx`):** Menandai metrik sebagai "Nilai Booking Cohort (Created At)" dan "Revenue Repeat Cohort (LTV)".
+  4. **Heatmap, Customer DB, & Retensi Staf (`treatment-heatmap.service.ts`, `CustomerDatabase.tsx`, `RetentionTab.tsx`, `StaffScorecard.tsx`):** Label diselaraskan menjadi "Omzet Kunjungan Selesai" (`completed_only`), "Total Belanja Pasien (All-Time)" (`purchase_value`), dan "Retensi Pasien per Bidan (60 hari)".
+- **Navigasi & Cross-Link Dua Arah (Fase 5):**
+  1. **Menu Sidebar (`Layout.tsx` & `App.tsx`):** Label menu `Meta Click Catcher` diperbarui menjadi `Marketing Performance` dengan rute backward-compatible `/admin/marketing-performance`. Header diubah menjadi `Marketing Performance & Attribution`.
+  2. **Cross-Link UI:** Tombol *"CAC/ROAS & Cohort →"* di `FinancialAnalytics` mengarah ke Meta Click Catcher, dan link *"Detail Nilai Booking →"* di `MetaPerformancePanel` mengarah ke Financial Analytics.
+- **Target Bulanan & Risk-Adjusted Forecast (Fase 6):**
+  1. **Konfigurasi Target Tenant-Aware (`src/config/financial-targets.ts` & `src/config/tenant-settings.config.ts`):** Target disimpan di `Tenant.settings.financialTargets` (`monthlyRevenueTarget`, `monthlyBookingTarget`) dengan cache 5 menit dan invalidasi saat PATCH `/api/admin/tenant-settings`. Terdaftar di `scripts/module-registry.json` (`analytics.financial_targets`).
+  2. **Forecasting Berbasis Risiko (`src/domain/daily-baseline.ts` & `src/services/financial-analytics.service.ts`):** Menghitung skenario konservatif (disesuaikan dengan persentase `cancellationRate`), base, dan optimis, serta gap target dan kebutuhan laju harian (`requiredDailyRevenue` & `requiredDailyBookings`).
+  3. **Garis Target Pace & Modal UI (`CumulativeTrendChart.tsx`, `FinancialAnalytics.tsx`):** Menampilkan garis putus-putus linear `Target Pace` pada grafik akumulasi MTD, kartu ringkasan capaian & gap target, serta modal interaktif *"Atur Target"* dengan validasi form dan aksesibilitas lengkap.
+- **Verifikasi & Kualitas:** 138 tes targeted hijau (12 test file), typecheck backend 0 error, build produksi admin dashboard sukses, `check:reuse` (189 baseline, 0 baru), `check:architecture` (58 baseline, 0 baru), `check:design` & `check:ui-reuse` lolos 100%.
+- **Koreksi Pasca-Audit (2026-11-27):**
+  1. **Target & Required Pace:** Progress target, `requiredDailyRevenue`, dan `requiredDailyBookings` kini memakai `revenueToDate`/`bookingsToDate` (realisasi s/d hari ini), bukan total booking sebulan yang masih memuat jadwal mendatang.
+  2. **Risk-Adjusted Forecast:** Base forecast mengurangi `historicalCancellationRate` (3 bulan tertutup) dari seluruh booking terjadwal; skenario konservatif/base/optimis dihitung di domain; garis forecast chart = base risk-adjusted.
+  3. **Label:** Sisa label "Omset" di metric switcher, tooltip chart, KPI marketing, channel/campaign, daily report panel, Copilot prompt, dan preview diganti "Nilai Booking".
+  4. **Meta Performance:** KPI memakai `created_at`/non-cancelled; tabel kohort memakai `booking_date`/completed-only/treatment-only dengan badge terpisah.
+  5. **Verifikasi:** 138 tes targeted hijau (12 file); build, `check:reuse`, `check:architecture`, `check:design`, `check:ui-reuse` hijau. **Catatan:** full suite masih memiliki kegagalan unrelated (`readiness-probe` deterministik, media flaky, `reuse-gate` timing) yang perlu ditangani terpisah.
+
 #### 2026-11-26 - Feat: Grafik Akumulasi MTD, Forecasting Runway & Breakdown Repeat (#378)
 
 - **Konteks:** Menjawab kebutuhan visualisasi performa kumulatif Month-to-Date (MTD) dengan kurva akumulasi berjalan (S-curve non-decreasing), perbandingan langsung terhadap garis bulan lalu dan baseline rata-rata historis (3, 6, 12 bulan), runway forecasting akhir bulan berbasis pace historis + komitmen booking terjadwal, serta visualisasi breakdown pasien baru vs reservasi repeat.
@@ -21,6 +48,17 @@ dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.
   3. **Tooltip Interaktif `CumulativeComparisonTooltip.tsx`:** Kartu perbandingan lengkap menyajikan capaian MTD, perbandingan MoM %, varians terhadap Baseline %, breakdown Baru vs Repeat, serta proyeksi akhir bulan.
   4. **Kontrol Interaktif (`FinancialAnalytics.tsx`):** Segmented control mode (Akumulasi MTD vs Harian, tersimpan di `localStorage`), toggle metrik (Omset vs Reservasi), selector jendela baseline (`Auto`, `3 Bln`, `6 Bln`, `12 Bln`), dan integrasi `ChartSeriesToggle`.
 - **Pengujian & Kualitas:** 45 tes targeted hijau (domain baseline kumulatif, service baseline, config baseline, admin analytics subroute, mapper dashboard metrics), typecheck & dashboard build sukses, `check:reuse` bersih.
+
+#### 2026-11-25 - Feat: Unifikasi Gestur Swipe & Optimalisasi Pull-to-Refresh (#343)
+
+- **Konteks:** Pull-to-refresh terasa patah-patah karena `usePullToRefresh` memanggil `setDistance` pada setiap `touchmove` di halaman 3.787 baris; indikator punya dead zone 28 px dan dinding keras di kurva linear. Gestur swipe horizontal tersebar ad-hoc di tiga komponen dan state `slideDirection` tidak pernah dipakai.
+- **Perbaikan Fondasional:**
+  1. **Modul kanonis `gesture.swipe` (`swipeGesture.ts`):** `applyRubberBand` (redaman eksponensial tanpa dinding keras), `isDominantHorizontal` (rasio 1.8x/2.2x), `resolveSwipeDirection`, `slideClassFor`, dan konstanta tepi/ambang — terdaftar di `scripts/module-registry.json` + `MODULE_INDEX.md`.
+  2. **PTR 0-render per frame (`usePullToRefresh.ts` + `PullToRefreshIndicator.tsx`):** jarak visual ditulis ke CSS custom property `--ptr-y`/`--ptr-progress` via ref DOM; React hanya re-render pada fase diskret. Indikator selalu ter-mount (`forwardRef`), transisi 220 ms `out-expo`, dan fase `done` tetap opak.
+  3. **Hook `useSwipeGesture.ts`:** listener native passive (tidak memicu larangan `preventDefault` React 18), mengabaikan form/`[data-horizontal-scroll]`/`[data-no-swipe]`.
+  4. **Tab directional (`StaffToday.tsx`):** `animate-slideInFromRight`/`Left` aktif dengan `key={activeTab}` di tiap cabang; guard modal, tepi kiri, dan area gulir horizontal dipertahankan.
+  5. **Konsolidasi gestur (`Layout.tsx`, `LiveChatThreadList.tsx`, `LiveChatMonitor.tsx`):** edge swipe-back memakai `--sb-x` tanpa re-attach listener per frame; `data-swipe-menu-owner` mencegah dua drawer terbuka bersamaan; handler `preventDefault` mati di daftar thread dihapus.
+- **Verifikasi:** 23 tes gestur hijau (`pull-to-refresh` 7 + `swipe-gesture` 16; 1 kasus duplikat dihapus), `npm run typecheck` 0, dashboard build sukses, `check:reuse` 189 baseline/0 baru, `check:tokens` 275/275. **Catatan:** `check:design` masih gagal pre-existing di `check:dark-parity` (3 file tak tersentuh, lihat #373); suite penuh 8.495/8.497 lulus dengan 2 kegagalan pre-existing (#368). Baseline Profiler/FPS perangkat belum diukur.
 
 #### 2026-11-25 - Feat: Spesialisasi Notifikasi Keterlambatan Khusus Staff Terapis (#376)
 

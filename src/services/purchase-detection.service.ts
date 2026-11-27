@@ -195,7 +195,7 @@ export async function maybeFirePurchaseEvent(params: {
     }
     if (!value) {
       const pureTreatmentVal = extractValueByFormat(text, formats.formatValue);
-      value = pureTreatmentVal ?? amount ?? (await resolveTreatmentValue(reservation.treatment_detail || reservation.raw_text));
+      value = pureTreatmentVal ?? amount ?? (await resolveTreatmentValue(reservation.treatment_detail || reservation.raw_text, reservation.tenant_id));
     }
 
     // Terapkan downside guard pada jalur utama juga: pertahankan nilai resmi
