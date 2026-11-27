@@ -27,11 +27,14 @@ describe('S-10 artefak audit Fase 5', () => {
   });
 
   it('semua path artefak berasal dari repo ini (bukan mesin lain)', () => {
-    const normalizedRoot = root.replace(/\\/g, '/').toLowerCase();
     for (const name of files) {
-      const normalized = name.replace(/\\/g, '/').toLowerCase();
-      expect(normalized.startsWith(normalizedRoot), `path luar repo: ${name}`).toBe(true);
-      expect(normalized).toContain('/tests/unit/');
+      const normalized = name.replace(/\\/g, '/');
+      // Artefak auditable dipakai lintas mesin (lokal & CI), jadi path wajib
+      // relatif terhadap root repo. Path absolut menandakan artefak dibuat di
+      // mesin lain dan tidak bisa diverifikasi di mesin ini.
+      expect(/^([A-Za-z]:\/|\/)/.test(normalized), `path absolut mesin lain: ${name}`).toBe(false);
+      expect(normalized).toContain('tests/unit/');
+      expect(fs.existsSync(path.join(root, normalized)), `file tidak ada di repo: ${name}`).toBe(true);
     }
   });
 

@@ -25,11 +25,11 @@ describe('Cfg-017 artefak & klaim audit Fase 10', () => {
     expect(files).toHaveLength(10);
     expect(artifact.numTotalTests).toBe(74);
     expect(artifact.numFailedTests).toBe(0);
-    const normalizedRoot = root.replace(/\\/g, '/').toLowerCase();
     for (const name of files) {
-      const normalized = name.replace(/\\/g, '/').toLowerCase();
-      expect(normalized.startsWith(normalizedRoot), `path luar repo: ${name}`).toBe(true);
-      expect(normalized).toContain('/tests/');
+      const normalized = name.replace(/\\/g, '/');
+      expect(/^([A-Za-z]:\/|\/)/.test(normalized), `path absolut mesin lain: ${name}`).toBe(false);
+      expect(normalized).toContain('tests/');
+      expect(fs.existsSync(path.join(root, normalized)), `file tidak ada di repo: ${name}`).toBe(true);
     }
     expect(report).toContain('10 file suites, 74 tests passed');
   });
