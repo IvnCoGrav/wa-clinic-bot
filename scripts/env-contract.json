@@ -1,0 +1,25 @@
+{
+  "version": 1,
+  "description": "Kontrak env per service (F7). Worker TIDAK menerima secret inbound webhook: worker tidak membuka HTTP, sehingga kebocoran container worker tidak boleh memberi kemampuan memalsukan webhook WAHA/Meta/Telegram.",
+  "worker": {
+    "envFile": ".env.worker",
+    "required": [
+      "ADMIN_API_KEY",
+      "WAHA_API_KEY",
+      "BACKUP_ENCRYPTION_KEY"
+    ],
+    "denied": [
+      "WAHA_WEBHOOK_SECRET",
+      "WAHA_ALLOW_UNSIGNED_WEBHOOK",
+      "TELEGRAM_WEBHOOK_SECRET",
+      "WABA_APP_SECRET",
+      "WABA_WEBHOOK_VERIFY_TOKEN",
+      "WABA_ALLOW_UNSIGNED_WEBHOOK",
+      "WAHA_SWAGGER_PASSWORD",
+      "WAHA_DASHBOARD_PASSWORD"
+    ],
+    "deniedPrefixes": [
+      "VITE_"
+    ]
+  }
+}
