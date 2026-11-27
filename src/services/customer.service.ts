@@ -2474,6 +2474,13 @@ export class CustomerService {
             totalMql: totalMqlCount,
             totalProspects: Math.max(0, totalCustomersCount - totalPurchasersCount),
             totalRevenue: totalRevAgg?._sum?.purchase_value || 0,
+            revenueBasis: {
+              basis: 'all_time',
+              source: 'purchase_value',
+              includesDeliveryFee: false,
+              discountApplied: false,
+              label: 'Total Belanja Pasien (All-Time)',
+            },
           };
           responseCacheService.set(cacheKeyStats, stats, 15);
         } catch {
@@ -2483,6 +2490,13 @@ export class CustomerService {
             totalMql: 0,
             totalProspects: total,
             totalRevenue: 0,
+            revenueBasis: {
+              basis: 'all_time',
+              source: 'purchase_value',
+              includesDeliveryFee: false,
+              discountApplied: false,
+              label: 'Total Belanja Pasien (All-Time)',
+            },
           };
         }
       }
@@ -2640,6 +2654,13 @@ export class CustomerService {
     totalMql: number;
     totalProspects: number;
     totalRevenue: number;
+    revenueBasis?: {
+      basis: string;
+      source: string;
+      includesDeliveryFee: boolean;
+      discountApplied: boolean;
+      label: string;
+    };
   }> {
     const cacheKey = `customers:stats:${tenantId}`;
     let stats = responseCacheService.get<any>(cacheKey);
@@ -2665,6 +2686,13 @@ export class CustomerService {
         totalMql: totalMqlCount,
         totalProspects: Math.max(0, totalCustomersCount - totalPurchasersCount),
         totalRevenue: totalRevAgg?._sum?.purchase_value || 0,
+        revenueBasis: {
+          basis: 'all_time',
+          source: 'purchase_value',
+          includesDeliveryFee: false,
+          discountApplied: false,
+          label: 'Total Belanja Pasien (All-Time)',
+        },
       };
       responseCacheService.set(cacheKey, stats, 60);
     } catch {
@@ -2674,6 +2702,13 @@ export class CustomerService {
         totalMql: 0,
         totalProspects: 0,
         totalRevenue: 0,
+        revenueBasis: {
+          basis: 'all_time',
+          source: 'purchase_value',
+          includesDeliveryFee: false,
+          discountApplied: false,
+          label: 'Total Belanja Pasien (All-Time)',
+        },
       };
     }
     return stats;

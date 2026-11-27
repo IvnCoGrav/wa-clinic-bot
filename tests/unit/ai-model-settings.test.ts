@@ -23,7 +23,7 @@ describe('AI Model Settings — Endpoints & Preset Registry', () => {
   beforeAll(async () => {
     process.env.ADMIN_API_KEY = ADMIN_KEY;
     process.env.KENARI_API_KEY = 'mock-kenari-key';
-    process.env.SUMO_POD_API_KEY = 'mock-sumopod-key';
+    process.env.SUMOPOD_API_KEY = 'mock-sumopod-key';
     process.env.KENARI_BASE_URL = 'https://kenari.id/v1';
     process.env.SUMO_POD_BASE_URL = 'https://ai.sumopod.com/v1';
     const { buildApp } = await import('../../src/app');
@@ -63,7 +63,7 @@ describe('AI Model Settings — Endpoints & Preset Registry', () => {
     expect(res.statusCode).toBe(200);
     const body = JSON.parse(res.body);
     // Should succeed with mocked LLM
-    expect(body.success).toBe(true);
+    expect(body.success, `Respons endpoint: ${res.body}`).toBe(true);
     expect(typeof body.latencyMs).toBe('number');
     expect(body.latencyMs).toBeGreaterThanOrEqual(0);
     expect(body.latencyMs).toBeLessThan(10000);
@@ -83,7 +83,7 @@ describe('AI Model Settings — Endpoints & Preset Registry', () => {
       });
       expect(res.statusCode).toBe(200);
       const body = JSON.parse(res.body);
-      expect(body.success).toBe(true);
+      expect(body.success, `Respons endpoint (${scenario}): ${res.body}`).toBe(true);
       expect(body.replySnippet).toBeDefined();
     }
   });

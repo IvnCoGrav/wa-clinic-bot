@@ -14,6 +14,7 @@ import { clearBrandCache } from '../../config/brand';
 import {
   clearDelayWatchdogCache,
 } from '../../config/delay-watchdog-config';
+import { clearFinancialTargetsCache } from '../../config/financial-targets';
 import { staffDepartureWatchdogService } from '../../services/staff-departure-watchdog.service';
 
 /**
@@ -81,6 +82,7 @@ export async function settingsTenantRoutes(fastify: FastifyInstance) {
         clearStaffNotificationConfigCache(tenantId);
         clearBrandCache(tenantId);
         clearDelayWatchdogCache(tenantId);
+        clearFinancialTargetsCache(tenantId);
 
         await auditService.logAdminAction({
           apiKey: (request as any).adminKeyUsed,

@@ -27,14 +27,20 @@ export interface GoogleOAuthTokens {
 }
 
 export class GoogleOAuthClientManager {
-  private clientId: string;
-  private clientSecret: string;
-  private redirectUri: string;
+  // Kredensial dibaca saat dipakai, bukan disalin di constructor. Singleton ini
+  // dibuat ketika modul di-import, sehingga menyalin env di constructor membuat
+  // konfigurasi yang diisi setelah import (mis. oleh test atau bootstrap yang
+  // memuat .env belakangan) diabaikan — dan menyembunyikan kesalahan konfigurasi.
+  private get clientId(): string {
+    return process.env.GOOGLE_OAUTH_CLIENT_ID || '';
+  }
 
-  constructor() {
-    this.clientId = process.env.GOOGLE_OAUTH_CLIENT_ID || '';
-    this.clientSecret = process.env.GOOGLE_OAUTH_CLIENT_SECRET || '';
-    this.redirectUri = process.env.GOOGLE_OAUTH_REDIRECT_URI || '';
+  private get clientSecret(): string {
+    return process.env.GOOGLE_OAUTH_CLIENT_SECRET || '';
+  }
+
+  private get redirectUri(): string {
+    return process.env.GOOGLE_OAUTH_REDIRECT_URI || '';
   }
 
   /**

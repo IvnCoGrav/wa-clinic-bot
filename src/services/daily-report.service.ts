@@ -5,6 +5,7 @@ import { AiModelConfigService } from '../config/ai-models.config';
 import { callChatCompletionsWithFallback, getFallbackModel } from '../integrations/llm/model-fallback';
 import { parsePositiveInt } from '../utils/env-numeric';
 import { decryptSecretCompat } from '../utils/encryption';
+import { resolveRevenueAmounts } from './revenue-analytics.service';
 
 export interface DailyReportData {
   reportDateStr: string;
@@ -14,6 +15,8 @@ export interface DailyReportData {
     revenueIsEstimated: boolean;
     newCustomersCount: number;
     repeatCustomersCount: number;
+    basis: 'created_at';
+    statusFilter: 'confirmed_and_completed';
   };
   chat: {
     newConversations: number;
@@ -158,7 +161,9 @@ export class DailyReportService {
         totalRevenue: 1500000,
         revenueIsEstimated: false,
         newCustomersCount: 3,
-        repeatCustomersCount: 2
+        repeatCustomersCount: 2,
+        basis: 'created_at',
+        statusFilter: 'confirmed_and_completed',
       },
       chat: {
         newConversations: 12,
@@ -197,7 +202,7 @@ _Data di bawah adalah data DUMMY (bukan data riil) dan TIDAK dicatat ke riwayat 
 
 💰 *Sales & Konversi (Dummy)*
 - Reservasi Confirmed: *${dummyData.sales.totalConfirmed}*
-- Total Omzet: *Rp 1.500.000*
+- Total Nilai Booking: *Rp 1.500.000*
 - Customer Baru: *${dummyData.sales.newCustomersCount}*
 - Repeat Order: *${dummyData.sales.repeatCustomersCount}*
 
@@ -284,9 +289,12 @@ _Data di bawah adalah data DUMMY (bukan data riil) dan TIDAK dicatat ke riwayat 
       where: {
         ...tenantFilter,
         created_at: dateRange,
-        status: { in: ['confirmed', 'en_route'] }
+        status: { in: ['confirmed', 'en_route', 'completed'] }
       },
-      include: { customer: true }
+      include: {
+        customer: true,
+        items: true,
+      }
     });
 
     const newCustomersCount = reservations.filter(r => 
@@ -294,54 +302,26 @@ _Data di bawah adalah data DUMMY (bukan data riil) dan TIDAK dicatat ke riwayat 
     ).length;
     const repeatCustomersCount = reservations.filter(r => r.is_repeat_order).length;
 
-    // Pricing Match
+    // Pricing Match via canonical revenue seam
     let totalRevenue = 0;
     let revenueIsEstimated = false;
-
-    // Cache clinic services
-    const clinicServices = await prisma.clinicService.findMany({
-      where: { ...tenantFilter, is_active: true }
-    });
+    const catalogCache = new Map();
 
     for (const res of reservations) {
-      if (!res.treatment_detail) continue;
-      
-      let matchedPrice = 0;
-      let isFuzzy = false;
-      const detailStr = res.treatment_detail.toLowerCase().replace(/\s+/g, '').trim();
-
-      // Exact match
-      const exactMatch = clinicServices.find(cs => 
-        cs.service_id.toLowerCase().replace(/\s+/g, '').trim() === detailStr ||
-        cs.name.toLowerCase().replace(/\s+/g, '').trim() === detailStr
+      const rev = await resolveRevenueAmounts(
+        res,
+        tenantId,
+        { includeDeliveryFee: false },
+        catalogCache
       );
+      totalRevenue += rev.bookingValue;
 
-      if (exactMatch) {
-        matchedPrice = exactMatch.promo_price || exactMatch.original_price;
-      } else {
-        // Fuzzy match
-        let bestMatch = null;
-        let bestScore = 0;
-
-        for (const cs of clinicServices) {
-          const scoreId = getStringSimilarity(res.treatment_detail, cs.service_id);
-          const scoreName = getStringSimilarity(res.treatment_detail, cs.name);
-          const maxScore = Math.max(scoreId, scoreName);
-          if (maxScore > bestScore && maxScore >= 0.8) {
-            bestScore = maxScore;
-            bestMatch = cs;
-          }
-        }
-
-        if (bestMatch) {
-          matchedPrice = bestMatch.promo_price || bestMatch.original_price;
-          isFuzzy = true;
-        }
-      }
-
-      if (matchedPrice > 0) {
-        totalRevenue += matchedPrice;
-        if (isFuzzy) revenueIsEstimated = true;
+      // revenueIsEstimated = true hanya jika purchase_value dan items tidak ada dan fallback katalog dipakai
+      const hasDirectPrice =
+        (Number(res?.purchase_value) > 0) ||
+        (Array.isArray(res?.items) && res.items.length > 0);
+      if (!hasDirectPrice && rev.bookingValue > 0) {
+        revenueIsEstimated = true;
       }
     }
 
@@ -430,7 +410,9 @@ _Data di bawah adalah data DUMMY (bukan data riil) dan TIDAK dicatat ke riwayat 
         totalRevenue,
         revenueIsEstimated,
         newCustomersCount,
-        repeatCustomersCount
+        repeatCustomersCount,
+        basis: 'created_at' as const,
+        statusFilter: 'confirmed_and_completed' as const,
       },
       chat: {
         newConversations,
@@ -555,7 +537,7 @@ _Data di bawah adalah data DUMMY (bukan data riil) dan TIDAK dicatat ke riwayat 
       new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(val);
 
     const revenueStr = s.totalRevenue > 0 
-      ? `${formatCurrency(s.totalRevenue)} ${s.revenueIsEstimated ? '*(estimasi)*' : ''}`
+      ? `${formatCurrency(s.totalRevenue)}${s.revenueIsEstimated ? ' (estimasi katalog)' : ''}`
       : 'N/A';
 
     return `📊 *Laporan Harian Operasional — ${tenantName}*
@@ -563,7 +545,7 @@ _Data di bawah adalah data DUMMY (bukan data riil) dan TIDAK dicatat ke riwayat 
 
 💰 *Sales & Konversi*
 - Reservasi Confirmed: *${s.totalConfirmed}*
-- Total Omzet: *${revenueStr}*
+- Nilai Booking Dibuat Hari Ini: *${revenueStr}*
 - Customer Baru: *${s.newCustomersCount}*
 - Repeat Order: *${s.repeatCustomersCount}*
 

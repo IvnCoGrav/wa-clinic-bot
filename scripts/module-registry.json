@@ -851,6 +851,51 @@
         "packages/admin-dashboard/src/utils/swipeGesture.ts"
       ],
       "test": "tests/unit/swipe-gesture.test.ts"
+    },
+    {
+      "id": "analytics.revenue_contract",
+      "title": "Kontrak kanonis revenue dan analitik dashboard",
+      "description": "Definisi tipe RevenueBasis, RevenueStatusFilter, RevenueQuery, RevenueAmounts, RevenueBasisMeta, dan helper filter status serta metadata basis analitik.",
+      "canonical": "src/domain/analytics-contract.ts",
+      "exports": [
+        "RevenueBasis",
+        "RevenueStatusFilter",
+        "RevenueQuery",
+        "RevenueAmounts",
+        "RevenueBasisMeta",
+        "DEFAULT_REVENUE_QUERY",
+        "isRevenueStatusIncluded",
+        "describeRevenueBasis",
+        "buildRevenueBasisMeta"
+      ],
+      "forbiddenDeclarations": [
+        "isRevenueStatusIncluded",
+        "describeRevenueBasis"
+      ],
+      "allowedFiles": [
+        "src/domain/analytics-contract.ts",
+        "src/services/revenue-analytics.service.ts"
+      ],
+      "test": "tests/unit/analytics-contract.test.ts"
+    },
+    {
+      "id": "analytics.financial_targets",
+      "title": "Resolusi target finansial bulanan per-tenant",
+      "description": "Resolver target omset dan booking bulanan tenant-aware dari Tenant.settings dengan cache 5 menit dan fallback aman.",
+      "canonical": "src/config/financial-targets.ts",
+      "exports": [
+        "getFinancialTargets",
+        "clearFinancialTargetsCache",
+        "DEFAULT_FINANCIAL_TARGETS"
+      ],
+      "forbiddenDeclarations": [
+        "getFinancialTargets",
+        "clearFinancialTargetsCache"
+      ],
+      "allowedFiles": [
+        "src/config/financial-targets.ts"
+      ],
+      "test": "tests/unit/financial-targets-config.test.ts"
     }
   ]
 }

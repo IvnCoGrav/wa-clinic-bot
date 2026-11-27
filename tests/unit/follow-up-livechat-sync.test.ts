@@ -130,7 +130,10 @@ describe('Follow-Up & Automated Broadcast Live Chat Synchronization Tests', () =
       bubblesSent: 1,
     });
 
-    // Mock Date so it falls within business hours (e.g. 10:00)
+    // Mock Date so it falls within business hours (e.g. 10:00 WIB). Fake timers
+    // wajib diaktifkan: tanpa `useFakeTimers()`, `setSystemTime` tidak berlaku
+    // dan hasil test bergantung jam riil saat suite dijalankan.
+    vi.useFakeTimers({ shouldAdvanceTime: true });
     const fakeNow = new Date('2026-08-26T03:00:00.000Z'); // 10:00 WIB
     vi.setSystemTime(fakeNow);
     process.env.BROADCAST_THROTTLE_MIN_SECONDS = '0';

@@ -71,6 +71,8 @@ export interface CumulativeTrendPoint {
 
   cumulativeForecastRevenue: number | null;
   cumulativeForecastBookings: number | null;
+
+  targetPaceRevenue: number | null;
 }
 
 export interface ForecastSummary {
@@ -81,6 +83,19 @@ export interface ForecastSummary {
   projectedEndRevenue: number | null;
   projectedEndBookings: number | null;
   scheduledFutureRevenue: number;
+
+  // Realisasi s/d hari ini (basis target & required pace)
+  revenueToDate: number;
+  bookingsToDate: number;
+
+  // Skenario berbasis risiko historis & gap target (Fase 6)
+  cancellationRate: number; // persen, historis 3 bulan
+  conservativeRevenue: number | null;
+  baseRevenue: number | null;
+  optimisticRevenue: number | null;
+  gapToTargetRevenue: number | null;
+  requiredDailyRevenue: number | null;
+  requiredDailyBookings: number | null;
 }
 
 export interface CumulativeForecastContext {
@@ -369,8 +384,21 @@ export function computeCumulativeAndForecast(input: {
   baseline: DailyBaselineResult | null;
   daysInMonth: number;
   context: CumulativeForecastContext;
+  targetRevenue?: number | null;
+  targetBookings?: number | null;
+  /** Rasio pembatalan historis 0..1 (bukan persen). */
+  cancellationRate?: number;
 }): { points: CumulativeTrendPoint[]; summary: ForecastSummary } {
-  const { dailyPoints, baseline, daysInMonth, context } = input;
+  const {
+    dailyPoints,
+    baseline,
+    daysInMonth,
+    context,
+    targetRevenue,
+    targetBookings,
+    cancellationRate,
+  } = input;
+  const cancelRate = Math.max(0, Math.min(0.5, Number(cancellationRate) || 0));
   const { monthPosition } = context;
   const isPast = monthPosition === 'past';
   const isFuture = monthPosition === 'future';
@@ -471,17 +499,19 @@ export function computeCumulativeAndForecast(input: {
     method = 'RUN_RATE_FLAT';
   }
 
-  // Proyeksi kumulatif untuk d > asOfDay
+  // Proyeksi kumulatif untuk d > asOfDay.
+  // Base = risk-adjusted: booking terjadwal dikurangi cancellation rate historis.
   const forecastRev = new Array<number | null>(daysInMonth + 1).fill(null);
   const forecastBook = new Array<number | null>(daysInMonth + 1).fill(null);
 
+  let baseCumRev = actualRevT;
+  let baseCumBook = actualBookT;
+  let conservativeCumRev = actualRevT;
+  let optimisticCumRev = actualRevT;
+
   if (monthPosition === 'current' && asOfDay < daysInMonth) {
-    let cumRev = actualRevT;
-    let cumBook = actualBookT;
-    if (asOfDay >= 0) {
-      forecastRev[asOfDay] = cumRev;
-      forecastBook[asOfDay] = cumBook;
-    }
+    forecastRev[asOfDay] = baseCumRev;
+    forecastBook[asOfDay] = baseCumBook;
 
     for (let d = asOfDay + 1; d <= daysInMonth; d++) {
       const p = byDay.get(d);
@@ -498,10 +528,19 @@ export function computeCumulativeAndForecast(input: {
           ? Math.round(b.avg6mBookings * pacingBook * 10) / 10
           : Math.round(flatBookRate * 10) / 10;
 
-      cumRev += Math.max(bookedRev, expectedRev);
-      cumBook += Math.max(bookedBook, expectedBook);
-      forecastRev[d] = cumRev;
-      forecastBook[d] = cumBook;
+      const baseScheduledRev = bookedRev * (1 - cancelRate);
+      const conservativeScheduledRev = bookedRev * (1 - Math.min(0.6, cancelRate * 1.5));
+      const optimisticScheduledRev = bookedRev * (1 - cancelRate * 0.5);
+
+      baseCumRev += Math.round(Math.max(baseScheduledRev, expectedRev));
+      conservativeCumRev += Math.round(Math.max(conservativeScheduledRev, expectedRev * 0.9));
+      optimisticCumRev += Math.round(Math.max(optimisticScheduledRev, expectedRev * 1.1));
+
+      const baseScheduledBook = bookedBook * (1 - cancelRate);
+      baseCumBook += Math.round(Math.max(baseScheduledBook, expectedBook) * 10) / 10;
+
+      forecastRev[d] = baseCumRev;
+      forecastBook[d] = baseCumBook;
     }
   }
 
@@ -536,6 +575,11 @@ export function computeCumulativeAndForecast(input: {
 
       cumulativeForecastRevenue: forecastRev[d],
       cumulativeForecastBookings: forecastBook[d],
+
+      targetPaceRevenue:
+        targetRevenue && targetRevenue > 0
+          ? Math.round((targetRevenue / daysInMonth) * d)
+          : null,
     });
   }
 
@@ -553,16 +597,60 @@ export function computeCumulativeAndForecast(input: {
       ? forecastBook[daysInMonth] ?? actualBookT
       : null;
 
+  const daysRemaining = Math.max(0, daysInMonth - asOfDay);
+
+  const baseRevenue = projectedEndRevenue;
+  const conservativeRevenue =
+    monthPosition === 'past'
+      ? projectedEndRevenue
+      : monthPosition === 'current'
+      ? Math.round(conservativeCumRev)
+      : null;
+  const optimisticRevenue =
+    monthPosition === 'past'
+      ? projectedEndRevenue
+      : monthPosition === 'current'
+      ? Math.round(optimisticCumRev)
+      : null;
+
+  const gapToTargetRevenue =
+    targetRevenue != null && targetRevenue > 0 && baseRevenue != null
+      ? Math.round(targetRevenue - baseRevenue)
+      : null;
+
+  const requiredDailyRevenue =
+    targetRevenue != null && targetRevenue > 0 && monthPosition !== 'future'
+      ? daysRemaining > 0
+        ? Math.round(Math.max(0, targetRevenue - actualRevT) / daysRemaining)
+        : 0
+      : null;
+
+  const requiredDailyBookings =
+    targetBookings != null && targetBookings > 0 && monthPosition !== 'future'
+      ? daysRemaining > 0
+        ? Math.round((Math.max(0, targetBookings - actualBookT) / daysRemaining) * 10) / 10
+        : 0
+      : null;
+
   return {
     points,
     summary: {
       method,
       asOfDay,
-      daysRemaining: Math.max(0, daysInMonth - asOfDay),
+      daysRemaining,
       pacingFactor: pacingRev,
       projectedEndRevenue,
       projectedEndBookings,
       scheduledFutureRevenue,
+      revenueToDate: actualRevT,
+      bookingsToDate: actualBookT,
+      cancellationRate: Math.round(cancelRate * 1000) / 10,
+      conservativeRevenue,
+      baseRevenue,
+      optimisticRevenue,
+      gapToTargetRevenue,
+      requiredDailyRevenue,
+      requiredDailyBookings,
     },
   };
 }

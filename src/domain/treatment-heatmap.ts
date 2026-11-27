@@ -8,6 +8,12 @@ import { DAY_NAMES_ID, WIB_OFFSET_MS, shiftWibMonth, wibMonthBoundsUtc } from '.
  * perilaku agregasi bisa diuji tanpa database.
  */
 
+import {
+  buildRevenueBasisMeta,
+  DEFAULT_REVENUE_QUERY,
+  type RevenueBasisMeta,
+} from './analytics-contract';
+
 export type HeatmapScope = 'weekly' | 'monthly' | 'multi';
 
 export interface HeatmapHours {
@@ -89,6 +95,7 @@ export interface TreatmentHeatmapResponse {
   hourSlots: number[];
   maxCount: number;
   maxRevenue: number;
+  revenueBasis?: RevenueBasisMeta;
   totals: TreatmentHeatmapTotals;
   hourly?: HeatmapHourlyCell[];
   weeks?: HeatmapWeekRow[];
@@ -346,6 +353,7 @@ export function buildTreatmentHeatmap(params: BuildTreatmentHeatmapParams): Trea
     hourSlots: slots,
     maxCount: 0,
     maxRevenue: 0,
+    revenueBasis: buildRevenueBasisMeta({ ...DEFAULT_REVENUE_QUERY, statusFilter: 'completed_only' }),
     totals,
     quality,
   };

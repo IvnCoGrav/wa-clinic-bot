@@ -5,6 +5,12 @@ import { isDummyOrTestContact } from '../../utils/dummy-filter';
 import { maskPhoneNumber } from '../../utils/pii-masker';
 import { hasScheduleSignal, extractTimeHint, extractTimeOfDayHint, isScheduleCheckEngagement, isScheduleAvailabilityText } from '../../v3/agent/pipeline/medical-signal-detector';
 import { hasBookingCommitSignal } from '../../utils/date-confirmation';
+import {
+  resolveRevenueAmounts,
+  createRevenueAccumulator,
+  addRevenueAmounts,
+} from '../revenue-analytics.service';
+import type { RevenueStatusFilter } from '../../domain/analytics-contract';
 
 /**
  * copilot-tools.ts (Fase 6r + fixing plan) — Tools database Copilot Admin
@@ -1430,13 +1436,15 @@ export const queryRevenue: CopilotTool = {
   description:
     'Mengambil rekap omzet/pendapatan dari reservasi klinik (jasa, ongkir, diskon, kuitansi terpisah). ' +
     'Gunakan untuk menjawab: "omzet minggu ini", "omzet per treatment", "berapa yang sudah dibayar". ' +
-    'basis = booking_date (tanggal treatment), BUKAN tanggal pembayaran. ' +
+    'bookingValue = totalRevenue = nilai booking resmi setelah diskon + ongkir. ' +
+    'grossRevenue = nilai layanan kotor sebelum potongan diskon. ' +
+    'basis = booking_date (tanggal treatment), statusFilter menjelaskan status yang dihitung. ' +
     'Bila hasil lebih dari satu bucket, baris terakhir bucket="TOTAL" berisi agregat — pakai itu untuk total.',
   parameters: {
     dateFrom: { type: 'string', description: 'Tanggal awal rentang WIB (YYYY-MM-DD).' },
     dateTo: { type: 'string', description: 'Tanggal akhir rentang WIB (YYYY-MM-DD).' },
     groupBy: { type: 'string', description: 'Pengelompokan: "day" | "treatment" | "staff". Default "day".' },
-    status: { type: 'string', description: 'Status reservasi: "completed" | "confirmed" | "all". Default "completed".' },
+    status: { type: 'string', description: 'Status reservasi: "completed" | "confirmed" | "all_non_cancelled" | "all". Default "all_non_cancelled".' },
   },
   run: async (tenantId, args) => {
     const dFromStr = isValidIsoDate(args.dateFrom) ? String(args.dateFrom).trim() : undefined;
@@ -1454,19 +1462,25 @@ export const queryRevenue: CopilotTool = {
       where.booking_date = { gte: startUtc, lte: endUtc };
     }
 
-    const st = String(args.status || 'completed').toLowerCase();
-    if (st === 'confirmed') {
-      where.status = 'confirmed';
-    } else if (st === 'all') {
-      where.status = { in: ['completed', 'confirmed'] };
-    } else {
+    const st = String(args.status || 'all_non_cancelled').toLowerCase();
+    let statusFilter: RevenueStatusFilter = 'all_non_cancelled';
+    if (st === 'completed') {
       where.status = 'completed';
+      statusFilter = 'completed_only';
+    } else if (st === 'confirmed') {
+      where.status = 'confirmed';
+      statusFilter = 'confirmed_only';
+    } else {
+      where.status = { notIn: ['cancelled', 'CANCELLED'] };
+      statusFilter = 'all_non_cancelled';
     }
 
     const reservations = await prisma.reservation.findMany({
       where,
       include: {
         assigned_staff: { select: { id: true, name: true } },
+        customer: { select: { ongkir: true } },
+        items: true,
       },
       orderBy: { booking_date: 'asc' },
       take: 1000,
@@ -1474,100 +1488,74 @@ export const queryRevenue: CopilotTool = {
 
     const groupBy = ['treatment', 'staff'].includes(String(args.groupBy || '')) ? String(args.groupBy) : 'day';
 
-    const bucketsMap = new Map<string, {
+    type RevBucket = ReturnType<typeof createRevenueAccumulator> & {
       bucket: string;
       reservations: number;
-      purchaseValue: number;
-      deliveryFee: number;
-      discount: number;
       receiptAmount: number;
-      lunasRevenue: number;
-      pendingRevenue: number;
-      totalRevenue: number;
-    }>();
+    };
+    const bucketsMap = new Map<string, RevBucket>();
+    const catalogPriceCache = new Map();
 
     for (const r of reservations) {
-      let key = 'Semua';
-      if (groupBy === 'day') {
-        key = r.booking_date ? formatWibDateYYYYMMDD(new Date(r.booking_date)) : 'Tanpa Tanggal';
-      } else if (groupBy === 'treatment') {
-        key = (r.treatment_detail || String(r.treatment_category || 'Lainnya')).trim();
-      } else if (groupBy === 'staff') {
-        key = r.assigned_staff?.name || 'Belum Ditugaskan';
-      }
+      const key = groupBy === 'day'
+        ? (r.booking_date ? formatWibDateYYYYMMDD(new Date(r.booking_date)) : 'Tanpa Tanggal')
+        : groupBy === 'treatment'
+        ? (r.treatment_detail || String(r.treatment_category || 'Lainnya')).trim()
+        : (r.assigned_staff?.name || 'Belum Ditugaskan');
 
       let b = bucketsMap.get(key);
       if (!b) {
-        b = {
-          bucket: key,
-          reservations: 0,
-          purchaseValue: 0,
-          deliveryFee: 0,
-          discount: 0,
-          receiptAmount: 0,
-          lunasRevenue: 0,
-          pendingRevenue: 0,
-          totalRevenue: 0,
-        };
+        b = { ...createRevenueAccumulator(), bucket: key, reservations: 0, receiptAmount: 0 };
         bucketsMap.set(key, b);
       }
 
-      const pVal = r.purchase_value || 0;
-      const dFee = r.delivery_fee || 0;
-      const totalFee = pVal + dFee;
-      const isLunas = isReservationPaid(r);
-
+      const rev = await resolveRevenueAmounts(r, tenantId, { includeDeliveryFee: true }, catalogPriceCache);
       b.reservations++;
-      b.purchaseValue += pVal;
-      b.deliveryFee += dFee;
-      b.discount += r.discount_amount || 0;
       b.receiptAmount += r.receipt_amount || 0;
-      b.totalRevenue += totalFee;
-      if (isLunas) {
-        b.lunasRevenue += totalFee;
-      } else {
-        b.pendingRevenue += totalFee;
-      }
+      addRevenueAmounts(b, rev);
     }
 
-    // SSOT finansial: selaras dengan FinancialAnalyticsService (lunas vs pending berbasis purchase_occurred_at).
-    const allBuckets = Array.from(bucketsMap.values()).map((b) => {
-      const netRevenue = (b.purchaseValue || 0) + (b.deliveryFee || 0) - (b.discount || 0);
-      const paidAmount = b.lunasRevenue;
-      const pendingAmount = b.pendingRevenue;
-      return {
-        ...b,
-        netRevenue,
-        paidAmount,
-        pendingAmount,
-        basis: 'booking_date' as const,
-      };
-    });
+    // SSOT finansial: selaras dengan FinancialAnalyticsService
+    const allBuckets = Array.from(bucketsMap.values()).map((b) => ({
+      ...b,
+      grossRevenue: b.treatmentGross,
+      purchaseValue: b.treatmentGross,
+      discount: b.discount,
+      totalRevenue: b.bookingValue,
+      netRevenue: b.bookingValue,
+      lunasRevenue: b.paidAmount,
+      pendingRevenue: b.pendingAmount,
+      basis: 'booking_date' as const,
+      statusFilter,
+    }));
 
     const rows = allBuckets.slice(-60);
-
-    const totalReservations = allBuckets.reduce((s, r) => s + r.reservations, 0);
-    const totalPurchase = allBuckets.reduce((s, r) => s + r.purchaseValue, 0);
-    const totalDelivery = allBuckets.reduce((s, r) => s + r.deliveryFee, 0);
-    const totalDiscount = allBuckets.reduce((s, r) => s + r.discount, 0);
-    const totalReceipt = allBuckets.reduce((s, r) => s + r.receiptAmount, 0);
-    const totalRevenue = totalPurchase + totalDelivery;
-    const totalNetRevenue = totalRevenue - totalDiscount;
-    const totalLunasRevenue = allBuckets.reduce((s, r) => s + r.lunasRevenue, 0);
-    const totalPendingRevenue = allBuckets.reduce((s, r) => s + r.pendingRevenue, 0);
+    const sumKey = (k: keyof RevBucket) => allBuckets.reduce((s, r) => s + Number(r[k] || 0), 0);
+    const totalReservations = sumKey('reservations');
+    const totalGrossRevenue = sumKey('treatmentGross');
+    const totalDelivery = sumKey('deliveryFee');
+    const totalDiscount = sumKey('discount');
+    const totalBookingValue = sumKey('bookingValue');
+    const totalPaidAmount = sumKey('paidAmount');
+    const totalPendingAmount = sumKey('pendingAmount');
+    const totalReceipt = sumKey('receiptAmount');
 
     const summaryFacts = {
       totalReservations,
-      totalPurchase,
+      grossRevenue: totalGrossRevenue,
+      totalPurchase: totalGrossRevenue,
       totalDelivery,
       totalDiscount,
-      totalRevenue,
-      netRevenue: totalNetRevenue,
-      lunasRevenue: totalLunasRevenue,
-      pendingRevenue: totalPendingRevenue,
-      paidAmount: totalLunasRevenue,
-      pendingAmount: totalPendingRevenue,
+      bookingValue: totalBookingValue,
+      totalRevenue: totalBookingValue,
+      netRevenue: totalBookingValue,
+      lunasRevenue: totalPaidAmount,
+      pendingRevenue: totalPendingAmount,
+      paidAmount: totalPaidAmount,
+      pendingAmount: totalPendingAmount,
       receiptAmount: totalReceipt,
+      basis: 'booking_date' as const,
+      statusFilter,
     };
 
     if (rows.length > 1) {
@@ -1575,17 +1563,23 @@ export const queryRevenue: CopilotTool = {
       rows.push({
         bucket: 'TOTAL',
         reservations: totalReservations,
-        purchaseValue: totalPurchase,
+        treatmentGross: totalGrossRevenue,
+        grossRevenue: totalGrossRevenue,
+        purchaseValue: totalGrossRevenue,
         deliveryFee: totalDelivery,
         discount: totalDiscount,
+        treatmentNet: totalBookingValue - totalDelivery,
+        bookingValue: totalBookingValue,
         receiptAmount: totalReceipt,
-        lunasRevenue: totalLunasRevenue,
-        pendingRevenue: totalPendingRevenue,
-        totalRevenue,
-        netRevenue: totalNetRevenue,
-        paidAmount: totalLunasRevenue,
-        pendingAmount: totalPendingRevenue,
+        lunasRevenue: totalPaidAmount,
+        pendingRevenue: totalPendingAmount,
+        totalRevenue: totalBookingValue,
+        netRevenue: totalBookingValue,
+        paidAmount: totalPaidAmount,
+        pendingAmount: totalPendingAmount,
+        isPaid: totalPendingAmount === 0 && totalBookingValue > 0,
         basis: 'booking_date' as const,
+        statusFilter,
       });
     }
 

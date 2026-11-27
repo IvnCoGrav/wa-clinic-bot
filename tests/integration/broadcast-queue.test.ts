@@ -32,8 +32,9 @@ describe('Broadcast Throttling & Queue Constraint Tests', () => {
   });
 
   it('Job processed outside business hours (09:00-18:00) -> rescheduled to tomorrow 09:00', async () => {
-    // Mock jam 20:00 (di luar jam kerja) menggunakan fake timer local time
-    vi.setSystemTime(new Date(2026, 6, 24, 20, 0, 0));
+    // Mock 20:00 WIB (di luar jam kerja). Waktu dibangun eksplisit WIB agar
+    // tidak bergantung zona mesin (runner CI berjalan di UTC).
+    vi.setSystemTime(new Date('2026-07-24T20:00:00+07:00'));
 
     const followUpUpdateSpy = vi.mocked(prisma.followUp.update).mockResolvedValue({} as any);
 
@@ -55,14 +56,14 @@ describe('Broadcast Throttling & Queue Constraint Tests', () => {
       })
     );
 
-    // Cek target tanggal besok jam 09:00
-    const scheduledDate = followUpUpdateSpy.mock.calls[0][0].data.scheduled_at;
-    expect(scheduledDate.getHours()).toBe(9);
+    // Cek target: besok 09:00 WIB sebagai instant absolut (bukan jam host).
+    const scheduledDate = followUpUpdateSpy.mock.calls[0][0].data.scheduled_at as Date;
+    expect(scheduledDate.toISOString()).toBe(new Date('2026-07-25T09:00:00+07:00').toISOString());
   });
 
   it('Job processed inside business hours -> delegates to the single canonical sender + delay throttling', async () => {
-    // Mock jam 10:00 pagi (dalam jam kerja)
-    vi.setSystemTime(new Date(2026, 6, 24, 10, 0, 0));
+    // Mock 10:00 WIB (dalam jam kerja).
+    vi.setSystemTime(new Date('2026-07-24T10:00:00+07:00'));
 
     const mockFollowUp = {
       id: 'f-day',
@@ -108,8 +109,8 @@ describe('Broadcast Throttling & Queue Constraint Tests', () => {
   });
 
   it('Template selection -> seluruh teks berasal dari seam kanonis (bukan TEMPLATES hardcoded)', async () => {
-    // Mock jam 10:00 pagi (dalam jam kerja)
-    vi.setSystemTime(new Date(2026, 6, 24, 10, 0, 0));
+    // Mock 10:00 WIB (dalam jam kerja).
+    vi.setSystemTime(new Date('2026-07-24T10:00:00+07:00'));
 
     const mockFollowUp = {
       id: 'f-variant',

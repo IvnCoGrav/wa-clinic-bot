@@ -22,7 +22,7 @@ function badRequest(message: string): never {
  * Service Treatment Heatmap — satu query agregasi per-request.
  *
  * Definisi metrik (disepakati): warna sel = jumlah reservasi berstatus
- * `completed`; reservasi mendatang/batal TIDAK dihitung. Omzet memakai seam
+ * `completed`; reservasi mendatang/batal TIDAK dihitung. Nilai booking memakai seam
  * kanonis `resolveReservationBilling` (purchase_value + ongkir).
  */
 export class TreatmentHeatmapService {

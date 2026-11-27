@@ -34,7 +34,7 @@ const QUICK_PROMPTS = [
   'Jadwal besok siapa saja?',
   'Berapa chat hari ini?',
   'Chat siapa yang belum dibalas?',
-  'Omzet minggu ini berapa?',
+  'Nilai booking minggu ini berapa?',
   'Follow-up yang gagal apa saja?',
 ];
 
@@ -77,10 +77,16 @@ const RichMessage: React.FC<{ content: string; onNavigate: (url: string) => void
           </button>
         );
       } else {
+        // Hanya URL http(s) yang boleh menjadi tautan; skema lain (javascript:,
+        // data:) dirender sebagai teks agar tidak bisa dieksekusi/diikuti.
         nodes.push(
-          <a key={`ext-${m.index}`} href={url} target="_blank" rel="noopener noreferrer" className="underline">
-            {label}
-          </a>
+          /^https?:\/\//i.test(url) ? (
+            <a key={`ext-${m.index}`} href={url} target="_blank" rel="noopener noreferrer" className="underline">
+              {label}
+            </a>
+          ) : (
+            <span key={`txt-${m.index}`}>{label}</span>
+          )
         );
       }
     } else {

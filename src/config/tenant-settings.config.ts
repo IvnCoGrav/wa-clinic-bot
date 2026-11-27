@@ -8,9 +8,13 @@ import {
   getDelayWatchdogSettings,
   type DelayWatchdogSettings,
 } from './delay-watchdog-config';
+import {
+  getFinancialTargets,
+  type FinancialTargets,
+} from './financial-targets';
 import { normalizePhoneID } from '../utils/phone-normalizer';
 
-export type { DelayWatchdogSettings };
+export type { DelayWatchdogSettings, FinancialTargets };
 
 /**
  * tenant-settings.config.ts — kontrak tulis/baca setelan tenant yang sebelumnya
@@ -50,6 +54,7 @@ export interface TenantSettingsView {
   copilot: CopilotSettings;
   brand: BrandIdentity;
   delayWatchdog: DelayWatchdogSettings;
+  financialTargets: FinancialTargets;
 }
 
 export interface ClinicLocationPatch {
@@ -68,6 +73,10 @@ export interface TenantSettingsPatch {
   copilot?: { styleTone?: string | null };
   brand?: Partial<BrandIdentity>;
   delayWatchdog?: Partial<DelayWatchdogSettings>;
+  financialTargets?: {
+    monthlyRevenueTarget?: number | null;
+    monthlyBookingTarget?: number | null;
+  };
 }
 
 export type ParseResult =
@@ -90,6 +99,7 @@ const TOP_LEVEL_KEYS = [
   'copilot',
   'brand',
   'delayWatchdog',
+  'financialTargets',
 ] as const;
 const MAX_TEXT_LENGTH = 200;
 const MAX_LOGO_URL_LENGTH = 500;
@@ -357,6 +367,48 @@ export function parseTenantSettingsPatch(raw: unknown): ParseResult {
     }
   }
 
+  if (raw.financialTargets !== undefined) {
+    if (!isPlainObject(raw.financialTargets)) {
+      errors.push('financialTargets harus berupa objek.');
+    } else {
+      const allowedKeys = ['monthlyRevenueTarget', 'monthlyBookingTarget'] as const;
+      rejectUnknownKeys(raw.financialTargets, allowedKeys, 'financialTargets.', errors);
+      const src = raw.financialTargets;
+      const dst: { monthlyRevenueTarget?: number | null; monthlyBookingTarget?: number | null } = {};
+
+      if (src.monthlyRevenueTarget !== undefined) {
+        if (src.monthlyRevenueTarget === null) {
+          dst.monthlyRevenueTarget = null;
+        } else if (
+          !isFiniteNumber(src.monthlyRevenueTarget) ||
+          src.monthlyRevenueTarget < 0 ||
+          src.monthlyRevenueTarget > 10_000_000_000
+        ) {
+          errors.push('financialTargets.monthlyRevenueTarget harus angka 0 sampai 10.000.000.000 atau null.');
+        } else {
+          dst.monthlyRevenueTarget = Math.round(src.monthlyRevenueTarget);
+        }
+      }
+
+      if (src.monthlyBookingTarget !== undefined) {
+        if (src.monthlyBookingTarget === null) {
+          dst.monthlyBookingTarget = null;
+        } else if (
+          !isFiniteNumber(src.monthlyBookingTarget) ||
+          !Number.isInteger(src.monthlyBookingTarget) ||
+          src.monthlyBookingTarget < 0 ||
+          src.monthlyBookingTarget > 100_000
+        ) {
+          errors.push('financialTargets.monthlyBookingTarget harus bilangan bulat 0 sampai 100.000 atau null.');
+        } else {
+          dst.monthlyBookingTarget = src.monthlyBookingTarget;
+        }
+      }
+
+      if (Object.keys(dst).length > 0) patch.financialTargets = dst;
+    }
+  }
+
   if (errors.length > 0) return { ok: false, errors };
   if (Object.keys(patch).length === 0) {
     return { ok: false, errors: ['Tidak ada setelan yang dikirim.'] };
@@ -417,6 +469,19 @@ export function applyTenantSettingsPatch(
       next.delayWatchdog.adminRecipients = patch.delayWatchdog.adminRecipients;
     }
   }
+  if (patch.financialTargets) {
+    const targets = { ...(isPlainObject(current.financialTargets) ? current.financialTargets : {}) };
+    if (patch.financialTargets.monthlyRevenueTarget !== undefined) {
+      if (patch.financialTargets.monthlyRevenueTarget === null) delete targets.monthlyRevenueTarget;
+      else targets.monthlyRevenueTarget = patch.financialTargets.monthlyRevenueTarget;
+    }
+    if (patch.financialTargets.monthlyBookingTarget !== undefined) {
+      if (patch.financialTargets.monthlyBookingTarget === null) delete targets.monthlyBookingTarget;
+      else targets.monthlyBookingTarget = patch.financialTargets.monthlyBookingTarget;
+    }
+    if (Object.keys(targets).length > 0) next.financialTargets = targets;
+    else delete next.financialTargets;
+  }
 
   return next;
 }
@@ -457,7 +522,7 @@ async function readDeliveryAndCopilot(
 export async function getTenantSettingsView(
   tenantId: string = DEFAULT_TENANT_ID
 ): Promise<TenantSettingsView> {
-  const [clinicLocation, operationalHours, staffNotification, brand, extra, delayWatchdog] =
+  const [clinicLocation, operationalHours, staffNotification, brand, extra, delayWatchdog, financialTargets] =
     await Promise.all([
       getClinicLocationAsync(tenantId),
       getOperationalHours(tenantId),
@@ -465,6 +530,7 @@ export async function getTenantSettingsView(
       getBrandIdentityAsync(tenantId),
       readDeliveryAndCopilot(tenantId),
       getDelayWatchdogSettings(tenantId),
+      getFinancialTargets(tenantId),
     ]);
 
   return {
@@ -475,5 +541,6 @@ export async function getTenantSettingsView(
     copilot: extra.copilot,
     brand: { ...brand },
     delayWatchdog: { ...delayWatchdog },
+    financialTargets: { ...financialTargets },
   };
 }

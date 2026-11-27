@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { apiRequest } from '../../services/api';
 import { useUiFeedback } from '../common/UiFeedback';
 import { formatRupiah } from '../../utils/money';
+import { MetricBasisBadge } from './MetricBasisBadge';
 import {
   CalendarDays,
   CalendarRange,
@@ -72,6 +73,14 @@ interface HeatmapData {
   maxCount: number;
   maxRevenue: number;
   totals: HeatmapCellMetrics;
+  revenueBasis?: {
+    basis: string;
+    statusFilter: string;
+    includeDeliveryFee: boolean;
+    includePending: boolean;
+    includeUpcoming: boolean;
+    label: string;
+  };
   hourly?: HeatmapHourlyCell[];
   weeks?: HeatmapWeekRow[];
   days?: HeatmapDayCell[];
@@ -173,10 +182,20 @@ export const TreatmentHeatmapTab: React.FC<TreatmentHeatmapTabProps> = ({ year, 
       {/* Kontrol tampilan */}
       <div className="bg-surface p-4 sm:p-5 rounded-2xl border border-divider shadow-xs flex flex-col lg:flex-row lg:items-center justify-between gap-4">
         <div>
-          <h2 className="text-base font-bold text-ink flex items-center gap-2">
-            <Grid3X3 size={18} className="text-accent" />
-            <span>Heatmap Kepadatan Treatment</span>
-          </h2>
+          <div className="flex items-center gap-2.5 flex-wrap">
+            <h2 className="text-base font-bold text-ink flex items-center gap-2">
+              <Grid3X3 size={18} className="text-accent" />
+              <span>Heatmap Kepadatan Treatment</span>
+            </h2>
+            <MetricBasisBadge
+              label="Omzet Kunjungan Selesai"
+              basis="booking_date"
+              statusFilter="completed_only"
+              includesPending={false}
+              includesUpcoming={false}
+              includesDeliveryFee={true}
+            />
+          </div>
           <p className="text-xs text-ink-2 mt-0.5">
             Warna = jumlah reservasi <strong>selesai</strong>. Reservasi mendatang, batal, dan hold tidak dihitung.
           </p>
@@ -252,9 +271,9 @@ export const TreatmentHeatmapTab: React.FC<TreatmentHeatmapTabProps> = ({ year, 
           </p>
         </div>
         <div className="bg-surface p-4 rounded-2xl border border-divider shadow-xs">
-          <p className="text-[11px] font-bold text-ink-2 uppercase tracking-wider">Omzet Periode</p>
+          <p className="text-[11px] font-bold text-ink-2 uppercase tracking-wider" title="Hanya reservasi completed; mendatang/batal tidak dihitung.">Omzet Kunjungan Selesai</p>
           <h3 className="text-2xl font-black text-accent mt-1">{formatRupiah(data?.totals.revenue || 0)}</h3>
-          <p className="text-[11px] text-ink-3 mt-1">Layanan + ongkir (tanpa potongan)</p>
+          <p className="text-[11px] text-ink-3 mt-1" title="Hanya reservasi completed; mendatang/batal tidak dihitung.">Khusus reservasi completed</p>
         </div>
         <div className="bg-surface p-4 rounded-2xl border border-divider shadow-xs">
           <p className="text-[11px] font-bold text-ink-2 uppercase tracking-wider">Item Treatment</p>
