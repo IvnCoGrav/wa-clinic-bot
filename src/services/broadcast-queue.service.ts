@@ -2,6 +2,7 @@ import { Queue, Worker, Job } from 'bullmq';
 import Redis from 'ioredis';
 import { prisma } from '../db/client';
 import { DEFAULT_TENANT_ID } from '../config/tenant';
+import { getWibNow, WIB_OFFSET_MS } from '../utils/wib-time';
 import dotenv from 'dotenv';
 
 dotenv.config();
@@ -173,16 +174,21 @@ export class BroadcastQueueService {
       return;
     }
 
-    // 1. Cek Jam Kerja (09:00 - 18:00)
+    // 1. Cek jam kerja 09:00–18:00 WIB.
+    //    WAJIB memakai jam WIB, bukan jam host: server produksi berjalan di UTC
+    //    sehingga `getHours()` menggeser jendela kirim 7 jam (broadcast terkirim
+    //    sore/malam WIB atau ditunda padahal masih jam kerja).
     const now = new Date();
-    const currentHour = now.getHours();
+    const wibNow = getWibNow(now);
+    const currentHour = wibNow.getUTCHours();
 
     if (currentHour < 9 || currentHour >= 18) {
-      console.log(`[Broadcast Queue] Outside business hours (${currentHour}:00). Rescheduling follow-up ${followUpId} to tomorrow at 09:00.`);
-      
-      const tomorrow0900 = new Date();
-      tomorrow0900.setDate(tomorrow0900.getDate() + 1);
-      tomorrow0900.setHours(9, 0, 0, 0);
+      console.log(`[Broadcast Queue] Outside business hours (${currentHour}:00 WIB). Rescheduling follow-up ${followUpId} to tomorrow at 09:00 WIB.`);
+
+      // Besok 09:00 WIB sebagai instant absolut (bukan 09:00 zona host).
+      const tomorrow0900 = new Date(
+        Date.UTC(wibNow.getUTCFullYear(), wibNow.getUTCMonth(), wibNow.getUTCDate() + 1, 9, 0, 0, 0) - WIB_OFFSET_MS
+      );
 
       // Kembalikan ke PENDING dengan waktu baru agar dicrowd oleh cron besok pagi
       await prisma.followUp.update({
