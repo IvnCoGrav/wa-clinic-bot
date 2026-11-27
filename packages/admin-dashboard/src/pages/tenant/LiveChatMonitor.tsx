@@ -196,6 +196,9 @@ export const LiveChatMonitor: React.FC = () => {
     threadLoadError,
     hasMoreOlderMessages,
     isLoadingOlder,
+    hasNewerMessages,
+    isLoadingNewer,
+    hasNewerMessagesRef,
     isDeepSearching,
     pendingFocusMessageIdRef,
     wasNearBottomRef,
@@ -215,6 +218,7 @@ export const LiveChatMonitor: React.FC = () => {
     inChatSearchInputRef,
     loadThread,
     loadOlderMessages,
+    loadNewerMessages,
     handleDeepSearchInHistory,
     scrollToBottom,
     scrollToMessage,
@@ -409,6 +413,7 @@ export const LiveChatMonitor: React.FC = () => {
     scrollToBottom,
     chatContainerRef,
     wasNearBottomRef,
+    hasNewerMessagesRef,
     savedScrollTopRef,
     mobileViewRef,
     isDesktopRef,
@@ -841,7 +846,7 @@ export const LiveChatMonitor: React.FC = () => {
                       c.conversationId &&
                       (c as any).activeConfirmedReservation?.id === currentAlert.reservationId
                   );
-                  if (conv?.conversationId) setSelectedId(conv.conversationId);
+                  if (conv?.conversationId) handleSelect(conv.conversationId);
                   setDelayCycleIndex((prev) => (prev + 1) % alertList.length);
                 }}
                 className={`flex items-center space-x-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold border transition cursor-pointer active:scale-95 ${
@@ -1024,9 +1029,6 @@ export const LiveChatMonitor: React.FC = () => {
             setContextMenu={setContextMenu}
             handleRelease={handleRelease}
             releasingId={releasingId}
-            setInChatSearchQuery={setInChatSearchQuery}
-            setInChatSearchOpen={setInChatSearchOpen}
-            pendingFocusMessageIdRef={pendingFocusMessageIdRef}
             selectedIdRef={selectedIdRef}
             loadThread={loadThread}
             searchDebounceTimerRef={searchDebounceTimerRef}
@@ -1058,6 +1060,9 @@ export const LiveChatMonitor: React.FC = () => {
             hasMoreOlderMessages={hasMoreOlderMessages}
             isLoadingOlder={isLoadingOlder}
             loadOlderMessages={loadOlderMessages}
+            hasNewerMessages={hasNewerMessages}
+            isLoadingNewer={isLoadingNewer}
+            loadNewerMessages={loadNewerMessages}
             chatContainerRef={chatContainerRef}
             messagesEndRef={messagesEndRef}
             composerRef={composerRef}

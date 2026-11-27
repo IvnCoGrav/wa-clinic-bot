@@ -454,15 +454,16 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
 
   /**
    * GET /api/admin/live-chat/conversations/:id/messages
-   * Thread pesan sebuah percakapan (kronologis) + cursor pagination opsional:
-   * ?limit=50&before=<ISO timestamp>. Tanpa param = 50 pesan terakhir (identik legacy).
+   * Thread pesan sebuah percakapan (kronologis) + cursor pagination dua arah:
+   * ?limit=50&before=<cursor> (riwayat lama) atau ?after=<cursor> (pesan lebih baru).
+   * Tanpa param = 50 pesan terakhir (identik legacy).
    */
   fastify.get(
     '/api/admin/live-chat/conversations/:id/messages',
     async (
       request: FastifyRequest<{
         Params: { id: string };
-        Querystring: { limit?: string; before?: string; focusMessageId?: string };
+        Querystring: { limit?: string; before?: string; after?: string; focusMessageId?: string };
       }>,
       reply
     ) => {
@@ -471,13 +472,15 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
       try {
         const limit = Math.min(Math.max(parseInt(request.query.limit || '50', 10) || 50, 1), 200);
         const before = request.query.before?.trim() || undefined;
+        const after = request.query.after?.trim() || undefined;
         const focusMessageId = request.query.focusMessageId?.trim() || undefined;
-        const { messages, hasMore, pinnedMessage } = await liveChatService.getConversationMessagesPaged(
+        const { messages, hasMore, hasNewer, newestCursor, pinnedMessage } = await liveChatService.getConversationMessagesPaged(
           id,
           tenantId,
           limit,
           before,
-          focusMessageId
+          focusMessageId,
+          after
         );
         // Cursor komposit (created_at|id) agar pesan bertimestamp sama tidak
         // terlewat di batas halaman (audit #316 / T-09).
@@ -487,6 +490,8 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
           count: messages.length,
           data: messages,
           hasMore,
+          hasNewer: !!hasNewer,
+          newestCursor: newestCursor || null,
           oldestCursor: oldest ? encodeMessageCursor(oldest.created_at, oldest.id) : null,
           pinnedMessage: pinnedMessage || null,
         });

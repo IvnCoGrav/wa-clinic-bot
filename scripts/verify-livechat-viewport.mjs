@@ -63,6 +63,21 @@ check(
   pane.includes('data-chat-scroll-container="true"'),
   'LiveChatMessagePane.tsx',
 );
+check(
+  'Hook memakai paginasi dua arah (?after=) untuk pesan lebih baru',
+  thread.includes('&after=') && thread.includes('loadNewerMessages'),
+  'useLiveChatActiveThread.ts loadNewerMessages',
+);
+check(
+  'Pane menyediakan tombol "ke pesan terbaru" saat hasNewerMessages',
+  pane.includes('hasNewerMessages') && pane.includes('loadNewerMessages(20, true)'),
+  'LiveChatMessagePane.tsx newer pill',
+);
+check(
+  'SSE tidak menambal bubble saat masih ada gap pesan lebih baru',
+  read('packages/admin-dashboard/src/hooks/useLiveChatSse.ts').includes('!hasNewerMessagesRef.current'),
+  'useLiveChatSse.ts message.created guard',
+);
 
 if (fails > 0) {
   console.error(`\n${fails} check gagal.`);

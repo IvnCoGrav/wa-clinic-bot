@@ -27,6 +27,8 @@ export interface UseLiveChatSseParams {
   scrollToBottom: (smooth?: boolean, force?: boolean) => void;
   chatContainerRef: React.RefObject<HTMLDivElement>;
   wasNearBottomRef: React.MutableRefObject<boolean>;
+  /** true bila thread masih berupa jendela lama (ada pesan lebih baru belum dimuat). */
+  hasNewerMessagesRef: React.MutableRefObject<boolean>;
   savedScrollTopRef: React.MutableRefObject<number | null>;
   mobileViewRef: React.MutableRefObject<'list' | 'chat'>;
   isDesktopRef: React.MutableRefObject<boolean>;
@@ -60,6 +62,7 @@ export function useLiveChatSse({
   scrollToBottom,
   chatContainerRef,
   wasNearBottomRef,
+  hasNewerMessagesRef,
   savedScrollTopRef,
   mobileViewRef,
   isDesktopRef,
@@ -140,8 +143,11 @@ export function useLiveChatSse({
             payload_raw: rawPayload,
           };
 
-          // Append ke thread yang sedang dibuka / replace optimistic message
-          if (selectedIdRef.current === conversationId) {
+          // Append ke thread yang sedang dibuka / replace optimistic message.
+          // Bila thread masih berupa jendela lama (ada pesan lebih baru belum dimuat),
+          // JANGAN append: itu menciptakan "lubang" riwayat tanpa penanda. Biarkan
+          // tombol "ke pesan terbaru" yang memuat berurutan.
+          if (selectedIdRef.current === conversationId && !hasNewerMessagesRef.current) {
             const applyMessageCreated = () => {
               // User bisa pindah percakapan selama pra-muat berjalan.
               if (selectedIdRef.current !== conversationId) return;

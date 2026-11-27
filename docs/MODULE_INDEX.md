@@ -7,7 +7,7 @@
 
 ## 1. Daftar Kapabilitas Kanonis Aktif
 
-Total kapabilitas terdaftar: **45 modul**.
+Total kapabilitas terdaftar: **46 modul**.
 
 | ID Kapabilitas | Judul & Deskripsi | Modul Kanonis | Ekspor Resmi | Test File |
 |---|---|---|---|---|
@@ -22,6 +22,7 @@ Total kapabilitas terdaftar: **45 modul**.
 | `gesture.swipe` | **Fisika & klasifikasi gestur swipe kanonis**<br>Redaman eksponensial, dominansi sumbu, arah swipe, dan pemetaan kelas slide tab — murni tanpa DOM. | [`packages/admin-dashboard/src/utils/swipeGesture.ts`](../packages/admin-dashboard/src/utils/swipeGesture.ts) | `SWIPE_RATIO`, `EDGE_RATIO`, `TAB_SWIPE_MIN_PX`, `EDGE_OPEN_MIN_PX`, `EDGE_ZONE_PX`, `SWIPE_MAX_DURATION_MS`, `applyRubberBand`, `isDominantHorizontal`, `resolveSwipeDirection`, `slideClassFor` | [`swipe-gesture.test.ts`](../tests/unit/swipe-gesture.test.ts) |
 | `json.extract` | **Ekstraksi JSON dari output AI**<br>Mengekstrak blok JSON seimbang dari respons teks LLM yang mengandung markdown atau teks pelengkap. | [`src/utils/json-extract.ts`](../src/utils/json-extract.ts) | `extractBalancedJson`, `extractJsonContent`, `repairTruncatedJson` | [`json-extract.test.ts`](../tests/unit/json-extract.test.ts) |
 | `livechat.serialize` | **Proyeksi DTO LiveChat**<br>Memetakan baris percakapan/kustomer/reservasi menjadi DTO LiveChat (badge reservasi, sumber lokasi, awaiting-reply) tanpa akses DB. | [`src/services/live-chat.serializer.ts`](../src/services/live-chat.serializer.ts) | `serializeLiveChatConversation` | [`livechat-payload-completeness.test.ts`](../tests/unit/livechat-payload-completeness.test.ts) |
+| `livechat.thread_pagination` | **Paginasi dua arah thread pesan Live Chat**<br>Jendela fokus di sekitar pesan hasil pencarian dan paginasi dua arah (before/after) dengan penanda hasNewer/newestCursor, tenant-scoped dan tahan DB offline. | [`src/services/message-thread.service.ts`](../src/services/message-thread.service.ts) | `messageThreadService` | [`live-chat-paged-messages.test.ts`](../tests/unit/live-chat-paged-messages.test.ts) |
 | `location.adequacy` | **Kecukupan, presisi, dan precedence lokasi tugas**<br>Resolver kanonis kecukupan/presisi/kepercayaan lokasi serta precedence titik tugas (pemilik koordinat) berbasis status; mencegah penurunan label & shareloc palsu. | [`src/domain/location-adequacy.ts`](../src/domain/location-adequacy.ts) | `resolveLocationAdequacy`, `resolveTaskLocationPrecedence`, `extractStaffVerifiedCoords`, `SAME_PLACE_TOLERANCE_M` | [`location-adequacy.test.ts`](../tests/unit/location-adequacy.test.ts) |
 | `location.clinic_question` | **Klasifikasi pertanyaan lokasi klinik**<br>Mendeteksi apakah pesan customer menanyakan lokasi atau alamat klinik fisik. | [`src/utils/location-classifier.ts`](../src/utils/location-classifier.ts) | `isClinicLocationQuestion` | [`location-classifier.test.ts`](../tests/unit/location-classifier.test.ts) |
 | `location.gps_tier` | **Pemilihan tier kandidat GPS**<br>Pemilih deterministik kandidat koordinat berdasarkan hierarki tier dan kebaruan dalam tier yang sama. | [`src/domain/gps-tier.ts`](../src/domain/gps-tier.ts) | `pickGpsTier` | [`location-ingest.test.ts`](../tests/unit/location-ingest.test.ts) |
@@ -157,6 +158,15 @@ Total kapabilitas terdaftar: **45 modul**.
 - **Simbol Terlarang di Luar Kanonis:** `serializeLiveChatConversation`
 - **File yang Diizinkan:** `src/services/live-chat.serializer.ts`
 - **File Test:** [`tests/unit/livechat-payload-completeness.test.ts`](../tests/unit/livechat-payload-completeness.test.ts)
+
+### `livechat.thread_pagination` — Paginasi dua arah thread pesan Live Chat
+
+- **Deskripsi:** Jendela fokus di sekitar pesan hasil pencarian dan paginasi dua arah (before/after) dengan penanda hasNewer/newestCursor, tenant-scoped dan tahan DB offline.
+- **File Kanonis:** [`src/services/message-thread.service.ts`](../src/services/message-thread.service.ts)
+- **Ekspor Kanonis:** `messageThreadService`
+- **Simbol Terlarang di Luar Kanonis:** 
+- **File yang Diizinkan:** `src/services/message-thread.service.ts`
+- **File Test:** [`tests/unit/live-chat-paged-messages.test.ts`](../tests/unit/live-chat-paged-messages.test.ts)
 
 ### `location.adequacy` — Kecukupan, presisi, dan precedence lokasi tugas
 

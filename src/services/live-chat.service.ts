@@ -3,6 +3,7 @@ import { Direction } from '@prisma/client';
 import { conversationService, buildConversationUpdatedPayload } from './conversation.service';
 import { customerService } from './customer.service';
 import { messageService } from './message.service';
+import { messageThreadService } from './message-thread.service';
 import { resolveGatewayForTenant } from '../integrations/whatsapp/factory';
 import { ClientIdempotencyStore } from '../utils/client-idempotency';
 import { alertService, AlertType, AlertSeverity } from './alert.service';
@@ -275,17 +276,35 @@ export class LiveChatService {
   }
 
   /**
-   * Thread pesan paged (cursor-based): `before` = ISO timestamp / Date cursor.
-   * Mengembalikan pesan kronologis (lama -> baru) + flag hasMore.
+   * Thread pesan paged (cursor-based): `before`/`after` + `focusMessageId`.
+   * Mengembalikan pesan kronologis (lama -> baru) + flag hasMore/hasNewer.
    */
   public async getConversationMessagesPaged(
     conversationId: string,
     tenantId: string,
     limit = 50,
     before?: string | Date,
-    focusMessageId?: string
-  ): Promise<{ messages: any[]; hasMore: boolean; pinnedMessage?: any }> {
-    return messageService.getRecentMessagesWithHasMore(conversationId, limit, tenantId, before, focusMessageId);
+    focusMessageId?: string,
+    after?: string | Date
+  ): Promise<{
+    messages: any[];
+    hasMore: boolean;
+    hasNewer: boolean;
+    newestCursor: string | null;
+    pinnedMessage?: any;
+  }> {
+    const page = await messageThreadService.getRecentMessagesWithHasMore(
+      conversationId,
+      limit,
+      tenantId,
+      before,
+      focusMessageId,
+      after
+    );
+    // Pin diambil di lapisan pemanggil agar modul thread tidak bergantung pada
+    // message-pin.service (mencegah siklus import baru).
+    const pinnedMessage = await messageService.getPinnedMessage(conversationId, tenantId);
+    return { ...page, pinnedMessage };
   }
 
   /**
