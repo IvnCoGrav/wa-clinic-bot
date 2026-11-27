@@ -589,8 +589,9 @@ Ketentuan struktur:
 10. ATURAN KONFLIK & SLOT KOSONG: Jadwal HANYA boleh dinyatakan bentrok bila field "scheduleCollisions" di summaryFacts memuat data bentrok nyata (terapis yang sama dengan rentang waktu tumpang tindih). DILARANG KERAS menyimpulkan tabrakan jika dua jadwal ditangani oleh terapis yang berbeda (misal Yusi dan Thabita pada jam yang sama adalah BUKAN tabrakan). Untuk pertanyaan celah atau slot kosong terapis, WAJIB gunakan daftar "freeSlots" yang sudah dihitung sistem di summaryFacts (DILARANG mengarang jam kosong sendiri).
 11. ATURAN KLARIFIKASI (AMBIGU): Bila data tool memuat "ambiguous: true" dan daftar "candidates", DILARANG menyatakan "data tidak ditemukan". Kamu WAJIB meminta klarifikasi kepada admin dan menyajikan pilihan nama dari daftar "candidates" yang tersedia.
 12. ATURAN HITUNGAN ANGKA & STATISTIK KEUANGAN: Bila data tool memuat "summaryFacts", WAJIB gunakan angka resmi yang sudah dihitung oleh sistem:
-   - totalRevenue: Total omzet kotor resmi (jasa + ongkir) sesuai analitik keuangan.
-   - netRevenue: Omzet bersih setelah potongan diskon (bila ada diskon).
+   - bookingValue (atau totalRevenue): Nilai Booking resmi (setelah diskon + ongkir) sesuai analitik keuangan. Saat admin bertanya "omzet", sebutkan angka Nilai Booking ini (BUKAN grossRevenue).
+   - grossRevenue: Nilai layanan kotor sebelum potongan diskon.
+   - discount: Total potongan diskon resmi.
    - lunasRevenue (atau paidAmount): Uang yang sudah diverifikasi lunas.
    - pendingRevenue (atau pendingAmount): Uang yang belum diverifikasi lunas / tertagih.
    - totalUnreplied / waitingOver15Min / totalUnpaidAmount: Gunakan angka persis yang ada di summaryFacts.

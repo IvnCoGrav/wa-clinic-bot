@@ -184,6 +184,21 @@ export const CumulativeComparisonTooltip: React.FC<CumulativeComparisonTooltipPr
           </div>
         )}
       </div>
+
+      {/* 4. Target Pace */}
+      {isRevenue && item.targetPaceRevenue != null && (
+        <div className="pt-1.5 border-t border-divider space-y-0.5">
+          <div className="flex items-center justify-between text-ink-2">
+            <span className="flex items-center gap-1.5">
+              <span className="w-2 h-0.5 border-t-2 border-dashed border-danger shrink-0" />
+              <span>Target Pace:</span>
+            </span>
+            <span className="font-semibold text-danger">
+              {formatRupiah(item.targetPaceRevenue)}
+            </span>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -621,11 +621,13 @@ export const CustomerDatabase: React.FC = () => {
 
         <div className="bg-surface p-3.5 rounded-xl border border-divider shadow-xs">
           <div className="flex items-center justify-between">
-            <span className="text-[11px] font-bold text-ink-3 uppercase tracking-wider">Total Omset (LTV)</span>
+            <span className="text-[11px] font-bold text-ink-3 uppercase tracking-wider" title="purchase_value, tanpa ongkir/diskon">
+              Total Belanja Pasien (All-Time)
+            </span>
             <DollarSign size={15} className="text-accent" />
           </div>
           <p className="text-lg font-bold text-accent mt-1">{formatCurrency(stats.totalRevenue)}</p>
-          <span className="text-[10px] text-ink-3">Akumulasi Transaksi Riil</span>
+          <span className="text-[10px] text-ink-3" title="purchase_value, tanpa ongkir/diskon">purchase_value, tanpa ongkir/diskon</span>
         </div>
 
         <div className="bg-surface p-3.5 rounded-xl border border-divider shadow-xs">
@@ -997,7 +999,7 @@ export const CustomerDatabase: React.FC = () => {
                   {/* Grid Top Cards: LTV & MQL Status */}
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
                     <div className="p-3 bg-surface-2 border border-divider rounded-2xl">
-                      <span className="text-[10px] uppercase font-bold text-ink-3 block">Total LTV</span>
+                      <span className="text-[10px] uppercase font-bold text-ink-3 block" title="purchase_value, tanpa ongkir/diskon">Total Belanja (All-Time)</span>
                       <p className="font-bold text-sm text-accent mt-0.5">
                         {formatCurrency(detailData?.ltv ?? activeDetailCustomer.ltv)}
                       </p>

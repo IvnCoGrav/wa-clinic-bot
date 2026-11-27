@@ -3,6 +3,7 @@ import { FinancialAnalyticsService } from '../../src/services/financial-analytic
 import { prisma } from '../../src/db/client';
 import { responseCacheService } from '../../src/services/response-cache.service';
 import { clearAnalyticsBaselineSettingsCache } from '../../src/config/analytics-baseline';
+import { clearFinancialTargetsCache } from '../../src/config/financial-targets';
 
 function clearCacheByPrefix(prefix: string) {
   const cache = (responseCacheService as any).cache;
@@ -232,6 +233,155 @@ describe('Analytics Daily Baseline Service Wiring (Fase 3)', () => {
       expect(res3.baseline.monthsRequested).toBe(3);
       expect(res6.baseline.monthsRequested).toBe(6);
       expect(res12.baseline.monthsRequested).toBe(12);
+    });
+
+    it('Fase 2: activeBookings, AOV, repeatRate, cancellationRate, dan revenueBasis kanonis', async () => {
+      vi.spyOn(prisma.reservation, 'findMany').mockImplementation(async (args?: any) => {
+        if (!args?.where?.status) {
+          // Current month: 4 total (2 completed, 1 confirmed, 1 cancelled)
+          // 1 repeat, 2 new active
+          return [
+            {
+              id: 'res-1',
+              status: 'completed',
+              booking_date: new Date('2026-11-05T03:00:00.000Z'),
+              purchase_value: 200000,
+              discount_amount: 20000,
+              delivery_fee: 10000,
+              is_repeat_order: true,
+              items: [],
+            },
+            {
+              id: 'res-2',
+              status: 'completed',
+              booking_date: new Date('2026-11-06T03:00:00.000Z'),
+              purchase_value: 150000,
+              discount_amount: 0,
+              delivery_fee: 10000,
+              is_repeat_order: false,
+              items: [],
+            },
+            {
+              id: 'res-3',
+              status: 'confirmed',
+              booking_date: new Date('2026-11-07T03:00:00.000Z'),
+              purchase_value: 100000,
+              discount_amount: 10000,
+              delivery_fee: 10000,
+              is_repeat_order: false,
+              items: [],
+            },
+            {
+              id: 'res-4',
+              status: 'cancelled',
+              booking_date: new Date('2026-11-08T03:00:00.000Z'),
+              purchase_value: 500000,
+              discount_amount: 0,
+              delivery_fee: 20000,
+              is_repeat_order: false,
+              items: [],
+            },
+          ] as any[];
+        }
+        return [];
+      });
+
+      const res = await FinancialAnalyticsService.getMonthlyAnalytics('tenant-kpi', 2026, 11);
+
+      // Total bookings = 4 (termasuk yang batal)
+      expect(res.kpi.totalBookings).toBe(4);
+      // Active bookings = 3 (non-cancelled)
+      expect(res.kpi.activeBookings).toBe(3);
+      expect(res.kpi.cancelledBookings).toBe(1);
+      // cancellationRate = (1 / 4) * 100 = 25%
+      expect(res.kpi.cancellationRate).toBe(25);
+
+      // Res-1: net 180k + ongkir 10k = 190k
+      // Res-2: net 150k + ongkir 10k = 160k
+      // Res-3: net 90k + ongkir 10k = 100k
+      // Total active booking value = 450k
+      expect(res.kpi.totalRevenue).toBe(450000);
+      expect(res.kpi.grossRevenue).toBe(450000);
+      expect(res.kpi.totalDiscount).toBe(30000);
+
+      // AOV denominator adalah activeBookings: 450k / 3 = 150k (BUKAN 450k / 4 = 112.5k)
+      expect(res.kpi.aov).toBe(150000);
+
+      // Repeat count = 1, active bookings = 3
+      expect(res.kpi.repeatCustomersCount).toBe(1);
+      expect(res.kpi.newCustomersCount).toBe(2); // 3 - 1
+      expect(res.kpi.repeatRatePercentage).toBe(33.3); // (1 / 3) * 100 = 33.3%
+
+      // revenueBasis metadata
+      expect(res.revenueBasis).toBeDefined();
+      expect(res.revenueBasis.basis).toBe('booking_date');
+      expect(res.revenueBasis.statusFilter).toBe('all_non_cancelled');
+      expect(res.revenueBasis.label).toContain('Basis tanggal treatment');
+    });
+
+    it('Fase 6: historical cancellation rate + target memakai realisasi s/d hari ini', async () => {
+      vi.setSystemTime(new Date('2026-11-15T05:00:00.000Z')); // 12:00 WIB
+      clearCacheByPrefix('analytics:monthly:tenant-target:');
+      clearFinancialTargetsCache('tenant-target');
+
+      vi.spyOn((prisma as any).tenant, 'findUnique').mockResolvedValue({
+        settings: {
+          financialTargets: { monthlyRevenueTarget: 3000000, monthlyBookingTarget: 10 },
+        },
+      });
+
+      vi.spyOn(prisma.reservation, 'findMany').mockImplementation(async (args?: any) => {
+        if (args?.where?.status?.notIn) return [];
+        return [
+          {
+            id: 'past',
+            booking_date: new Date('2026-11-10T03:00:00.000Z'),
+            status: 'completed',
+            purchase_value: 100000,
+            discount_amount: 0,
+            delivery_fee: 0,
+            is_repeat_order: false,
+            customer: { ongkir: 0 },
+            items: [],
+          },
+          {
+            id: 'future',
+            booking_date: new Date('2026-11-30T03:00:00.000Z'),
+            status: 'confirmed',
+            purchase_value: 200000,
+            discount_amount: 0,
+            delivery_fee: 0,
+            is_repeat_order: false,
+            customer: { ongkir: 0 },
+            items: [],
+          },
+        ] as any[];
+      });
+
+      vi.spyOn(prisma.reservation, 'count').mockImplementation(async (args?: any) => {
+        const isCancelled =
+          Array.isArray(args?.where?.status?.in) &&
+          args.where.status.in.includes('cancelled');
+        return isCancelled ? 2 : 10;
+      });
+
+      const res = await FinancialAnalyticsService.getMonthlyAnalytics('tenant-target', 2026, 11);
+
+      // 6 cancelled / 30 total dari 3 bulan historis = 20%
+      expect(res.forecastSummary.cancellationRate).toBe(20);
+      // Realisasi s/d 15 Nov hanya baris 'past'
+      expect(res.forecastSummary.revenueToDate).toBe(100000);
+      expect(res.forecastSummary.bookingsToDate).toBe(1);
+      // Required pace memakai realisasi, bukan total bulan (300k)
+      expect(res.forecastSummary.requiredDailyRevenue).toBe(Math.round((3000000 - 100000) / 15));
+      expect(res.forecastSummary.requiredDailyBookings).toBe(0.6);
+      expect(res.forecastSummary.gapToTargetRevenue).toBe(
+        3000000 - (res.forecastSummary.baseRevenue ?? 0)
+      );
+      // Current-month cancellation rate tetap operasional (0), bukan historis
+      expect(res.kpi.cancellationRate).toBe(0);
+
+      vi.useRealTimers();
     });
   });
 });

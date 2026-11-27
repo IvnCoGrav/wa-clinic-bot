@@ -36,6 +36,40 @@ describe('Admin Financial Analytics — Tenant Isolation (SEC-AUDIT)', () => {
     expect(body.data.monthName).toBe('Oktober');
   });
 
+  it('includes revenueBasis metadata in endpoint response', async () => {
+    vi.spyOn(FinancialAnalyticsService, 'getMonthlyAnalytics').mockResolvedValueOnce({
+      monthName: 'November',
+      year: 2026,
+      kpi: { totalRevenue: 1000000, activeBookings: 5, totalBookings: 6 },
+      revenueBasis: {
+        basis: 'booking_date',
+        statusFilter: 'all_non_cancelled',
+        includeDeliveryFee: true,
+        includePending: true,
+        includeUpcoming: true,
+        discountApplied: true,
+        label: 'Basis tanggal treatment; semua non-cancelled',
+      },
+      dailyTrend: [],
+    } as any);
+
+    const app = buildApp();
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/admin/financial-analytics?year=2026&month=11',
+      headers: {
+        'x-api-key': ADMIN_KEY,
+        'x-tenant-id': 'tenant-basis',
+      },
+    });
+
+    expect(res.statusCode).toBe(200);
+    const body = JSON.parse(res.payload);
+    expect(body.data.revenueBasis).toBeDefined();
+    expect(body.data.revenueBasis.basis).toBe('booking_date');
+    expect(body.data.revenueBasis.label).toContain('Basis tanggal treatment');
+  });
+
   it('rejects invalid baselineMonths with 400', async () => {
     const app = buildApp();
     const res = await app.inject({

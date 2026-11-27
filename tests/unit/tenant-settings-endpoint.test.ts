@@ -127,6 +127,19 @@ describe('parseTenantSettingsPatch — validasi ketat', () => {
     expect(parseTenantSettingsPatch({ brand: { logoUrl: 'https://cdn.example.com/logo.png' } }).ok).toBe(true);
   });
 
+  it('memvalidasi financialTargets dengan benar', () => {
+    expect(parseTenantSettingsPatch({ financialTargets: { monthlyRevenueTarget: 50000000, monthlyBookingTarget: 150 } })).toEqual({
+      ok: true,
+      patch: { financialTargets: { monthlyRevenueTarget: 50000000, monthlyBookingTarget: 150 } },
+    });
+    expect(parseTenantSettingsPatch({ financialTargets: { monthlyRevenueTarget: null, monthlyBookingTarget: null } })).toEqual({
+      ok: true,
+      patch: { financialTargets: { monthlyRevenueTarget: null, monthlyBookingTarget: null } },
+    });
+    expect(parseTenantSettingsPatch({ financialTargets: { monthlyRevenueTarget: -100 } }).ok).toBe(false);
+    expect(parseTenantSettingsPatch({ financialTargets: { unknownKey: 123 } as any }).ok).toBe(false);
+  });
+
   it('menerima patch valid dan men-trim teks', () => {
     const res = parseTenantSettingsPatch({
       clinicLocation: { name: '  Klinik Waru  ', maxCoverageKm: 25 },
@@ -176,6 +189,20 @@ describe('applyTenantSettingsPatch', () => {
   it('tidak membuat section kosong saat hanya sebagian field dikirim', () => {
     const next = applyTenantSettingsPatch({}, { staffNotification: { telegramEnabled: false } });
     expect(next).toEqual({ staffNotification: { telegramEnabled: false } });
+  });
+
+  it('menggabungkan dan menghapus financialTargets dengan benar', () => {
+    const res = applyTenantSettingsPatch(
+      { financialTargets: { monthlyRevenueTarget: 50000000, monthlyBookingTarget: 100 } },
+      { financialTargets: { monthlyRevenueTarget: 60000000 } }
+    );
+    expect(res.financialTargets).toEqual({ monthlyRevenueTarget: 60000000, monthlyBookingTarget: 100 });
+
+    const removed = applyTenantSettingsPatch(
+      { financialTargets: { monthlyRevenueTarget: 50000000 } },
+      { financialTargets: { monthlyRevenueTarget: null } }
+    );
+    expect(removed.financialTargets).toBeUndefined();
   });
 });
 

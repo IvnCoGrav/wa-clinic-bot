@@ -88,7 +88,7 @@ export const Overview: React.FC = () => {
     () => [
       {
         key: 'revenue',
-        label: 'Omset',
+        label: 'Nilai Booking',
         color: 'rgb(var(--c-accent))',
         shape: 'area',
       },
@@ -225,7 +225,7 @@ export const Overview: React.FC = () => {
                 className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-accent hover:bg-accent-hover text-accent-ink rounded-xl text-xs font-bold shadow-xs transition duration-150 active:scale-[0.98]"
               >
                 <TrendingUp size={14} aria-hidden="true" />
-                <span>Dashboard Transaksi & Omset</span>
+                <span>Dashboard Transaksi & Nilai Booking</span>
               </Link>
             )}
             <Button
@@ -279,7 +279,7 @@ export const Overview: React.FC = () => {
           <>
             <Link to="/admin/financial-analytics" className="block group">
               <KpiCard
-                label="Omset Bulan Ini"
+                label="Nilai Booking Bulan Ini"
                 value={formatRupiah(revenueMonth)}
                 hint={chartLabel ? `Bulan ${chartLabel}` : 'Bulan berjalan'}
                 icon={<DollarSign size={18} className="text-success" />}
@@ -288,9 +288,9 @@ export const Overview: React.FC = () => {
             </Link>
 
             <KpiCard
-              label="Rata-rata Nilai (AOV)"
+              label="Rata-rata Order (AOV)"
               value={formatRupiah(aovMonth)}
-              hint="Bulan berjalan (AOV)"
+              hint="Nilai Booking / reservasi aktif"
               icon={<TrendingUp size={18} className="text-info" />}
             />
           </>
@@ -305,7 +305,7 @@ export const Overview: React.FC = () => {
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
               <div className="flex items-center gap-2">
-                <h3 className="text-sm font-bold text-ink">Omset & Reservasi Harian</h3>
+                <h3 className="text-sm font-bold text-ink">Nilai Booking & Reservasi Harian</h3>
                 <Link to="/admin/financial-analytics" className="text-xs font-bold text-accent hover:underline">
                   Detail Transaksi →
                 </Link>
@@ -349,7 +349,7 @@ export const Overview: React.FC = () => {
                       yAxisId="left"
                       type="monotone"
                       dataKey="revenue"
-                      name="Omset (Rp)"
+                      name="Nilai Booking (Rp)"
                       stroke="rgb(var(--c-accent))"
                       strokeWidth={2.5}
                       fillOpacity={1}

@@ -292,4 +292,19 @@ describe('buildTreatmentHeatmap — konsistensi & determinisme', () => {
     };
     expect(buildTreatmentHeatmap(params)).toEqual(buildTreatmentHeatmap(params));
   });
+
+  it('menyertakan metadata revenueBasis berstatus completed_only', () => {
+    const res = buildTreatmentHeatmap({
+      year: 2026,
+      month: 11,
+      scope: 'monthly',
+      hours: HOURS,
+      now: NOW,
+      reservations: [],
+    });
+    expect(res.revenueBasis).toBeDefined();
+    expect(res.revenueBasis?.basis).toBe('booking_date');
+    expect(res.revenueBasis?.statusFilter).toBe('completed_only');
+    expect(res.revenueBasis?.label).toContain('hanya selesai');
+  });
 });

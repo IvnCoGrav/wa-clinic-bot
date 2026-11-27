@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
+import { Link } from 'react-router-dom';
 import { apiRequest } from '../../services/api';
 import { useUiFeedback } from '../../components/common/UiFeedback';
 import { Modal } from '../../components/ui/Modal';
@@ -28,6 +29,8 @@ import {
   X,
   ExternalLink,
   Grid3X3,
+  MousePointerClick,
+  Target,
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -53,6 +56,7 @@ import { TreatmentHeatmapTab } from '../../components/analytics/TreatmentHeatmap
 import { ChartSeriesToggle, type ChartSeriesToggleItem } from '../../components/analytics/ChartSeriesToggle';
 import { CumulativeTrendChart } from '../../components/analytics/CumulativeTrendChart';
 import { DailyComparisonTooltip } from '../../components/analytics/DailyComparisonTooltip';
+import { MetricBasisBadge } from '../../components/analytics/MetricBasisBadge';
 import { useChartSeriesToggles } from '../../hooks/useChartSeriesToggles';
 import {
   mapDailyTrendToChart,
@@ -66,12 +70,16 @@ import { formatMonthYearWib, formatWib, formatWibDate } from '../../utils/dateWi
 
 interface MonthlyKpiSummary {
   totalRevenue: number;
+  grossRevenue?: number;
+  totalDiscount?: number;
   lunasRevenue: number;
   pendingRevenue: number;
   totalBookings: number;
+  activeBookings?: number;
   completedBookings: number;
   upcomingBookings: number;
   cancelledBookings: number;
+  cancellationRate?: number;
   aov: number;
   repeatCustomersCount: number;
   newCustomersCount: number;
@@ -165,6 +173,19 @@ interface MonthlyAnalyticsData {
   month: number;
   monthName: string;
   kpi: MonthlyKpiSummary;
+  revenueBasis?: {
+    basis: string;
+    statusFilter: string;
+    includeDeliveryFee: boolean;
+    includePending: boolean;
+    includeUpcoming: boolean;
+    discountApplied: boolean;
+    label: string;
+  };
+  target?: {
+    monthlyRevenueTarget: number | null;
+    monthlyBookingTarget: number | null;
+  };
   dailyTrend: DailyRevenuePoint[];
   cumulativeTrend?: CumulativeChartPoint[];
   forecastSummary?: ForecastSummaryDto;
@@ -251,10 +272,41 @@ export const FinancialAnalytics: React.FC = () => {
     { current: true, lastMonth: true, baseline: true }
   );
 
+  // Target modal state
+  const [isTargetModalOpen, setIsTargetModalOpen] = useState(false);
+  const [targetRevenueInput, setTargetRevenueInput] = useState('');
+  const [targetBookingInput, setTargetBookingInput] = useState('');
+  const [isSavingTarget, setIsSavingTarget] = useState(false);
+
+  const handleSaveTarget = async () => {
+    setIsSavingTarget(true);
+    try {
+      const revNum = targetRevenueInput.trim() !== '' ? Number(targetRevenueInput) : null;
+      const bookNum = targetBookingInput.trim() !== '' ? Number(targetBookingInput) : null;
+      await apiRequest('/api/admin/tenant-settings', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          financialTargets: {
+            monthlyRevenueTarget: revNum,
+            monthlyBookingTarget: bookNum,
+          },
+        }),
+      });
+      toast('Target bulanan berhasil disimpan', 'success');
+      setIsTargetModalOpen(false);
+      fetchAnalytics();
+    } catch (err: any) {
+      toast(err?.message || 'Gagal menyimpan target', 'error');
+    } finally {
+      setIsSavingTarget(false);
+    }
+  };
+
   // Series visibility toggles for cumulative chart (Q6)
   const { visible: cumulativeVisible, toggle: toggleCumulativeSeries } = useChartSeriesToggles(
     'fin-analytics:cumulative-series',
-    { total: true, new: false, repeat: false, last: true, avg: true, forecast: true }
+    { total: true, new: false, repeat: false, last: true, avg: true, forecast: true, targetPace: true }
   );
 
   const chartDaily = useMemo(() => mapDailyTrendToChart(data?.dailyTrend || []), [data?.dailyTrend]);
@@ -370,8 +422,19 @@ export const FinancialAnalytics: React.FC = () => {
         dashed: true,
         shape: 'line',
       },
+      ...(data?.target?.monthlyRevenueTarget
+        ? [
+            {
+              key: 'targetPace',
+              label: `Target Pace (${formatCompactRupiah(data.target.monthlyRevenueTarget)})`,
+              color: 'rgb(var(--c-danger))',
+              dashed: true,
+              shape: 'line' as const,
+            },
+          ]
+        : []),
     ],
-    [currentMonthLabel, prevMonthLabel, baselineAvailable, data?.baseline]
+    [currentMonthLabel, prevMonthLabel, baselineAvailable, data?.baseline, data?.target]
   );
 
   // Fetch monthly analytics data
@@ -471,18 +534,26 @@ export const FinancialAnalytics: React.FC = () => {
 
   const kpi = data?.kpi || {
     totalRevenue: 0,
+    grossRevenue: 0,
+    totalDiscount: 0,
     lunasRevenue: 0,
     pendingRevenue: 0,
     totalBookings: 0,
+    activeBookings: 0,
     completedBookings: 0,
     upcomingBookings: 0,
     cancelledBookings: 0,
+    cancellationRate: 0,
     aov: 0,
     repeatCustomersCount: 0,
     newCustomersCount: 0,
     repeatRatePercentage: 0,
     totalDeliveryFee: 0,
   };
+
+  // Target progress & required pace harus memakai realisasi s/d hari ini,
+  // bukan total booking sebulan (yang masih memuat jadwal mendatang).
+  const realizedRevenue = data?.forecastSummary?.revenueToDate ?? kpi.totalRevenue;
 
   return (
     <div className="space-y-6 animate-fadeIn pb-12">
@@ -569,6 +640,31 @@ export const FinancialAnalytics: React.FC = () => {
             <span>{exporting ? 'Mengunduh...' : 'Export Excel'}</span>
           </button>
 
+          {/* Cross Link to Marketing Performance */}
+          <Link
+            to="/admin/meta-click-catcher"
+            className="flex items-center space-x-1.5 px-3.5 py-2 rounded-xl bg-surface hover:bg-surface-2 border border-divider text-ink text-xs font-bold shadow-xs transition active:scale-95 cursor-pointer"
+            title="Lihat Performa Marketing & Atribusi Meta"
+          >
+            <MousePointerClick size={14} className="text-accent" />
+            <span>CAC/ROAS &amp; Cohort &rarr;</span>
+          </Link>
+
+          {/* Atur Target Button */}
+          <button
+            type="button"
+            onClick={() => {
+              setTargetRevenueInput(data?.target?.monthlyRevenueTarget ? String(data.target.monthlyRevenueTarget) : '');
+              setTargetBookingInput(data?.target?.monthlyBookingTarget ? String(data.target.monthlyBookingTarget) : '');
+              setIsTargetModalOpen(true);
+            }}
+            className="flex items-center space-x-1.5 px-3.5 py-2 rounded-xl bg-surface hover:bg-surface-2 border border-divider text-ink text-xs font-bold shadow-xs transition active:scale-95 cursor-pointer"
+            title="Atur Target Finansial Bulanan"
+          >
+            <Target size={14} className="text-accent" />
+            <span>{data?.target?.monthlyRevenueTarget ? 'Target Bulanan' : 'Atur Target'}</span>
+          </button>
+
           {/* Refresh Button */}
           <button
             aria-label="Muat Ulang Data"
@@ -632,7 +728,7 @@ export const FinancialAnalytics: React.FC = () => {
           <div className="flex items-start justify-between">
             <div>
               <p className="text-xs font-bold text-ink-2 uppercase tracking-wider">
-                Total Omset ({data?.monthName || 'Bulan Ini'})
+                Total Nilai Booking ({data?.monthName || 'Bulan Ini'})
               </p>
               <h3 className="text-2xl font-black text-ink mt-1.5 tracking-tight">
                 {formatRupiah(kpi.totalRevenue)}
@@ -669,10 +765,10 @@ export const FinancialAnalytics: React.FC = () => {
           </div>
           <div className="mt-3 pt-3 border-t border-divider dark:border-divider flex items-center justify-between text-xs text-ink-2">
             <span className="text-accent font-semibold">
-              {kpi.completedBookings} Selesai
+              {kpi.activeBookings ?? (kpi.totalBookings - kpi.cancelledBookings)} Aktif
             </span>
             <span className="text-info font-semibold">
-              {kpi.upcomingBookings} Mendatang
+              {kpi.completedBookings} Selesai
             </span>
             {kpi.cancelledBookings > 0 && (
               <span className="text-danger font-semibold">
@@ -698,7 +794,7 @@ export const FinancialAnalytics: React.FC = () => {
             </div>
           </div>
           <div className="mt-3 pt-3 border-t border-divider dark:border-divider flex items-center justify-between text-xs text-ink-2">
-            <span>Nominal belanja rata-rata per transaksi</span>
+            <span>Nilai Booking / reservasi aktif (non-cancelled)</span>
           </div>
         </div>
 
@@ -707,7 +803,7 @@ export const FinancialAnalytics: React.FC = () => {
           <div className="flex items-start justify-between">
             <div>
               <p className="text-xs font-bold text-ink-2 uppercase tracking-wider">
-                Rasio Pasien Langganan
+                Rasio Reservasi Repeat
               </p>
               <h3 className="text-2xl font-black text-ink mt-1.5 tracking-tight">
                 {kpi.repeatRatePercentage}% <span className="text-sm font-semibold text-ink-2">Repeat</span>
@@ -718,24 +814,146 @@ export const FinancialAnalytics: React.FC = () => {
             </div>
           </div>
           <div className="mt-3 pt-3 border-t border-divider dark:border-divider flex items-center justify-between text-xs text-ink-2">
-            <span className="text-accent font-semibold">{kpi.repeatCustomersCount} Pasien Lama</span>
+            <span className="text-accent font-semibold">{kpi.repeatCustomersCount} Reservasi Repeat</span>
             <span className="text-info font-semibold">{kpi.newCustomersCount} Pasien Baru</span>
           </div>
         </div>
+      </div>
+
+      {/* Target Bulanan & Risk-Adjusted Forecast Card */}
+      <div className="bg-surface p-4 sm:p-5 rounded-2xl border border-divider shadow-xs space-y-3">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-divider pb-3">
+          <div className="flex items-center gap-2">
+            <div className="h-8 w-8 rounded-lg bg-accent/10 text-accent flex items-center justify-center font-bold">
+              <Target size={18} />
+            </div>
+            <div>
+              <h2 className="text-sm font-bold text-ink flex items-center gap-2">
+                <span>Target Bulanan &amp; Proyeksi Risiko ({data?.monthName} {selectedYear})</span>
+              </h2>
+              <p className="text-[11px] text-ink-3">
+                Monitoring laju harian vs target omset serta skenario probabilistik pembatalan.
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              setTargetRevenueInput(data?.target?.monthlyRevenueTarget ? String(data.target.monthlyRevenueTarget) : '');
+              setTargetBookingInput(data?.target?.monthlyBookingTarget ? String(data.target.monthlyBookingTarget) : '');
+              setIsTargetModalOpen(true);
+            }}
+            className="px-3 py-1.5 rounded-xl bg-surface hover:bg-surface-2 border border-divider text-ink text-xs font-semibold shadow-xs transition flex items-center gap-1.5 self-start sm:self-auto cursor-pointer"
+          >
+            <Target size={13} className="text-accent" />
+            <span>{data?.target?.monthlyRevenueTarget ? 'Ubah Target' : 'Atur Target'}</span>
+          </button>
+        </div>
+
+        {data?.target?.monthlyRevenueTarget ? (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-1">
+            {/* Kolom 1: Capaian & Gap Target */}
+            <div className="p-3 rounded-xl bg-fill-1 border border-divider space-y-1">
+              <span className="text-[11px] font-bold text-ink-2 uppercase tracking-wider">Capaian vs Target</span>
+              <div className="flex items-baseline gap-2">
+                <span className="text-lg font-black text-ink">{formatRupiah(realizedRevenue)}</span>
+                <span className="text-xs text-ink-3 font-medium">/ {formatCompactRupiah(data.target.monthlyRevenueTarget)}</span>
+              </div>
+              <div className="w-full bg-surface rounded-full h-2 overflow-hidden border border-divider/60">
+                <div
+                  className="bg-accent h-full rounded-full transition-[width] duration-500"
+                  style={{ width: `${Math.min(100, Math.round((realizedRevenue / data.target.monthlyRevenueTarget) * 100))}%` }}
+                />
+              </div>
+              <div className="flex items-center justify-between text-[11px] text-ink-2 pt-1">
+                <span>Progress: {Math.round((realizedRevenue / data.target.monthlyRevenueTarget) * 100)}% (realisasi s/d hari ini)</span>
+                <span className={data.forecastSummary?.gapToTargetRevenue && data.forecastSummary.gapToTargetRevenue > 0 ? 'text-warning font-semibold' : 'text-success font-semibold'}>
+                  {data.forecastSummary?.gapToTargetRevenue && data.forecastSummary.gapToTargetRevenue > 0
+                    ? `Gap Proyeksi: -${formatCompactRupiah(data.forecastSummary.gapToTargetRevenue)}`
+                    : 'Target Tercapai / Surplus'}
+                </span>
+              </div>
+            </div>
+
+            {/* Kolom 2: Laju Kebutuhan Harian */}
+            <div className="p-3 rounded-xl bg-fill-1 border border-divider space-y-1">
+              <span className="text-[11px] font-bold text-ink-2 uppercase tracking-wider">Kebutuhan Laju Harian</span>
+              <div className="flex items-baseline gap-1.5">
+                <span className="text-lg font-black text-accent">
+                  {data.forecastSummary?.requiredDailyRevenue ? formatRupiah(data.forecastSummary.requiredDailyRevenue) : 'Rp 0'}
+                </span>
+                <span className="text-xs text-ink-3">/ hari</span>
+              </div>
+              <p className="text-[11px] text-ink-2">
+                Dibutuhkan selama <span className="font-semibold text-ink">{data.forecastSummary?.daysRemaining ?? 0} hari</span> tersisa untuk mencapai target.
+              </p>
+              {data.target.monthlyBookingTarget && data.forecastSummary?.requiredDailyBookings !== undefined && (
+                <div className="text-[11px] text-info font-medium pt-0.5">
+                  Target Pasien: butuh {data.forecastSummary.requiredDailyBookings} reservasi / hari
+                </div>
+              )}
+            </div>
+
+            {/* Kolom 3: Skenario Risk-Adjusted */}
+            <div className="p-3 rounded-xl bg-fill-1 border border-divider space-y-1">
+              <span className="text-[11px] font-bold text-ink-2 uppercase tracking-wider">Proyeksi Berbasis Risiko</span>
+              <div className="space-y-1 text-xs pt-0.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-ink-2">Konservatif ({data.forecastSummary?.cancellationRate ?? 0}% batal historis):</span>
+                  <span className="font-bold text-ink">
+                    {data.forecastSummary?.conservativeRevenue ? formatRupiah(data.forecastSummary.conservativeRevenue) : '-'}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-ink-2">Base (Pacing Normal):</span>
+                  <span className="font-bold text-accent">
+                    {data.forecastSummary?.baseRevenue ? formatRupiah(data.forecastSummary.baseRevenue) : '-'}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-ink-2">Optimis (+5% pace):</span>
+                  <span className="font-bold text-success">
+                    {data.forecastSummary?.optimisticRevenue ? formatRupiah(data.forecastSummary.optimisticRevenue) : '-'}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="p-3 rounded-xl bg-fill-1 border border-divider text-xs text-ink-2 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <span>
+              Target bulanan belum ditetapkan. Atur target omset &amp; jumlah reservasi untuk memantau gap dan laju pace harian secara otomatis.
+            </span>
+            <button
+              type="button"
+              onClick={() => {
+                setTargetRevenueInput('');
+                setTargetBookingInput('');
+                setIsTargetModalOpen(true);
+              }}
+              className="px-3 py-1.5 rounded-lg bg-accent text-accent-ink font-bold text-xs shrink-0 self-start sm:self-auto cursor-pointer"
+            >
+              Tetapkan Target Sekarang
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Daily / Cumulative Revenue & Bookings Analytics Chart Block */}
       <div className="bg-surface p-4 sm:p-6 rounded-2xl border border-divider shadow-xs space-y-4">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
           <div>
-            <h2 className="text-base font-bold text-ink flex items-center gap-2">
-              <BarChart2 size={18} className="text-accent" />
-              <span>
-                {chartMode === 'cumulative'
-                  ? `Akumulasi MTD & Proyeksi (${data?.monthName} ${selectedYear})`
-                  : `Histori Pendapatan Harian (${data?.monthName} ${selectedYear})`}
-              </span>
-            </h2>
+            <div className="flex items-center gap-2.5 flex-wrap">
+              <h2 className="text-base font-bold text-ink flex items-center gap-2">
+                <BarChart2 size={18} className="text-accent" />
+                <span>
+                  {chartMode === 'cumulative'
+                    ? `Akumulasi MTD & Proyeksi (${data?.monthName} ${selectedYear})`
+                    : `Histori Pendapatan Harian (${data?.monthName} ${selectedYear})`}
+                </span>
+              </h2>
+              <MetricBasisBadge {...(data?.revenueBasis || { basis: 'booking_date', label: 'Basis tanggal treatment' })} />
+            </div>
             <p className="text-xs text-ink-2 mt-0.5">
               {chartMode === 'cumulative'
                 ? 'Kurva trajektori akumulasi berjalan (running total) s/d akhir bulan dengan pembanding historis & proyeksi'
@@ -773,7 +991,7 @@ export const FinancialAnalytics: React.FC = () => {
               </button>
             </div>
 
-            {/* 2. Metric Switcher (Omset vs Reservasi) */}
+            {/* 2. Metric Switcher (Nilai Booking vs Reservasi) */}
             <div className="inline-flex p-0.5 rounded-xl bg-fill-1 border border-divider text-xs">
               <button
                 type="button"
@@ -785,7 +1003,7 @@ export const FinancialAnalytics: React.FC = () => {
                     : 'text-ink-2 hover:text-ink'
                 }`}
               >
-                Omset (Rp)
+                Nilai Booking (Rp)
               </button>
               <button
                 type="button"
@@ -988,7 +1206,7 @@ export const FinancialAnalytics: React.FC = () => {
                     ))}
                   </Pie>
                   <Tooltip
-                    formatter={(val: any) => [formatRupiah(Number(val)), 'Omset']}
+                    formatter={(val: any) => [formatRupiah(Number(val)), 'Nilai Booking']}
                   />
                 </PieChart>
               </ResponsiveContainer>
@@ -1442,6 +1660,78 @@ export const FinancialAnalytics: React.FC = () => {
 
         </Modal>
       )}
+
+      {/* Modal Atur Target Finansial */}
+      <Modal
+        open={isTargetModalOpen}
+        onClose={() => setIsTargetModalOpen(false)}
+        title={
+          <span className="flex items-center gap-2">
+            <Target size={18} className="text-accent" aria-hidden="true" />
+            <span>Target Finansial Bulanan</span>
+          </span>
+        }
+        subtitle="Atur target omset & booking untuk kalkulasi pace harian"
+        footer={
+          <div className="flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => setIsTargetModalOpen(false)}
+              className="px-4 py-2 rounded-xl bg-surface hover:bg-surface-2 border border-divider text-ink text-xs font-semibold transition cursor-pointer"
+            >
+              Batal
+            </button>
+            <button
+              type="button"
+              onClick={handleSaveTarget}
+              disabled={isSavingTarget}
+              className="px-4 py-2 rounded-xl bg-accent hover:bg-accent-hover text-accent-ink text-xs font-bold transition disabled:opacity-50 cursor-pointer"
+            >
+              {isSavingTarget ? 'Menyimpan...' : 'Simpan Target'}
+            </button>
+          </div>
+        }
+      >
+        <div className="p-5 space-y-4 text-xs">
+          <p className="text-ink-2">
+            Target ini disimpan di setelan tenant dan digunakan sebagai kurva pandu (Target Pace) pada grafik akumulasi serta menghitung kebutuhan omset harian s/d akhir bulan.
+          </p>
+
+          <div className="space-y-1.5">
+            <label htmlFor="target-revenue-input" className="font-bold text-ink block">
+              Target Nilai Booking Bulanan (Rp)
+            </label>
+            <input
+              id="target-revenue-input"
+              type="number"
+              placeholder="Contoh: 50000000"
+              value={targetRevenueInput}
+              onChange={(e) => setTargetRevenueInput(e.target.value)}
+              className="w-full px-3 py-2 bg-surface border border-divider rounded-xl text-ink font-medium focus:outline-none focus:ring-1 focus:ring-accent"
+            />
+            <span className="text-[11px] text-ink-3 block">
+              Kosongkan jika tidak ingin mematok target nominal rupiah.
+            </span>
+          </div>
+
+          <div className="space-y-1.5">
+            <label htmlFor="target-booking-input" className="font-bold text-ink block">
+              Target Jumlah Reservasi Bulanan (Pasien)
+            </label>
+            <input
+              id="target-booking-input"
+              type="number"
+              placeholder="Contoh: 150"
+              value={targetBookingInput}
+              onChange={(e) => setTargetBookingInput(e.target.value)}
+              className="w-full px-3 py-2 bg-surface border border-divider rounded-xl text-ink font-medium focus:outline-none focus:ring-1 focus:ring-accent"
+            />
+            <span className="text-[11px] text-ink-3 block">
+              Kosongkan jika tidak ingin mematok target kuantitas reservasi.
+            </span>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 };

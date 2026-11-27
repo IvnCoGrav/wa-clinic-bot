@@ -46,7 +46,7 @@ export const ChannelTable: React.FC<{ report: MetaPerformanceReport }> = ({ repo
               <th className="py-2.5 px-3 text-right">Leads</th>
               <th className="py-2.5 px-3 text-right">MQL</th>
               <th className="py-2.5 px-3 text-right">Pembeli Baru</th>
-              <th className="py-2.5 px-3 text-right">Omset Awal</th>
+              <th className="py-2.5 px-3 text-right">Nilai Booking Awal</th>
               <th className="py-2.5 px-3 text-right">AOV</th>
               <th className="py-2.5 px-3 text-right">Rata-rata Journey</th>
             </tr>

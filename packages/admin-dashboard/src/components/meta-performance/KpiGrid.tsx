@@ -29,23 +29,23 @@ export const KpiGrid: React.FC<{ report: MetaPerformanceReport }> = ({ report })
   return (
     <section className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
       <Card
-        label="Pembeli Baru (CAC)"
+        label="Pembeli Baru (Cohort)"
         value={fmtNum(k.newCustomersAcquired)}
         sub={`${fmtNum(k.repeatCustomersCount)} repeat di periode`}
         icon={<Users size={15} />}
         tone="ok"
       />
       <Card
-        label="Omset Akuisisi"
+        label="Nilai Booking Akuisisi"
         value={fmtRupiah(k.initialRevenue)}
         sub={`AOV awal ${fmtRupiah(k.initialAov)}`}
         icon={<ShoppingBag size={15} />}
         tone="ok"
       />
       <Card
-        label="Omset Repeat (LTV)"
+        label="Revenue Repeat Cohort (LTV)"
         value={fmtRupiah(k.repeatRevenue)}
-        sub={`Omset dari iklan: ${fmtRupiah(k.totalAdRevenue)}`}
+        sub={`Nilai Booking dari iklan: ${fmtRupiah(k.totalAdRevenue)}`}
         icon={<Repeat size={15} />}
       />
       <Card
@@ -54,7 +54,7 @@ export const KpiGrid: React.FC<{ report: MetaPerformanceReport }> = ({ report })
         sub={`dari total klinik ${fmtRupiah(k.totalClinicRevenue)}`}
         icon={<Percent size={15} />}
       />
-      <Card label="Total Omset Klinik" value={fmtRupiah(k.totalClinicRevenue)} sub={`Iklan ${fmtRupiah(k.totalAdRevenue)}`} icon={<Wallet size={15} />} />
+      <Card label="Nilai Booking Cohort (Created At)" value={fmtRupiah(k.totalClinicRevenue)} sub={`Iklan ${fmtRupiah(k.totalAdRevenue)}`} icon={<Wallet size={15} />} />
       <Card
         label="Journey Konversi"
         value={j.medianDays !== null ? `${j.medianDays} hari` : '-'}

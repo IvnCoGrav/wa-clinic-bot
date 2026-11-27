@@ -285,6 +285,7 @@ export const App: React.FC = () => {
               </ProtectedRoute>
             } />
             <Route path="/admin/meta-clicks" element={<Navigate to="/admin/meta-click-catcher" replace />} />
+            <Route path="/admin/marketing-performance" element={<Navigate to="/admin/meta-click-catcher" replace />} />
 
             <Route path="/admin/meta-capi-queue" element={
               <ProtectedRoute>

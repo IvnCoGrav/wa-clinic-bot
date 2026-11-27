@@ -2,6 +2,12 @@ import { prisma } from '../db/client';
 import { DEFAULT_TENANT_ID } from '../config/tenant';
 import { responseCacheService } from './response-cache.service';
 import { resolveReservationBilling, type CatalogPriceCache } from './reservation-billing.service';
+import { resolveRevenueAmounts } from './revenue-analytics.service';
+import {
+  DEFAULT_REVENUE_QUERY,
+  buildRevenueBasisMeta,
+  type RevenueBasisMeta,
+} from '../domain/analytics-contract';
 import { wibMonthBoundsUtc, shiftWibMonth, WIB_OFFSET_MS } from '../utils/wib-time';
 import { getPaymentDisplayStatus, type PaymentDisplayStatus } from '../domain/reservation-payment';
 import {
@@ -11,6 +17,10 @@ import {
   type AnalyticsBaselineSettings,
   type BaselineMode,
 } from '../config/analytics-baseline';
+import {
+  getFinancialTargets,
+  type FinancialTargets,
+} from '../config/financial-targets';
 import {
   buildDailyBaseline,
   computeCumulativeAndForecast,
@@ -61,12 +71,16 @@ export function escapeCsvCell(val: any): string {
 
 export interface MonthlyKpiSummary {
   totalRevenue: number;
+  grossRevenue: number;
+  totalDiscount: number;
   lunasRevenue: number;
   pendingRevenue: number;
   totalBookings: number;
+  activeBookings: number;
   completedBookings: number;
   upcomingBookings: number;
   cancelledBookings: number;
+  cancellationRate: number;
   aov: number; // Average Order Value
   repeatCustomersCount: number;
   newCustomersCount: number;
@@ -160,6 +174,8 @@ export interface MonthlyAnalyticsResponse {
   month: number;
   monthName: string;
   kpi: MonthlyKpiSummary;
+  revenueBasis: RevenueBasisMeta;
+  target?: FinancialTargets;
   dailyTrend: DailyRevenuePoint[];
   cumulativeTrend: CumulativeTrendPoint[];
   forecastSummary: ForecastSummary;
@@ -236,8 +252,8 @@ export class FinancialAnalyticsService {
       const inputs: BaselineReservationInput[] = [];
       for (const r of rows) {
         if (isCancelledStatus(r.status)) continue;
-        const { totalFee } = await resolveReservationBilling(r as any, tenantId, cache);
-        inputs.push({ bookingDate: r.booking_date, revenue: totalFee, bookings: 1 });
+        const rev = await resolveRevenueAmounts(r as any, tenantId, { includeDeliveryFee: true }, cache);
+        inputs.push({ bookingDate: r.booking_date, revenue: rev.bookingValue, bookings: 1 });
       }
 
       const result = buildDailyBaseline({
@@ -254,6 +270,53 @@ export class FinancialAnalyticsService {
       console.warn('[ANALYTICS] baseline fallback:', err);
       return { result: null, settings };
     }
+  }
+
+  /**
+   * Rasio pembatalan historis 3 bulan (bulan tertutup) untuk risk-adjusted forecast.
+   * Cache 600s; fail-safe 0 saat DB offline.
+   */
+  private static async loadCancellationRate(
+    tenantId: string,
+    year: number,
+    month: number
+  ): Promise<number> {
+    const key = `analytics:cancellation-rate:${tenantId}:${year}:${month}`;
+    const cached = responseCacheService.get<number>(key);
+    if (cached !== undefined && cached !== null) return cached;
+
+    let cancelled = 0;
+    let total = 0;
+    try {
+      for (let offset = -3; offset <= -1; offset++) {
+        const ym = shiftWibMonth(year, month, offset);
+        const bounds = wibMonthBoundsUtc(ym.year, ym.month);
+        if (!bounds) continue;
+        const [c, t] = await Promise.all([
+          prisma.reservation.count({
+            where: {
+              tenant_id: tenantId,
+              booking_date: { gte: bounds.start, lte: bounds.end },
+              status: { in: ['cancelled', 'CANCELLED'] },
+            },
+          }),
+          prisma.reservation.count({
+            where: {
+              tenant_id: tenantId,
+              booking_date: { gte: bounds.start, lte: bounds.end },
+            },
+          }),
+        ]);
+        cancelled += Number(c) || 0;
+        total += Number(t) || 0;
+      }
+    } catch {
+      // DB offline / mock tanpa count -> tanpa adjustment
+    }
+
+    const rate = total > 0 ? Math.min(0.5, Math.max(0, cancelled / total)) : 0;
+    responseCacheService.set(key, rate, 600);
+    return rate;
   }
 
   /**
@@ -371,8 +434,11 @@ export class FinancialAnalyticsService {
     }
 
     let totalRevenue = 0;
+    let grossRevenue = 0;
+    let totalDiscount = 0;
     let lunasRevenue = 0;
     let pendingRevenue = 0;
+    let activeBookings = 0;
     let completedBookings = 0;
     let upcomingBookings = 0;
     let cancelledBookings = 0;
@@ -391,15 +457,21 @@ export class FinancialAnalyticsService {
     const catalogPriceCache: CatalogPriceCache = new Map();
 
     for (const r of rows) {
-      const { treatmentFee, deliveryFee, totalFee } = await resolveReservationBilling(
+      const rev = await resolveRevenueAmounts(
         r,
         tenantId,
+        { includeDeliveryFee: true },
         catalogPriceCache
       );
+      const treatmentFee = rev.treatmentGross;
+      const discount = rev.discount;
+      const treatmentNet = rev.treatmentNet;
+      const deliveryFee = rev.deliveryFee;
+      const totalFee = rev.bookingValue;
 
       const isCompleted = (r.status || '').toLowerCase() === 'completed';
       const isCancelled = isCancelledStatus(r.status);
-      const isLunas = Boolean(r.purchase_occurred_at);
+      const isLunas = rev.isPaid;
       // Seam kanonis: completed-tanpa-bayar ditampilkan sebagai
       // SELESAI_BELUM_VERIFIKASI, bukan "Tagih di Tempat" (menyesatkan).
       const paymentDisplayStatus = getPaymentDisplayStatus(r as any);
@@ -407,7 +479,10 @@ export class FinancialAnalyticsService {
       if (isCancelled) {
         cancelledBookings++;
       } else {
+        activeBookings++;
         totalRevenue += totalFee;
+        grossRevenue += treatmentFee;
+        totalDiscount += discount;
         totalDeliveryFee += deliveryFee;
 
         if (isLunas) {
@@ -525,9 +600,14 @@ export class FinancialAnalyticsService {
     }
 
     const totalBookings = rows.length;
-    const aov = totalBookings > 0 ? Math.round(totalRevenue / totalBookings) : 0;
-    const newCustomersCount = Math.max(0, totalBookings - repeatCount);
-    const repeatRatePercentage = totalBookings > 0 ? parseFloat(((repeatCount / totalBookings) * 100).toFixed(1)) : 0;
+    const aov = activeBookings > 0 ? Math.round(totalRevenue / activeBookings) : 0;
+    const newCustomersCount = Math.max(0, activeBookings - repeatCount);
+    const repeatRatePercentage = activeBookings > 0
+      ? parseFloat(((repeatCount / activeBookings) * 100).toFixed(1))
+      : 0;
+    const cancellationRate = totalBookings > 0
+      ? parseFloat(((cancelledBookings / totalBookings) * 100).toFixed(1))
+      : 0;
 
     // Format daily trend points
     const dailyTrend: DailyRevenuePoint[] = [];
@@ -592,12 +672,21 @@ export class FinancialAnalyticsService {
         ? nowWib.getUTCDate()
         : 0;
 
+    const financialTargets = await getFinancialTargets(tenantId);
+    const historicalCancellationRate =
+      monthPosition === 'current'
+        ? await this.loadCancellationRate(tenantId, year, month)
+        : 0;
+
     const { points: cumulativeTrend, summary: forecastSummary } =
       computeCumulativeAndForecast({
         dailyPoints: dailyTrend,
         baseline: baselineResult,
         daysInMonth,
         context: { monthPosition, asOfDay },
+        targetRevenue: financialTargets.monthlyRevenueTarget,
+        targetBookings: financialTargets.monthlyBookingTarget,
+        cancellationRate: historicalCancellationRate,
       });
 
     // Format category breakdown
@@ -683,18 +772,24 @@ export class FinancialAnalyticsService {
       monthName,
       kpi: {
         totalRevenue,
+        grossRevenue,
+        totalDiscount,
         lunasRevenue,
         pendingRevenue,
         totalBookings,
+        activeBookings,
         completedBookings,
         upcomingBookings,
         cancelledBookings,
+        cancellationRate,
         aov,
         repeatCustomersCount: repeatCount,
         newCustomersCount,
         repeatRatePercentage,
         totalDeliveryFee,
       },
+      revenueBasis: buildRevenueBasisMeta(DEFAULT_REVENUE_QUERY),
+      target: financialTargets,
       dailyTrend,
       cumulativeTrend,
       forecastSummary,

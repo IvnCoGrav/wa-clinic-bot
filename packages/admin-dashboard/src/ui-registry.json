@@ -425,6 +425,16 @@
         "default"
       ],
       "reviewed": false
+    },
+    {
+      "name": "MetricBasisBadge",
+      "layer": "domain",
+      "path": "src/components/analytics/MetricBasisBadge.tsx",
+      "whenToUse": "Badge pill interaktif dengan tooltip untuk menampilkan basis tanggal, status filter, dan komponen kalkulasi metrik analitik finansial secara transparan.",
+      "states": [
+        "default"
+      ],
+      "reviewed": false
     }
   ],
   "pages": [

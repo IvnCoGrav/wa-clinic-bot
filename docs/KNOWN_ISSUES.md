@@ -3,6 +3,19 @@
 Catatan temuan yang sengaja dipisah dari fitur aktif, supaya tidak hilang dan
 tidak disalahartikan sebagai bug dari perubahan terbaru.
 
+## 379. [Analytics Centralization] Sentralisasi & Penyelarasan Seluruh Dashboard Analytics (2026-11-27)
+
+- **Status:** RESOLVED
+- **Cakupan:**
+  - (a) Unifikasi definisi metrik & seam kanonis: Seluruh surface analitik (Overview, Financial Analytics, Meta Performance, Customer DB, Heatmap Treatment, Staff Scorecard, Copilot, dan Telegram Daily Report) kini memakai seam tunggal resolveRevenueAmounts dari src/services/revenue-analytics.service.ts dan kontrak kanonis src/domain/analytics-contract.ts.
+  - (b) Eliminasi istilah 'Omset' tanpa kualifikasi basis: Semua label kini eksplisit ('Nilai Booking', 'Omzet Kunjungan Selesai', 'Nilai Booking Cohort (Created At)', 'Total Belanja Pasien All-Time', 'Estimasi Nilai Booking Harian (Katalog)').
+  - (c) Denominator AOV & Repeat: Resmi dihitung berbasis activeBookings (non-cancelled: totalBookings - cancelledBookings).
+  - (d) Target Finansial & Risk-Adjusted Forecast: Disimpan di Tenant.settings.financialTargets dengan invalidasi cache otomatis. Progress target, `requiredDailyRevenue`, dan `requiredDailyBookings` memakai realisasi s/d hari ini (`revenueToDate`/`bookingsToDate`), bukan total booking sebulan. Base forecast mengurangi `historicalCancellationRate` 3 bulan tertutup dari seluruh booking terjadwal; skenario konservatif/base/optimis dihitung di domain; garis forecast chart = base risk-adjusted.
+  - (e) Cross-Link Dua Arah: Navigasi cepat antara Financial Analytics dan Marketing Performance (Meta Click Catcher).
+  - (f) Meta Performance Dua Basis: KPI memakai `created_at`/non-cancelled/treatment+ongkir; tabel kohort memakai `booking_date`/completed-only/treatment-only (ongkir dipisah). Badge dipisah agar tidak menyesatkan.
+  - (g) Batasan Forecast: Belum ada status `no_show` terpisah; risk adjustment hanya memakai cancellation rate. Jika data no-show tersedia, tambahkan ke kontrak yang sama.
+  - (h) Verifikasi: 138 tes targeted hijau (12 file). Full suite masih memiliki kegagalan unrelated (`readiness-probe` deterministik, media flaky, `reuse-gate` timing) yang perlu ditangani task terpisah.
+
 ## 378. [Financial Analytics MTD & Forecasting] Fondasi & Akumulasi MTD (2026-11-26)
 
 - **Status:** PARTIALLY RESOLVED / ACCEPTED
