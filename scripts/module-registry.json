@@ -90,6 +90,20 @@
       "test": "tests/unit/livechat-payload-completeness.test.ts"
     },
     {
+      "id": "livechat.thread_pagination",
+      "title": "Paginasi dua arah thread pesan Live Chat",
+      "description": "Jendela fokus di sekitar pesan hasil pencarian dan paginasi dua arah (before/after) dengan penanda hasNewer/newestCursor, tenant-scoped dan tahan DB offline.",
+      "canonical": "src/services/message-thread.service.ts",
+      "exports": [
+        "messageThreadService"
+      ],
+      "forbiddenDeclarations": [],
+      "allowedFiles": [
+        "src/services/message-thread.service.ts"
+      ],
+      "test": "tests/unit/live-chat-paged-messages.test.ts"
+    },
+    {
       "id": "log.date_key",
       "title": "Kunci tanggal nama file log harian",
       "description": "Menghasilkan tanggal YYYY-MM-DD dari komponen lokal server untuk penamaan file log harian (llm-*.jsonl, app-*.log).",

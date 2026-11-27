@@ -3,6 +3,27 @@
 Catatan temuan yang sengaja dipisah dari fitur aktif, supaya tidak hilang dan
 tidak disalahartikan sebagai bug dari perubahan terbaru.
 
+## 380. [Live Chat] Klik hasil pencarian berhenti di pesan match — tidak ada lanjutan ke pesan terbaru (2026-11-27)
+
+- **Status:** RESOLVED
+- **Gejala:** Cari kata kunci di daftar chat → klik salah satu hasil → thread menampilkan jendela di sekitar pesan yang cocok, lalu berhenti. Pesan setelah match tidak bisa dimuat; banner `Hasil pencarian (N dari N)` menetap dan menutup pencarian pun tidak membawa ke pesan terakhir.
+- **Akar masalah (multi-layer):**
+  1. **Kontrak API satu arah.** `getRecentMessagesWithHasMore` hanya punya paginasi `before`/`hasMore`. Jendela `focusMessageId` tidak memberi tahu bahwa masih ada pesan LEBIH BARU dan tidak ada endpoint untuk mengambilnya (`hasNewer`/`newestCursor`/`after` tidak ada).
+  2. **State frontend.** `handleClearInChatSearch` hanya scroll ke bawah jendela yang sudah dimuat; `pendingFocusMessageIdRef` tidak dibersihkan pada request yang kalah (superseded); kata kunci daftar menular ke pencarian dalam chat dan tidak direset saat pindah percakapan.
+  3. **Integritas jendela.** Jendela fokus memakai `created_at` saja (tanpa tie-breaker id) sehingga pesan bertimestamp kembar bisa hilang/ganda saat disambung dengan cursor.
+  4. **SSE.** Pesan baru di-append ke jendela lama sehingga menciptakan "lubang" riwayat tanpa penanda.
+- **Perbaikan:**
+  - Modul kanonis baru `src/services/message-thread.service.ts` (`livechat.thread_pagination`) — memisahkan baca thread dari `message.service.ts` (turun ke 1172 baris; gate 1500 lolos). Seluruh query tetap `conversation_id + tenant_id`; `pinnedMessage` diambil di lapisan pemanggil agar tidak menambah siklus import.
+  - `GET /api/admin/live-chat/conversations/:id/messages` menerima `after=<cursor>` dan mengembalikan `hasNewer` + `newestCursor`; jendela fokus memakai urutan komposit `(created_at, id)`.
+  - `useLiveChatActiveThread.ts`: paginasi `loadNewerMessages` (loop berbatas), auto-lanjut maks 4 halaman setelah lompat ke match tanpa menggeser posisi baca, reset state per percakapan, `pendingFocusMessageIdRef` dibersihkan di jalur error.
+  - `LiveChatThreadList.tsx`: `handleSelect(convId, { searchQuery, focusMessageId })` — kata kunci hanya diwariskan ke chat yang punya hasil; pindah chat tanpa hasil mulai dari pesan terbaru.
+  - `LiveChatMessagePane.tsx`: tombol sticky "Ada pesan lebih baru — ke pesan terbaru".
+  - `useLiveChatSse.ts`: guard `hasNewerMessagesRef` — pesan baru tidak di-append selama masih ada gap.
+  - Guard statis `scripts/verify-livechat-viewport.mjs` +3 check; test `tests/unit/live-chat-paged-messages.test.ts` +2 kasus (focus→hasNewer→after berakhir di pesan terakhir; timestamp kembar 25 pesan).
+- **Batasan / tech debt tersisa:**
+  - Belum ada test otomatis untuk hook React (vitest berjalan `environment: 'node'`, tanpa jsdom/RTL). Perilaku klien dijaga guard statis + uji manual; menambah seam RTL adalah task terpisah.
+  - Auto-lanjut dibatasi 4 halaman (200 pesan) per pembukaan; sisa gap tetap dapat dimuat lewat tombol (maks 20 halaman per klik).
+
 ## 379. [Analytics Centralization] Sentralisasi & Penyelarasan Seluruh Dashboard Analytics (2026-11-27)
 
 - **Status:** RESOLVED

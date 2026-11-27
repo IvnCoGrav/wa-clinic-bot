@@ -68,6 +68,14 @@ export function useLiveChatActiveThread({
   const oldestMessageCursorRef = useRef<string | null>(null);
   const pendingFocusMessageIdRef = useRef<string | null>(null);
 
+  // Paginasi arah LEBIH BARU (kontrak `hasNewer` + `newestCursor` dari API).
+  const [hasNewerMessages, setHasNewerMessages] = useState(false);
+  const [isLoadingNewer, setIsLoadingNewer] = useState(false);
+  const newestMessageCursorRef = useRef<string | null>(null);
+  const hasNewerMessagesRef = useRef(false);
+  const isLoadingNewerRef = useRef(false);
+  const autoLoadNewerDoneRef = useRef<string>('');
+
   const wasNearBottomRef = useRef(true);
   const savedScrollTopRef = useRef<number | null>(null);
   const isInitialMessagesLoadRef = useRef(true);
@@ -159,6 +167,13 @@ export function useLiveChatActiveThread({
       const cursor = (res as any)?.oldestCursor as string | undefined;
       const firstLoaded = list[0] as any;
       oldestMessageCursorRef.current = cursor || (firstLoaded ? `${firstLoaded.created_at}|${firstLoaded.id}` : null);
+      const lastLoaded = list.length > 0 ? (list[list.length - 1] as any) : null;
+      const nextHasNewer = !!(res as any)?.hasNewer;
+      setHasNewerMessages(nextHasNewer);
+      hasNewerMessagesRef.current = nextHasNewer;
+      newestMessageCursorRef.current =
+        ((res as any)?.newestCursor as string | undefined) ||
+        (lastLoaded ? `${lastLoaded.created_at}|${lastLoaded.id}` : null);
 
       const deduped: ChatMessage[] = dedupeThreadMessages(list);
 
@@ -209,6 +224,7 @@ export function useLiveChatActiveThread({
     } catch (err: any) {
       if (activeThreadRequestIdRef.current === reqId && selectedIdRef.current === conversationId) {
         console.error('Failed to load conversation thread:', err);
+        pendingFocusMessageIdRef.current = null;
         if (!isRefreshSameThread) setMessages([]);
         setThreadLoadError(err?.message || 'Gagal memuat riwayat chat.');
       }
@@ -272,6 +288,66 @@ export function useLiveChatActiveThread({
       }
     }
   }, [selectedIdRef, chatContainerRef, isLoadingOlder, hasMoreOlderMessages]);
+
+  /**
+   * Muat pesan yang LEBIH BARU dari jendela saat ini (arah `after`).
+   * Dipakai setelah lompat ke hasil pencarian: riwayat lanjutan ikut termuat
+   * sehingga percakapan tidak "berhenti" di pesan match.
+   */
+  const loadNewerMessages = useCallback(async (maxPages = 10, jumpToBottom = false) => {
+    const conversationId = selectedIdRef.current;
+    if (!conversationId || isLoadingNewerRef.current) return;
+    isLoadingNewerRef.current = true;
+    setIsLoadingNewer(true);
+    const el = chatContainerRef.current;
+    const wasAtBottom = el ? el.scrollHeight - el.scrollTop - el.clientHeight < 80 : false;
+    let cursor = newestMessageCursorRef.current;
+    let guard = 0;
+    let collected: ChatMessage[] = [];
+    let stillNewer = false;
+    try {
+      while (cursor && guard < maxPages) {
+        guard++;
+        const res = await apiRequest(
+          `/api/admin/live-chat/conversations/${conversationId}/messages?limit=50&after=${encodeURIComponent(cursor)}`
+        );
+        if (selectedIdRef.current !== conversationId) return;
+        const batch: ChatMessage[] = Array.isArray(res) ? res : (res?.data || []);
+        if (batch.length === 0) {
+          stillNewer = false;
+          break;
+        }
+        collected = collected.concat(
+          batch.map((m) => ({
+            ...m,
+            media: extractMedia(m),
+            location: (m as any).location || extractLocation(m),
+            quoted_message: extractQuotedMessage(m),
+          }))
+        );
+        cursor = ((res as any)?.newestCursor as string | undefined) || cursor;
+        newestMessageCursorRef.current = cursor;
+        stillNewer = !!(res as any)?.hasNewer;
+        if (!stillNewer) break;
+      }
+      if (collected.length > 0) {
+        setMessages((prev) => dedupeThreadMessages([...prev, ...collected]));
+      }
+      hasNewerMessagesRef.current = stillNewer;
+      setHasNewerMessages(stillNewer);
+      if (jumpToBottom || wasAtBottom) {
+        requestAnimationFrame(() => {
+          const target = chatContainerRef.current;
+          if (target) target.scrollTop = target.scrollHeight;
+        });
+      }
+    } catch (err: any) {
+      console.error('Failed to load newer messages:', err);
+    } finally {
+      isLoadingNewerRef.current = false;
+      if (selectedIdRef.current === conversationId) setIsLoadingNewer(false);
+    }
+  }, [selectedIdRef, chatContainerRef]);
 
   const handleDeepSearchInHistory = useCallback(async () => {
     const conversationId = selectedIdRef.current;
@@ -345,7 +421,13 @@ export function useLiveChatActiveThread({
     setMatchingMessageIds([]);
     setCurrentMatchIndex(-1);
     setHighlightedMsgId(null);
-    scrollToBottom(true, true);
+    // Menutup pencarian tidak cukup scroll ke bawah jendela yang sudah dimuat:
+    // bila masih ada pesan lebih baru, muat dulu sampai pesan terakhir.
+    if (hasNewerMessagesRef.current) {
+      void loadNewerMessages(20, true);
+    } else {
+      scrollToBottom(false, true);
+    }
   };
 
   // Sync matchingMessageIds whenever messages or query change
@@ -442,7 +524,29 @@ export function useLiveChatActiveThread({
     handleDeepSearchInHistory,
   ]);
 
-  const handleSelect = useCallback((conversationId: string) => {
+  // Setelah lompat ke pesan hasil pencarian, lanjutkan memuat pesan yang lebih baru
+  // (maks 4 halaman) tanpa menggeser posisi baca. Sisa gap ditangani tombol "ke pesan terbaru".
+  useEffect(() => {
+    if (!selectedId || !hasNewerMessages) return;
+    const key = `${selectedId}:${newestMessageCursorRef.current}`;
+    if (autoLoadNewerDoneRef.current === key) return;
+    autoLoadNewerDoneRef.current = key;
+    void loadNewerMessages(4, false);
+  }, [selectedId, hasNewerMessages, loadNewerMessages]);
+
+  const handleSelect = useCallback((conversationId: string, opts?: { searchQuery?: string; focusMessageId?: string }) => {
+    const isSameConv = selectedIdRef.current === conversationId;
+    const seedQuery = opts?.searchQuery?.trim() || '';
+    if (seedQuery) {
+      setInChatSearchQuery(seedQuery);
+      setInChatSearchOpen(true);
+      pendingFocusMessageIdRef.current = opts?.focusMessageId || null;
+    } else if (!isSameConv) {
+      // Pindah percakapan tanpa hasil pencarian → mulai bersih di pesan terbaru.
+      setInChatSearchQuery('');
+      setInChatSearchOpen(false);
+      pendingFocusMessageIdRef.current = null;
+    }
     if (selectedIdRef.current && selectedIdRef.current !== conversationId && isTypingActiveRef.current) {
       try { notifyTyping(false); } catch {}
     }
@@ -501,11 +605,17 @@ export function useLiveChatActiveThread({
     setSearchParams,
     refreshChatItem,
     setChats,
+    setInChatSearchQuery,
+    setInChatSearchOpen,
   ]);
 
   // Perubahan conversationId: sinkronisasi pesan & draf
   useEffect(() => {
     isInitialMessagesLoadRef.current = true;
+    setHasNewerMessages(false);
+    hasNewerMessagesRef.current = false;
+    newestMessageCursorRef.current = null;
+    autoLoadNewerDoneRef.current = '';
     if (selectedId) {
       const saved = getConversationScroll(selectedId);
       savedScrollTopRef.current = saved ? saved.scrollTop : null;
@@ -569,6 +679,10 @@ export function useLiveChatActiveThread({
     setHasMoreOlderMessages,
     isLoadingOlder,
     setIsLoadingOlder,
+    hasNewerMessages,
+    isLoadingNewer,
+    newestMessageCursorRef,
+    hasNewerMessagesRef,
     isDeepSearching,
     setIsDeepSearching,
     oldestMessageCursorRef,
@@ -595,6 +709,7 @@ export function useLiveChatActiveThread({
     autoDeepSearchDoneRef,
     loadThread,
     loadOlderMessages,
+    loadNewerMessages,
     handleDeepSearchInHistory,
     scrollToBottom,
     scrollToMessage,
