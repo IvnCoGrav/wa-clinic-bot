@@ -276,8 +276,8 @@ export class LiveChatService {
   }
 
   /**
-   * Thread pesan paged (cursor-based): `before` = ISO timestamp / Date cursor.
-   * Mengembalikan pesan kronologis (lama -> baru) + flag hasMore.
+   * Thread pesan paged (cursor-based): `before`/`after` + `focusMessageId`.
+   * Mengembalikan pesan kronologis (lama -> baru) + flag hasMore/hasNewer.
    */
   public async getConversationMessagesPaged(
     conversationId: string,

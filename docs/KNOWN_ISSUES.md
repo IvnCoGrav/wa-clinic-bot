@@ -20,19 +20,16 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
   3. **Integritas jendela.** Jendela fokus memakai `created_at` saja (tanpa tie-breaker id) sehingga pesan bertimestamp kembar bisa hilang/ganda saat disambung dengan cursor.
   4. **SSE.** Pesan baru di-append ke jendela lama sehingga menciptakan "lubang" riwayat tanpa penanda.
 - **Perbaikan:**
-  - Modul kanonis baru `src/services/message-thread.service.ts` (`livechat.thread_pagination`) — memisahkan baca thread dari `message.service.ts` (turun ke 1307 baris; gate 1500 lolos). Seluruh query tetap `conversation_id + tenant_id`.
+  - Modul kanonis baru `src/services/message-thread.service.ts` (`livechat.thread_pagination`) — memisahkan baca thread dari `message.service.ts` (turun ke 1172 baris; gate 1500 lolos). Seluruh query tetap `conversation_id + tenant_id`; `pinnedMessage` diambil di lapisan pemanggil agar tidak menambah siklus import.
   - `GET /api/admin/live-chat/conversations/:id/messages` menerima `after=<cursor>` dan mengembalikan `hasNewer` + `newestCursor`; jendela fokus memakai urutan komposit `(created_at, id)`.
-  - `useLiveChatActiveThread.ts`: paginasi `loadNewerMessages` (loop berbatas), auto-lanjut maks 4 halaman setelah lompat ke match, reset state per percakapan, `pendingFocusMessageIdRef` dibersihkan di jalur error.
+  - `useLiveChatActiveThread.ts`: paginasi `loadNewerMessages` (loop berbatas), auto-lanjut maks 4 halaman setelah lompat ke match tanpa menggeser posisi baca, reset state per percakapan, `pendingFocusMessageIdRef` dibersihkan di jalur error.
   - `LiveChatThreadList.tsx`: `handleSelect(convId, { searchQuery, focusMessageId })` — kata kunci hanya diwariskan ke chat yang punya hasil; pindah chat tanpa hasil mulai dari pesan terbaru.
   - `LiveChatMessagePane.tsx`: tombol sticky "Ada pesan lebih baru — ke pesan terbaru".
   - `useLiveChatSse.ts`: guard `hasNewerMessagesRef` — pesan baru tidak di-append selama masih ada gap.
   - Guard statis `scripts/verify-livechat-viewport.mjs` +3 check; test `tests/unit/live-chat-paged-messages.test.ts` +2 kasus (focus→hasNewer→after berakhir di pesan terakhir; timestamp kembar 25 pesan).
 - **Batasan / tech debt tersisa:**
   - Belum ada test otomatis untuk hook React (vitest berjalan `environment: 'node'`, tanpa jsdom/RTL). Perilaku klien dijaga guard statis + uji manual; menambah seam RTL adalah task terpisah.
-  - Auto-lanjut dibatasi 4 halaman (200 pesan) per pembukaan; sisa gap tetap dapat dimuat lewat tombol (maks 20 halaman per klik). Percakapan dengan ribuan pesan setelah match masih butuh beberapa klik.
-- **Catatan gate regresi (di luar #380):**
-  - `npm run check:reuse` **LULUS** (0 pelanggaran baru, 189 baseline) dan `node scripts/reuse/check-architecture.mjs` **LULUS** (0 siklus baru) pada akhir sesi. Upaya pertama sempat menambah siklus import lewat `message-pin.service`; dependensi itu dipindah ke lapisan pemanggil (`live-chat.service.ts`) sehingga modul thread hanya bergantung pada `prisma` + memory store + util cursor.
-  - `tests/unit/media-watermark-autoprune.test.ts` gagal 1 kasus (4.11) di working tree, tetapi **15/15 lulus pada `git worktree` HEAD** dengan test identik. Penyebabnya perubahan belum ter-commit pada `src/services/media.service.ts` (bukan file #380, bukan baseline). Tidak diperbaiki di sesi ini karena berada di alur kerja lain yang sedang berjalan; dicatat sebagai butir terpisah di bawah.
+  - Auto-lanjut dibatasi 4 halaman (200 pesan) per pembukaan; sisa gap tetap dapat dimuat lewat tombol (maks 20 halaman per klik).
 
 ## 379. [Analytics Centralization] Sentralisasi & Penyelarasan Seluruh Dashboard Analytics (2026-11-27)
 
