@@ -1,5 +1,6 @@
 import { FastifyRequest } from 'fastify';
 import { DEFAULT_TENANT_ID } from '../../config/tenant';
+import { assertValidTenantId } from '../../utils/tenant-id';
 
 /**
  * Ar-003/Cfg-012: mode multi-tenant. Saat AKTIF, tenant WAJIB eksplisit —
@@ -21,7 +22,7 @@ export function resolveSessionTenantId(request: FastifyRequest): string {
     (request as any).headers?.['x-tenant-id'] ||
     (request as any).query?.tenant_id;
   const tenantId = typeof raw === 'string' ? raw.trim() : '';
-  if (tenantId) return tenantId;
+  if (tenantId) return assertValidTenantId(tenantId);
   if (isMultiTenantEnabled()) {
     const err = new Error('tenantId wajib pada mode multi-tenant') as any;
     err.statusCode = 401;
@@ -41,7 +42,7 @@ export function tenantOf(request: FastifyRequest): string {
     err.code = 'TENANT_REQUIRED';
     throw err;
   }
-  return tenantId;
+  return assertValidTenantId(tenantId);
 }
 
 

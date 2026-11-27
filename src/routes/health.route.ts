@@ -29,8 +29,13 @@ export async function healthRoutes(fastify: FastifyInstance) {
   /**
    * GET /ready
    * Readiness probe provider-aware. Memeriksa dependency eksternal sesuai provider aktif.
+   *
+   * M19-09: endpoint ini PUBLIK (probe orchestrator). Respons hanya `{ status }`;
+   * detail dependency/cron tidak boleh dibocorkan ke internet — detail tersedia di
+   * GET /api/admin/health (ber-auth). Secret tenant (waba_access_token) juga tidak
+   * boleh dibaca hanya untuk probe; keberadaan token dicek lewat COUNT di DB.
    */
-  fastify.get('/ready', async (request, reply) => {
+  fastify.get('/ready', async (_request, reply) => {
     const checks: Record<string, any> = {
       database: 'UNKNOWN',
     };
@@ -48,28 +53,27 @@ export async function healthRoutes(fastify: FastifyInstance) {
       isHealthy = false;
     }
 
-    // Ambil tenant aktif untuk deteksi provider
+    // Ambil tenant aktif untuk deteksi provider (TANPA secret).
     let tenants: Array<{
       id: string;
       whatsapp_provider?: string;
       waba_phone_number_id?: string | null;
-      waba_access_token?: string | null;
     }> = [];
 
     if (checks.database === 'CONNECTED') {
       try {
-        tenants = await withTimeout(
+        const rows = await withTimeout(
           prisma.tenant.findMany({
             select: {
               id: true,
               whatsapp_provider: true,
               waba_phone_number_id: true,
-              waba_access_token: true,
             },
           }),
           2000,
           'Tenants query timed out'
         );
+        tenants = Array.isArray(rows) ? rows : [];
       } catch (err: any) {
         console.warn('[READY CHECK] Gagal membaca konfigurasi tenant:', err?.message);
       }
@@ -93,16 +97,32 @@ export async function healthRoutes(fastify: FastifyInstance) {
       }
     }
 
-    // 3. WABA Credential Check (hanya jika ada tenant yang menggunakan WABA)
+    // 3. WABA Credential Check — COUNT langsung di DB; token tidak pernah ditarik
+    // ke memori proses hanya demi probe publik.
     if (hasWabaTenant) {
-      const invalidWaba = tenants.filter(
-        (t) => t.whatsapp_provider === 'WABA' && (!t.waba_phone_number_id || !t.waba_access_token)
-      );
-      if (invalidWaba.length > 0) {
-        checks.waba = `FAILED: Missing credentials for ${invalidWaba.length} WABA tenant(s)`;
+      try {
+        const rows = await withTimeout(
+          prisma.$queryRaw<Array<{ missing: number }>>`
+            SELECT COUNT(*)::int AS missing FROM tenants
+            WHERE whatsapp_provider::text = 'WABA'
+              AND (
+                waba_phone_number_id IS NULL OR waba_phone_number_id = ''
+                OR waba_access_token IS NULL OR waba_access_token = ''
+              )`,
+          2000,
+          'WABA credential check timed out'
+        );
+        const missing = Number(rows?.[0]?.missing || 0);
+        if (missing > 0) {
+          checks.waba = `FAILED: Missing credentials for ${missing} WABA tenant(s)`;
+          isHealthy = false;
+        } else {
+          checks.waba = 'CONFIGURED';
+        }
+      } catch (err: any) {
+        console.error('[READY CHECK] WABA credential check failed:', err?.message);
+        checks.waba = 'FAILED: Credential check unavailable';
         isHealthy = false;
-      } else {
-        checks.waba = 'CONFIGURED';
       }
     }
 
@@ -130,27 +150,40 @@ export async function healthRoutes(fastify: FastifyInstance) {
       }
     }
 
-    const statusCode = isHealthy ? 200 : 503;
+    let healthy = isHealthy;
 
     // K-005: status cron bersifat informasional di readiness — kegagalan cron
     // TIDAK boleh memicu restart container (cascade), tetapi wajib terlihat.
     let cronHealth: any = 'UNKNOWN';
     try {
-      const { getCronHealthSnapshot } = await import('../lifecycle/cron-health');
-      const snapshot = getCronHealthSnapshot();
+      const { getCronHealthSnapshotAsync } = await import('../lifecycle/cron-health');
+      const snapshot = await getCronHealthSnapshotAsync();
       cronHealth = {
         status: snapshot.status,
         alertThreshold: snapshot.alertThreshold,
         failingJobs: snapshot.failingJobs,
       };
+      // Cron DEGRADED/NO_JOBS harus terlihat sebagai NOT_READY. NO_JOBS hanya
+      // dianggap sehat bila proses ini memang tidak menjalankan cron (mode app).
     } catch (err: any) {
       cronHealth = `UNKNOWN: ${err?.message || 'gagal membaca status cron'}`;
     }
 
-    return reply.status(statusCode).send({
-      status: isHealthy ? 'READY' : 'NOT_READY',
-      timestamp: new Date().toISOString(),
-      checks: { ...checks, cron: cronHealth },
-    });
+    if (cronHealth?.status === 'DEGRADED') {
+      healthy = false;
+    }
+    if (process.env.SEPARATE_WORKER === 'true' && cronHealth?.status === 'NO_JOBS') {
+      // Mode worker terpisah: app tidak mendaftarkan cron; NO_JOBS berarti
+      // heartbeat worker tidak terlihat (mati/standby) → jangan lapor READY.
+      healthy = false;
+    }
+
+    // Observabilitas internal (log), BUKAN respons publik.
+    if (!healthy) {
+      console.warn('[READY CHECK] NOT_READY', JSON.stringify({ checks, cron: cronHealth }));
+    }
+
+    const statusCode = healthy ? 200 : 503;
+    return reply.status(statusCode).send({ status: healthy ? 'READY' : 'NOT_READY' });
   });
 }

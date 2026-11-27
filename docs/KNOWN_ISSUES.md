@@ -3,6 +3,50 @@
 Catatan temuan yang sengaja dipisah dari fitur aktif, supaya tidak hilang dan
 tidak disalahartikan sebagai bug dari perubahan terbaru.
 
+## 381. [Media] Test auto-prune watermark gagal karena perubahan `media.service.ts` yang belum ter-commit (2026-11-27)
+
+- **Status:** OPEN (di luar cakupan #380)
+- **Gejala:** `npx vitest run tests/unit/media-watermark-autoprune.test.ts` gagal pada kasus `4.11` (`pruneToLowWatermark` tidak menghapus file korup: `filesRemoved` 0, diharapkan 1). Jumlah kasus gagal bervariasi antar run (1–3) → indikasi flaky/order-dependent.
+- **Bukti pre-existing (bukan dari #380):** test file tidak dimodifikasi; `src/services/media.service.ts` berstatus `M` (perubahan belum ter-commit, bukan dari sesi #380). Test yang sama dijalankan pada `git worktree` HEAD bersih: **15/15 PASS**. Seluruh file #380 (live chat/message thread) tidak diimpor oleh test media.
+- **Tindakan:** tangani bersama alur kerja media (bandingkan diff `pruneToLowWatermark`/`createBlurThumbDetailed` vs HEAD); jangan menaikkan baseline atau menghapus test.
+
+## 380. [Live Chat] Klik hasil pencarian berhenti di pesan match — tidak ada lanjutan ke pesan terbaru (2026-11-27)
+
+- **Status:** RESOLVED
+- **Gejala:** Cari kata kunci di daftar chat → klik salah satu hasil → thread menampilkan jendela di sekitar pesan yang cocok, lalu berhenti. Pesan setelah match tidak bisa dimuat; banner `Hasil pencarian (N dari N)` menetap dan menutup pencarian pun tidak membawa ke pesan terakhir.
+- **Akar masalah (multi-layer):**
+  1. **Kontrak API satu arah.** `getRecentMessagesWithHasMore` hanya punya paginasi `before`/`hasMore`. Jendela `focusMessageId` tidak memberi tahu bahwa masih ada pesan LEBIH BARU dan tidak ada endpoint untuk mengambilnya (`hasNewer`/`newestCursor`/`after` tidak ada).
+  2. **State frontend.** `handleClearInChatSearch` hanya scroll ke bawah jendela yang sudah dimuat; `pendingFocusMessageIdRef` tidak dibersihkan pada request yang kalah (superseded); kata kunci daftar menular ke pencarian dalam chat dan tidak direset saat pindah percakapan.
+  3. **Integritas jendela.** Jendela fokus memakai `created_at` saja (tanpa tie-breaker id) sehingga pesan bertimestamp kembar bisa hilang/ganda saat disambung dengan cursor.
+  4. **SSE.** Pesan baru di-append ke jendela lama sehingga menciptakan "lubang" riwayat tanpa penanda.
+- **Perbaikan:**
+  - Modul kanonis baru `src/services/message-thread.service.ts` (`livechat.thread_pagination`) — memisahkan baca thread dari `message.service.ts` (turun ke 1307 baris; gate 1500 lolos). Seluruh query tetap `conversation_id + tenant_id`.
+  - `GET /api/admin/live-chat/conversations/:id/messages` menerima `after=<cursor>` dan mengembalikan `hasNewer` + `newestCursor`; jendela fokus memakai urutan komposit `(created_at, id)`.
+  - `useLiveChatActiveThread.ts`: paginasi `loadNewerMessages` (loop berbatas), auto-lanjut maks 4 halaman setelah lompat ke match, reset state per percakapan, `pendingFocusMessageIdRef` dibersihkan di jalur error.
+  - `LiveChatThreadList.tsx`: `handleSelect(convId, { searchQuery, focusMessageId })` — kata kunci hanya diwariskan ke chat yang punya hasil; pindah chat tanpa hasil mulai dari pesan terbaru.
+  - `LiveChatMessagePane.tsx`: tombol sticky "Ada pesan lebih baru — ke pesan terbaru".
+  - `useLiveChatSse.ts`: guard `hasNewerMessagesRef` — pesan baru tidak di-append selama masih ada gap.
+  - Guard statis `scripts/verify-livechat-viewport.mjs` +3 check; test `tests/unit/live-chat-paged-messages.test.ts` +2 kasus (focus→hasNewer→after berakhir di pesan terakhir; timestamp kembar 25 pesan).
+- **Batasan / tech debt tersisa:**
+  - Belum ada test otomatis untuk hook React (vitest berjalan `environment: 'node'`, tanpa jsdom/RTL). Perilaku klien dijaga guard statis + uji manual; menambah seam RTL adalah task terpisah.
+  - Auto-lanjut dibatasi 4 halaman (200 pesan) per pembukaan; sisa gap tetap dapat dimuat lewat tombol (maks 20 halaman per klik). Percakapan dengan ribuan pesan setelah match masih butuh beberapa klik.
+- **Catatan gate regresi (di luar #380):**
+  - `npm run check:reuse` **LULUS** (0 pelanggaran baru, 189 baseline) dan `node scripts/reuse/check-architecture.mjs` **LULUS** (0 siklus baru) pada akhir sesi. Upaya pertama sempat menambah siklus import lewat `message-pin.service`; dependensi itu dipindah ke lapisan pemanggil (`live-chat.service.ts`) sehingga modul thread hanya bergantung pada `prisma` + memory store + util cursor.
+  - `tests/unit/media-watermark-autoprune.test.ts` gagal 1 kasus (4.11) di working tree, tetapi **15/15 lulus pada `git worktree` HEAD** dengan test identik. Penyebabnya perubahan belum ter-commit pada `src/services/media.service.ts` (bukan file #380, bukan baseline). Tidak diperbaiki di sesi ini karena berada di alur kerja lain yang sedang berjalan; dicatat sebagai butir terpisah di bawah.
+
+## 379. [Analytics Centralization] Sentralisasi & Penyelarasan Seluruh Dashboard Analytics (2026-11-27)
+
+- **Status:** RESOLVED
+- **Cakupan:**
+  - (a) Unifikasi definisi metrik & seam kanonis: Seluruh surface analitik (Overview, Financial Analytics, Meta Performance, Customer DB, Heatmap Treatment, Staff Scorecard, Copilot, dan Telegram Daily Report) kini memakai seam tunggal resolveRevenueAmounts dari src/services/revenue-analytics.service.ts dan kontrak kanonis src/domain/analytics-contract.ts.
+  - (b) Eliminasi istilah 'Omset' tanpa kualifikasi basis: Semua label kini eksplisit ('Nilai Booking', 'Omzet Kunjungan Selesai', 'Nilai Booking Cohort (Created At)', 'Total Belanja Pasien All-Time', 'Estimasi Nilai Booking Harian (Katalog)').
+  - (c) Denominator AOV & Repeat: Resmi dihitung berbasis activeBookings (non-cancelled: totalBookings - cancelledBookings).
+  - (d) Target Finansial & Risk-Adjusted Forecast: Disimpan di Tenant.settings.financialTargets dengan invalidasi cache otomatis. Progress target, `requiredDailyRevenue`, dan `requiredDailyBookings` memakai realisasi s/d hari ini (`revenueToDate`/`bookingsToDate`), bukan total booking sebulan. Base forecast mengurangi `historicalCancellationRate` 3 bulan tertutup dari seluruh booking terjadwal; skenario konservatif/base/optimis dihitung di domain; garis forecast chart = base risk-adjusted.
+  - (e) Cross-Link Dua Arah: Navigasi cepat antara Financial Analytics dan Marketing Performance (Meta Click Catcher).
+  - (f) Meta Performance Dua Basis: KPI memakai `created_at`/non-cancelled/treatment+ongkir; tabel kohort memakai `booking_date`/completed-only/treatment-only (ongkir dipisah). Badge dipisah agar tidak menyesatkan.
+  - (g) Batasan Forecast: Belum ada status `no_show` terpisah; risk adjustment hanya memakai cancellation rate. Jika data no-show tersedia, tambahkan ke kontrak yang sama.
+  - (h) Verifikasi: 138 tes targeted hijau (12 file). Full suite masih memiliki kegagalan unrelated (`readiness-probe` deterministik, media flaky, `reuse-gate` timing) yang perlu ditangani task terpisah.
+
 ## 378. [Financial Analytics MTD & Forecasting] Fondasi & Akumulasi MTD (2026-11-26)
 
 - **Status:** PARTIALLY RESOLVED / ACCEPTED
@@ -10,6 +54,66 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
   - (b) CSV export includeBaseline:false null dereference: **RESOLVED** di src/services/financial-analytics.service.ts. Nilai fallback reason: "DISABLED" dan effectiveSettings mencegah crash saat baseline dimatikan.
   - (c) Akurasi is_repeat_order historis: **OPEN / ACCEPTED**. Label visual menggunakan "Reservasi Repeat"; backfill ordinal repeat berbasis urutan riil direncanakan sebagai task terpisah.
   - (d) Batasan forecasting statistik: **DOCUMENTED**. Garis proyeksi adalah estimasi trajektori matematis berbasis bobot musiman baseline dan komitmen booking, bukan jaminan omset pasti.
+
+## 377. [Security Audit 2026-11-26] 27 temuan confirmed kampanye audit end-to-end (OPEN - butuh remediasi)
+
+- **Status:** OPEN. Seluruh temuan berbasis source review + verifier independen; belum ada eksekusi multi-tenant/DB live.
+- **Artefak:** `C:\Users\User\security-audit-skill\chatbot-ag\<modul>\run-1\`. Ringkasan: `CAMPAIGN-REPORT.md`.
+- **Cakupan:** M00–M22 (seluruh modul).
+- **Total kampanye:** 27 confirmed, 231 needs_validation, 22 rejected. Temuan needs_validation tidak diberi severity dan menunggu validasi runtime. Seluruh unit `deferred` sudah ditutup; deferred wave terakhir (M07–M18) menambah 33 NV dan menolak 6 kandidat duplikat lintas modul.
+
+| Severity | Modul | Fingerprint | Temuan |
+|---|---|---|---|
+| **high** | M05 | `M05-13-staff-tenant-header-query-bypass` | Tenant /api/staff/* diambil dari header/query klien, bukan dari sesi staf |
+| **high** | M07 | `M07-CUSTOMER-MEMORY-CROSSTENANT` | Cache customer per-nomor tanpa tenant membuat pesan tenant B memakai customer tenant A |
+| **high** | M07 | `M07-LABEL-IDOR` | Penugasan label me-resolve customer dan label lintas tenant (id/phone tanpa tenant) |
+| **high** | M08 | `M08-LANDING-QUERY-XSS` | Reflected XSS di /go?slug= dan /cta?p= pada origin yang sama dengan dashboard admin |
+| **high** | M22 | `M22-02-STAFF-SESSION-ADMIN-API` | Sesi staf CS/SPV menembus /api/admin/* dan mengubah label customer tenant lain lewat lookup :id tanpa tenant |
+| **medium** | M01 | `M01-08-LABEL-LID-AS-PHONE` | Event label LID menulis flag admin/hold ke digit LID sebagai nomor HP |
+| **medium** | M01 | `M01-14-YA-CONFIRM-COALESCED` | Kata konfirmasi 'YA' ikut di-coalesce sehingga konfirmasi exact-match hilang |
+| **medium** | M01 | `M01-15-RESET-AMBIGUOUS-YA` | 'ya' umum dalam 5 menit setelah /reset memicu hardWipe tanpa konteks |
+| **medium** | M02 | `M02-10-STATUS-UNKNOWN-PHONE-500` | Status callback phone_number_id tak dikenal menghasilkan 500 dan membatalkan batch |
+| **medium** | M02 | `M02-12-STOP-BYPASS-EARLY-RETURN` | STOP hilang pada semua early-return ingress WABA |
+| **medium** | M02 | `M02-12-STOP-LOST-BY-COALESCE` | Burst coalescing menggabungkan STOP sehingga opt-out tidak terdeteksi |
+| **medium** | M02 | `M02-13-WABA-TYPE-MAPPING-GAP` | button/order/system jatuh ke unknown dan dipersist sebagai [IMAGE] |
+| **medium** | M05 | `M05-14-telegram-pairing-token-replay` | Token pairing Telegram tanpa TTL/sekali-pakai dan tidak dirotasi setelah binding |
+| **medium** | M05b | `M05b-M05-15-session-token-in-body` | Login terpadu mengembalikan token sesi mentah di body dan restore menerimanya dari body |
+| **medium** | M05b | `M05b-M05-16-pairing-rotation-keeps-chat-binding` | Regenerasi token pairing tidak melepas binding Telegram lama |
+| **medium** | M05b | `M05b-M05-17-push-to-revoked-staff` | Push notifikasi tetap dikirim ke staf nonaktif; deaktivasi tidak mencabut subscription |
+| **medium** | M05b | `M05b-STAFFLOGIN-LOCKOUT-DOS` | Lockout login staf berbasis identifier klien dapat dipakai menolak layanan akun (termasuk lintas tenant) |
+| **medium** | M07 | `M07-16:services-catalog-reads-default-tenant` | GET katalog layanan admin selalu membaca katalog default tenant |
+| **medium** | M07 | `M07-BACKUP-WHOLE-DB-DUMP` | Dump backup memuat seluruh database lintas tenant lalu diunggah ke Drive tenant pemanggil |
+| **medium** | M07 | `M07-LANDINGS-IDOR` | Landing page tenant lain dapat dibaca lewat :id dan daftar ?tenantId |
+| **medium** | M08 | `M08-PAGEVIEW-UNAUTH` | POST /api/tracking/pageview tanpa autentikasi menulis data dan memicu CAPI PageView |
+| **medium** | M08 | `M08-PROOF-PUBLIC` | GET /proof/:reservationId menyajikan bukti pembayaran tanpa autentikasi/kepemilikan |
+| **low** | M02 | `M02-11-REACTION-PRE-DEDUP-MUTATION` | Reaction dimutasi sebelum dedup dan tanpa claim idempoten |
+| **low** | M05 | `M05-05-message-row-wa-message-id-unmasked` | Respons pesan staf membawa wa_message_id berisi JID/nomor customer tanpa masking untuk terapis |
+| **low** | M05 | `M05-05-sse-status-updated-unmasked` | Event SSE message.status_updated tidak disanitasi sehingga waMessageId ber-JID terkirim ke terapis |
+| **low** | M08 | `M08-AVATAR-CROSS-TENANT` | Avatar publik melakukan lookup customer lintas tenant |
+| **low** | M09 | `M09-09-AUDIT-ACTOR-SPOOF` | Identitas pelaku pin/hide dapat dipalsukan lewat header x-admin-name atau body adminName |
+
+- **Deferred wave terakhir (M07–M18, 2026-11-26):** 52 unit ditutup; 33 NV baru, seluruhnya belum berseverity. Kelompok paling material:
+  - **M08 (permukaan publik):** `M08-LANDING-PIXEL-SCRIPT-INJECT` (stored XSS via `metaPixelId`/`whatsappNumber` ke `<script>` ber-nonce), `M08-TENANT-CONTENT-DUMP` (`/api/tenant/:slug` membocorkan `raw_html_content` + `tenant_id`), `M08-CTA-ATTRIBUTION-POISON`, `M08-CSP-REPORT-LOG-FLOOD`, `M08-PUBLIC-HTML-CACHE-POISON`, `M08-FILES-MIME-ECHO`.
+  - **M17 (supply chain):** `M17-02-BUILD-CONTEXT-PII` (COPY . . membawa dump 549 pelanggan + log + arsip backup), `M17-08-UNPINNED-IMAGES`, `M17-11-VITE-KEY-INLINE`, `M17-12-COMPOSE-ENV-OVERINJECT`, `M17-13-MIGRATION-PLAINTEXT-BUNDLE`, `M17-13-WATCHDOG-TOKEN-ARGV`.
+  - **M15 (worker/cron):** `M15-01-WEEKLY-BACKUP-CLAIM-FAILOPEN`, `M15-01-WEEKLY-BACKUP-NO-RETRY-AFTER-FAILURE`, `M15-10-BOOT-CRON-UNTRACKED-NO-DRAIN`, `M15-11-REDIS-PUBSUB-PERMANENT-FALLBACK`, `M15-12-CRON-HEALTH-CROSS-PROCESS-BLIND`, `M15-13-CONTACTS-OUTBOX-RMW-RACE`, `M15-13-CONTACTS-OUTBOX-SILENT-DROP`, `M15-14-SHEETS-FAILED-TERMINAL-SILENT-LOSS`.
+  - **M10 (Copilot):** `M10-09` history role confusion, `M10-10` kuota bukan per principal, `M10-05` abort/semaphore, `M10-12` biaya Hermes tidak tercatat, `M10-11` degradasi melewati grounding.
+  - **M14:** `M14-06-CASCADE-DELETE-CROSS-TENANT-PHONE` (CLI reset menghapus lintas tenant via nomor).
+  - **M07:** `M07-17-LEAD-MODERATION-NO-OWNERSHIP`, `M07-19-WABA-MULTI-ENTRY-SECRET-SELECTION`, `M07-20-CONFIG-FALLBACK-DEFAULT-TENANT`.
+  - **M18:** `M18-15-AVATAR-ANON-PII` (nama pelanggan di Location `ui-avatars.com`; klaim SSRF pada M18-14 dikoreksi).
+  - **M09:** `M09-01-SSE-ADMIN-TENANT-CHANNEL-NO-EVENT-AUTH`, `M09-02-SSE-ADMIN-PAYLOAD-NO-MASKING-LAYER`, `M09-14-SUGGEST-REPLY-DEFAULT-TENANT-LLM`.
+  - **Duplikat yang ditolak (dipetakan ke fingerprint existing):** `M14-04-BACKUP-TENANT-ID-FROM-CLIENT`→M16-05, `M14-06-LEGACY-STAGING-GLOBAL-PHONE-UNIQUE`→M07-01, `M15-01-WEEKLY-BACKUP-CROSS-TENANT-SCOPE`→M07-BACKUP-WHOLE-DB-DUMP, `M15-10-SHUTDOWN-SSE-HIJACK-FORCE-EXIT`→M19-11, `M17-14-READY-DISCLOSURE`→M19-09, `M18-08-HARVEST-AVATAR-PII-RETENTION`→M18-CHAT-EXPORT-PII-NO-RETENTION/M12-HARVEST-UNBOUNDED.
+- **Remediasi F0+F1 (2026-11-26, sudah di source, belum deploy):** seam kanonis (`tenant-id`, `script-escape`, `spreadsheet-escape`, `landing-fields`, `landing-url`) + perbaikan permukaan publik. Status **FIXED in source** (belum diverifikasi runtime): `M08-LANDING-QUERY-XSS`, `M08-LANDING-PIXEL-SCRIPT-INJECT`, `M08-TENANT-CONTENT-DUMP`, `M08-FILES-MIME-ECHO`, `M08-CSP-REPORT-LOG-FLOOD`, `M08-PUBLIC-HTML-CACHE-POISON`, dan `M08-PAGEVIEW-UNAUTH` (CAPI tidak lagi memakai `landing_url` kiriman klien; endpoint tetap publik by design, origin-trust belum diwajibkan). Gerbang: `typecheck`/`build`/`check:reuse`/`check-architecture` PASS (0 pelanggaran baru), 8535 test lulus; satu-satunya kegagalan `reuse-gate` adalah timing 60.025 dtk di bawah beban full-suite (gagal juga di baseline, lulus saat isolasi). Detail + deviasi: `docs/security-audit/BASELINE-2026-11-26.md`.
+- **Remediasi F2 (2026-11-26, source, belum deploy):** otoritas tenant & identitas. **FIXED in source:** `M05-13-staff-tenant-header-query-bypass`, `M07-CUSTOMER-MEMORY-CROSSTENANT`, `M07-LABEL-IDOR`, `M07-LANDINGS-IDOR`, `M07-16:services-catalog-reads-default-tenant`, `M09-09-AUDIT-ACTOR-SPOOF`, `M18-12-TENANT-PATH-TRAVERSAL`, `M07-17-LEAD-MODERATION-NO-OWNERSHIP`, `M07-19-WABA-MULTI-ENTRY-SECRET-SELECTION` (mode secret per tenant), `M16-05-BACKUP-TENANT-OWNERSHIP` (otoritas tenant; ownership file menyusul F4), `M05-05-*` (SSE staf), `M22-02-STAFF-SESSION-ADMIN-API`. **Ditunda:** `M07-20-CONFIG-FALLBACK-DEFAULT-TENANT` (butuh keputusan G5 + migrasi data). Gerbang: `typecheck`/`build`/`check:reuse`/`check-architecture` PASS (0 baru), full suite 8548 lulus, satu-satunya kegagalan `reuse-gate` timing (pre-existing). Detail: `docs/security-audit/F2-TENANT-AUTHORITY.md`.
+- **Remediasi F3 (2026-11-27, source, belum deploy):** media & file. **FIXED in source:** `M08-AVATAR-CROSS-TENANT`, `M18-15-AVATAR-ANON-PII`, `M18-11-INBOUND-BUFFER-BEFORE-QUOTA`, `M18-01-INBOUND-NO-MIME-WHITELIST`; bukti bayar manual kini disimpan di scope privat `payment-proofs/`. **Tetap terbuka:** `M08-PROOF-PUBLIC` (G3, risiko diterima). Gerbang: `typecheck`/`build`/`check:reuse`/`check-architecture` PASS (0 baru), full suite 8559 lulus, satu-satunya kegagalan `reuse-gate` timing (pre-existing). Detail: `docs/security-audit/F3-MEDIA-FILE.md`.
+- **Remediasi F4 (2026-11-27, source, belum deploy):** data, backup, export. **FIXED in source:** `M15-01-WEEKLY-BACKUP-CLAIM-FAILOPEN`, `M15-01-WEEKLY-BACKUP-NO-RETRY-AFTER-FAILURE`, `M14-13-RESTORE-FALSE-SUCCESS`, `M14-15-GZIP-BOMB-RESTORE`, `M18-13-SHEETS-FORMULA-INJECTION`, `M15-14-SHEETS-FAILED-TERMINAL-SILENT-LOSS`, `M16-02-ADMIN-BODY-TENANT-OVERRIDE` (Google/Sheets). **Sebagian:** `M14-14-BACKUP-RETENTION-AND-COVERAGE` (retensi lokal + dump per tenant; ownership file belum), `M16-05-BACKUP-TENANT-OWNERSHIP` (otoritas tenant beres, ownership file residual). `M07-BACKUP-WHOLE-DB-DUMP` dimigasi: dump default per tenant, global eksplisit untuk operator. Gerbang: typecheck/build/architecture PASS; full suite 8585 lulus, 2 gagal **keduanya `reuse-gate` akibat file eksternal `copilot-tools.ts` yang diubah di luar F4**. Detail: `docs/security-audit/F4-DATA-BACKUP.md`.
+- **Remediasi F5 (2026-11-27, source, belum deploy):** SSE, realtime, worker. **FIXED in source:** `M09-01-SSE-ADMIN-TENANT-CHANNEL-NO-EVENT-AUTH`, `M09-02-SSE-ADMIN-PAYLOAD-NO-MASKING-LAYER`, `M09-14-SUGGEST-REPLY-DEFAULT-TENANT-LLM`, `M19-11-SSE-DRAIN-FORCE-EXIT`, `M15-10-BOOT-CRON-UNTRACKED-NO-DRAIN`, `M15-11-REDIS-PUBSUB-PERMANENT-FALLBACK`, `M15-12-CRON-HEALTH-CROSS-PROCESS-BLIND`, `M15-13-CONTACTS-OUTBOX-RMW-RACE`, `M15-13-CONTACTS-OUTBOX-SILENT-DROP`. **Migrasi baru:** `cron_job_heartbeats` (wajib `prisma migrate deploy` + `prisma generate` saat deploy). Gerbang: typecheck/build/reuse/architecture PASS; full suite 8598 lulus, satu-satunya kegagalan `reuse-gate` timing (pre-existing). Detail: `docs/security-audit/F5-SSE-WORKER.md`.
+- **Remediasi F6 (2026-11-27, source, belum deploy):** Copilot & akuntansi LLM. **FIXED in source:** `M10-05-COPILOT-ABORT-SEMAPHORE`, `M10-09-COPILOT-BODY-CONTRACT`, `M10-10-COPILOT-RATE-GLOBAL-BUCKET`, `M10-10-COPILOT-TOKEN-BUDGET`, `M10-11-COPILOT-DEGRADED-UNSANITIZED`, `M10-12-HERMES-NO-USAGE`. Modul kanonis baru `ai.copilot_quota` (6 req/menit per principal, bucket `x-admin-identity` dihapus) dan `ai.copilot_token_budget` (20k token/turn, 500k token/hari/tenant khusus `task_type=AI_COPILOT_CHAT`, lantai in-memory saat buffer audit telat). **Residual:** kuota & semaphore masih per proses (multi-replika → batas efektif × replika); agregasi token harian tetap akurat karena bersumber DB. Gerbang: typecheck/build/dashboard-tsc/reuse(189)/architecture(58) PASS; `npx vitest run copilot` 248 pass; full suite **8616 pass / 1 gagal** (run 1) dan **8615 / 2 gagal** (run final) — semuanya timeout beban (`reuse-gate`, GPS staf, hook audit) yang **lulus saat dijalankan terpisah (52 test)**. Detail: `docs/security-audit/F6-COPILOT.md`.
+- **Remediasi F7 (2026-11-27, source, belum deploy):** secrets & supply chain. **FIXED in source:** `M17-02-DOCKER-CONTEXT-SENSITIVE` (`.dockerignore` menutup logs/backups/audit/data/snapshot/kunci), `M17-08-IMAGE-DIGEST` (semua image + `FROM` dipin `@sha256`, WAHA tetap tag terkunci), `M17-11-VITE-KEY-IN-BUNDLE` (endpoint `GET /api/config/public` + basemap runtime; build-arg & `import.meta.env` peta dihapus; canary `cartocdn` di dist = 0), `M17-12-ENV-SHARED-WORKER` (G11a: `.env.worker` tanpa secret inbound webhook + generator/checker deterministik), `M17-13-MIGRATION-BUNDLE-PLAINTEXT` (bundel migrasi ENC1 + checksum wajib + host key diverifikasi), `M17-13-WATCHDOG-TOKEN-ARGV` (token via `curl -K` file 600, parser config aman), `M19-09-READY-DISCLOSURE` (`/ready` publik hanya `{status}`, token WABA dicek via COUNT). **Operasional:** deploy & migrasi wajib menjalankan `node scripts/generate-worker-env.mjs` + `check-env-contract.mjs` (sudah otomatis di `deploy-prod.sh`/`vps-migrate-import.sh`); digest perlu diperbarui manual via prosedur `deploy_config.txt`. Gerbang: typecheck/build/dashboard-tsc/build/reuse(189)/architecture(58)/compose-config PASS; test F7+readiness+robustness 61 pass; full suite **8666 pass / 1 gagal** (satu-satunya `reuse-gate` timing 70,5 dtk yang lulus 14/14 saat dijalankan terpisah). Detail: `docs/security-audit/F7-SECRETS-SUPPLY-CHAIN.md`.
+- **Remediasi F8 (2026-11-27, source, belum deploy):** determinisme ingress WAHA/WABA. **FIXED in source:** `M01-08-LABEL-LID-AS-PHONE` (label `@lid` tak terpetakan tidak menandai customer; seam `services/ingress/label-event.service.ts`), `M01-14-YA-CONFIRM-COALESCED` (saat menunggu `/reset`, pesan tidak di-merge), `M01-15-RESET-AMBIGUOUS-YA` (pending `/reset` di `Conversation.session_data.reset_pending_at`, TTL 5 menit, bukan `Map` proses), `M02-10-STATUS-UNKNOWN-PHONE-500` (status phone tak dikenal diabaikan 200, batch lanjut), `M02-11-REACTION-PRE-DEDUP-MUTATION` (modul `security.inbound_event_dedup`; reaction WAHA/WABA diklaim sebelum mutasi), `M02-12-STOP-BYPASS-EARLY-RETURN` + `M02-12-STOP-LOST-BY-COALESCE` (opt-out dievaluasi sebelum semua early-return WABA; STOP/UNSUBSCRIBE tidak pernah di-merge), `M02-13-WABA-TYPE-MAPPING-GAP` (button/order/system/unsupported dipetakan eksplisit, tidak lagi `[IMAGE]`). **Tanpa migrasi DB** (memakai `session_data`). Gerbang: typecheck/build/reuse(189)/architecture(58) PASS; test F8 + terkeit 54 pass; full suite **8692 pass / 1 gagal** — `reuse-gate` timing (64,2 dtk; lulus 14/14 isolasi); flake media #368 tidak muncul. Detail: `docs/security-audit/F8-INGRESS-DETERMINISM.md`.
+- **Close-out F9 (2026-11-27):** seluruh fase F0–F8 selesai di source dan diverifikasi ulang. Validator `validate-findings.cjs` dan `validate-coverage-ledger.cjs`: **23/23 artefak PASS**. Delta audit file yang berubah bersih (tanpa `eval`/`new Function`/`child_process`/`innerHTML`, tanpa log nilai secret). Gerbang akhir: typecheck/build/dashboard build PASS, `check:reuse` 189/189, `check:architecture` 58/58. Ringkasan hasil + checklist deploy: `docs/security-audit/REMEDIATION-RESULT.md`. **Belum di-commit/deploy.** 231 temuan `needs_validation` TETAP NV karena tidak ada sandbox/DB uji; deploy membutuhkan 2-step verification bila menyentuh digest WAHA (G12).
+- **Risiko diterima (keputusan pengguna, 2026-11-26):** `M08-PROOF-PUBLIC` tidak diremediasi. Endpoint `/proof/:reservationId` tetap publik tanpa masa berlaku dan tetap `Cache-Control: public, max-age=86400`, sehingga siapa pun yang memegang link dapat mengakses bukti bayar selama record reservasi ada. Mitigasi termurah bila diinginkan nanti: `no-store` + `noindex` + `no-referrer` (tanpa memutus link lama).
+- **Remediasi prioritas:** (1) tenant-bound lookup pada semua endpoint admin/staff `:id` + FK komposit/RLS; (2) backup/restore signature + skema per tabel + transaksi, larang DATABASE_URL di argv/alert; (3) media/push endpoint allowlist + kuota/retensi; (4) putuskan SSE saat revoke/logout, CSP tanpa unsafe-inline, allowlist skema URL; (5) sanitizer log kanonik + retensi harian; (6) cron lease revalidation/failover + hardening container + /ready minimal.
+- **Catatan:** temuan M22-02 adalah komposisi M05+M07; M01/M02 confirmed adalah celah ingress deterministik yang ditemukan pada deferred wave.
 
 ## 370. [Live Chat Mobile / iOS Viewport] Celah Hitam & Kolom Ketik Tertinggal Saat Keyboard Muncul di iPhone Safari / PWA (2026-11-24, FIXED — SMOKE TEST PENDING)
 
@@ -58,13 +162,11 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
 
 - **Status:** OPEN, **bukan regresi** pekerjaan OTW 2026-11-24.
 - **Bukti pre-existing:** `git diff --name-only` pada sesi OTW tidak memuat satu pun file di bawah; working tree bersih sebelum pekerjaan dimulai. Sub-gate dijalankan terpisah dan gagal pada file yang tidak tersentuh.
-- **Pelanggaran yang tersisa:**
-  1. `check:tokens` — hex hardcode total 279 (baseline 275): `src/config/actionPermissions.ts` (2 hex, batas 0), `src/index.css` (9 hex, batas 7).
-  2. `check:dark-parity` — `src/pages/tenant/FollowUpQueue.tsx` (3 kelas palet tanpa `dark:`).
-  3. `check:a11y` — `src/components/common/UiFeedback.tsx` (`<div|span>` onClick tanpa role), `src/components/customer/AddressBookDrawer.tsx` (3 `label` tanpa `htmlFor`).
-  4. `check:dates` — `src/components/staff/ScorecardReportPanel.tsx:490` memakai `new Date().toLocaleString('id-ID')`, wajib lewat `src/utils/dateWib.ts`.
-  5. `check:contrast` **lulus**.
-- **Catatan:** karena `check:tokens` gagal lebih dulu, sub-gate lain tidak berjalan otomatis di `npm run check:design`; jalankan manual saat memperbaikinya.
+- **Pelanggaran yang tersisa (verifikasi 2026-11-25):**
+  1. `check:dark-parity` — `src/pages/staff/StaffTodayTaskCard.tsx` (6 kelas palet tanpa `dark:`), `src/pages/tenant/FollowUpQueue.tsx` (3), `src/components/settings/DelayWatchdogSettingsPanel.tsx` (1).
+  2. `check:tokens` — **lulus** (275/275) per 2026-11-25.
+  3. `check:a11y`, `check:contrast`, `check:dates` — belum dijalankan ulang pada 2026-11-25 karena rantai `&&` berhenti di `check:dark-parity`; status terakhir (2026-11-24): a11y & dates gagal, contrast lulus.
+- **Catatan:** karena `check:dark-parity` gagal lebih dulu, sub-gate setelahnya tidak berjalan otomatis di `npm run check:design`.
 
 ## 372. [OTW / Staf] Sisa Risiko Idempotensi Klaim OTW Setelah Kirim (2026-11-24, OPEN — by design, Fase 1)
 - **Konteks:** Fase 1 plan "Perbaikan Fondasional Alur OTW Bidan" (insiden Bidan Thabita 2026-11-24, reservasi `8878ffbf-...`, `otw_sent_at` NULL). Endpoint `POST /api/staff/reservations/:id/otw` kini mengklaim reservasi di dalam `prisma.$transaction` ber-`pg_advisory_xact_lock(hashtext('staff_otw:<id>'))`, meneruskan `requestId` klien sebagai `clientTempId`, dan memperlakukan `DUPLICATE_REPLY` sebagai sukses.
@@ -109,6 +211,7 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
 - **Status:** OPEN — test-only; bukan bug produk, tidak menghalangi deploy logout.
 - **Gejala 1 (`reuse-gate.test.ts` #10):** pada suite penuh paralel, gate `src/` memakan **82,9 dtk** (batas 60 dtk) → 1 failure. Rerun isolasi: **14/14 PASS**, gate **35,9 dtk**. Jadi flaky performa di bawah beban paralel, bukan regresi kode.
 - **Gejala 2 (`media-watermark-autoprune.test.ts`):** dijalankan sendirian di Windows → **4/15 gagal** (4.2, 4.3, 4.4, 4.11). File baru ditulis lalu langsung dipangkas; mtime NTFS bisa sedikit **di depan** `Date.now()` (terukur 33/50), sehingga `Date.now() - mtime < 0` tetap dianggap "file baru" walau `MEDIA_HD_MIN_AGE_HOURS=0`. Di suite penuh test ini lulus (flaky).
+- **Pembaruan 2026-11-25 (suite penuh 8.497 tes):** `reuse-gate` #10 gagal **68,8 dtk** di bawah beban paralel; rerun isolasi **14/14 PASS, 35,5 dtk** → flaky beban, bukan regresi. `media-watermark-autoprune` gagal **1/15 (4.11)** baik di suite penuh **maupun** isolasi → bukan sekadar flaky; kasus ini deterministik di Windows dan belum diperbaiki.
 - **Verifikasi ulang 2026-11-25 (run #376, sesi terpisah):** `npm test` penuh → **1.075/1.076 file pass (1 skip)**, **8.469/8.497 test pass (28 skip), 0 failure**. `reuse-gate` #10 dan `media-watermark-autoprune` 4.11 **lulus** di run ini, sehingga kedua kasus di atas tetap dikategorikan flaky/tidak konsisten (bukan deterministik); jangan mengubah kode fitur untuk mengejarnya.
 - **Usulan perbaikan (belum dieksekusi):** guard `media.service.ts:947` menjadi `if (minAgeMs > 0 && Date.now() - candidate.mtimeMs < minAgeMs)` agar env `0` benar-benar menonaktifkan guard; atau test men-set mtime ke masa lalu seperti test 4.5. Untuk `reuse-gate`, naikkan ambang waktu khusus CI paralel atau tandai flaky.
 
@@ -754,13 +857,23 @@ tidak disalahartikan sebagai bug dari perubahan terbaru.
 - **Catatan:** tile peta (gambar OSM) tetap memerlukan internet; yang kini mandiri dari CDN hanyalah pustaka petanya.
 - **Tidak menambah dependency npm** (`package.json` tidak berubah).
 
-## 343. [UI/UX] Pull-to-Refresh Masih Terasa “Clunky” & Belum Sesuai Ekspektasi (2026-11-14, OPEN)
+## 343. [UI/UX] Pull-to-Refresh Masih Terasa “Clunky” & Belum Sesuai Ekspektasi (2026-11-14, RESOLVED 2026-11-25)
 
-- **Status:** OPEN — implementasi sudah live (`9019815a`), tetapi pengguna menilai animasi masih kaku/tidak sesuai; perlu iterasi desain.
-- **Implementasi saat ini:** indikator ikon-only (reload berputar → spinner → centang hijau 1,1 dtk), cooldown 2 dtk, ambang 64 px, hambatan 0.55, transisi `240ms cubic-bezier(0.22,1,0.36,1)`, tanpa transisi saat jari menempel.
-- **Keluhan:** gerakan belum halus/sesuai; perlu disetel lagi (durasi, jarak, ukuran pill, posisi, atau mekanisme tarik).
-- **Area terdampak:** `LiveChatMonitor`, `StaffToday`/`StaffSchedule` (hook `usePullToRefresh`, `PullToRefreshIndicator`).
-- **Rencana iterasi (belum dieksekusi):** sesuaikan kurva/durasi (mis. spring 320 ms), perkecil ambang/resistensi, tambah haptic/opacity, atau ganti model indikator (mis. ikon menempel di bawah header). Perlu contoh referensi dari pengguna.
+- **Status:** RESOLVED (2026-11-25) — optimasi 0-render per frame pada dragging (`usePullToRefresh.ts` + `PullToRefreshIndicator.tsx`), kurva eksponensial kontinu `applyRubberBand(delta, 96, 85)` tanpa hard clamp di 96px, dead zone visual 28px dihapus sehingga indikator responsif dari pixel pertama, transisi 220ms `out-expo` (`cubic-bezier(0.16, 1, 0.3, 1)`), dan unifikasi gestur swipe horizontal kanonis `swipeGesture.ts` + `useSwipeGesture.ts`.
+- **Implementasi final:**
+  1. `swipeGesture.ts`: modul kanonis murni untuk redaman elastis eksponensial, evaluasi sumbu 1.8x/2.2x, resolusi arah swipe, dan pemetaan kelas slide directional.
+  2. `usePullToRefresh.ts`: isolasi rendering touchmove via CSS custom property (`--ptr-y`, `--ptr-progress`) pada ref DOM, React state re-render hanya dipanggil pada pergantian fase diskret (target ≤ 3 commit per drag; belum diukur dengan Profiler).
+  3. `PullToRefreshIndicator.tsx`: membaca CSS custom property langsung di GPU layer dengan `will-change: transform` dan timing `out-expo`.
+  4. `StaffToday.tsx`: directional tab sliding aktif (`animate-slideInFromRight` & `animate-slideInFromLeft`), duplikasi drawer dihapus dan diproteksi lewat `data-swipe-menu-owner="true"`.
+  5. `Layout.tsx`: edge swipe-back diisolasi via ref & CSS custom property (`--sb-x`), dependency effect dikosongkan (tanpa re-attach per frame).
+- **Hasil:** jalur `setState` per frame sudah dihapus sehingga re-render hanya terjadi pada fase diskret. **Catatan bukti:** baseline React Profiler dan pengukuran FPS perangkat belum dijalankan; angka "≤ 3 commit/drag" dan "60fps/120fps" masih berupa target yang perlu diverifikasi manual.
+
+## 375. [UI/UX] Pengujian Performa Otomatis Gestur di CI & Dynamic Resize Guard (2026-11-25, OPEN)
+
+- **Status:** OPEN (2026-11-25) — sengaja ditunda dari optimasi gestur v2.
+- **Batasan saat ini:**
+  1. Belum ada gerbang performa otomatis di CI untuk menghitung commit React per drag (saat ini diverifikasi manual via React DevTools Profiler).
+  2. Guard resize pada listener gestur `Layout.tsx` (`innerWidth < 768`) dievaluasi pada saat touchstart, namun listener tidak re-bind saat window resize (cukup untuk mobile/tablet potret-lanskap standar tanpa merusak performa).
 
 ## 342. [Reservasi] Peringatan “Customer sudah punya reservasi aktif” Muncul untuk Reservasi `completed` (2026-11-14, RESOLVED)
 

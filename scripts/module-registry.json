@@ -90,6 +90,20 @@
       "test": "tests/unit/livechat-payload-completeness.test.ts"
     },
     {
+      "id": "livechat.thread_pagination",
+      "title": "Paginasi dua arah thread pesan Live Chat",
+      "description": "Jendela fokus di sekitar pesan hasil pencarian dan paginasi dua arah (before/after) dengan penanda hasNewer/newestCursor, tenant-scoped dan tahan DB offline.",
+      "canonical": "src/services/message-thread.service.ts",
+      "exports": [
+        "messageThreadService"
+      ],
+      "forbiddenDeclarations": [],
+      "allowedFiles": [
+        "src/services/message-thread.service.ts"
+      ],
+      "test": "tests/unit/live-chat-paged-messages.test.ts"
+    },
+    {
       "id": "log.date_key",
       "title": "Kunci tanggal nama file log harian",
       "description": "Menghasilkan tanggal YYYY-MM-DD dari komponen lokal server untuk penamaan file log harian (llm-*.jsonl, app-*.log).",
@@ -804,6 +818,32 @@
       "test": "tests/unit/analytics-baseline-config.test.ts"
     },
     {
+      "id": "analytics.revenue_contract",
+      "title": "Kontrak kanonis revenue dan analitik dashboard",
+      "description": "Definisi tipe RevenueBasis, RevenueStatusFilter, RevenueQuery, RevenueAmounts, RevenueBasisMeta, dan helper filter status serta metadata basis analitik.",
+      "canonical": "src/domain/analytics-contract.ts",
+      "exports": [
+        "RevenueBasis",
+        "RevenueStatusFilter",
+        "RevenueQuery",
+        "RevenueAmounts",
+        "RevenueBasisMeta",
+        "DEFAULT_REVENUE_QUERY",
+        "isRevenueStatusIncluded",
+        "describeRevenueBasis",
+        "buildRevenueBasisMeta"
+      ],
+      "forbiddenDeclarations": [
+        "isRevenueStatusIncluded",
+        "describeRevenueBasis"
+      ],
+      "allowedFiles": [
+        "src/domain/analytics-contract.ts",
+        "src/services/revenue-analytics.service.ts"
+      ],
+      "test": "tests/unit/analytics-contract.test.ts"
+    },
+    {
       "id": "staff.otw_departure",
       "title": "Kontrak keberangkatan OTW: kirim dulu, peta kemudian",
       "description": "Urutan pengiriman OTW dengan batas tunggu 10 detik (bukan fire-and-forget), penyusunan payload ETA/GPS, keputusan kirim-ulang antrean pending berbasis jendela waktu server, dan kunci idempotensi per percobaan keberangkatan. Murni tanpa DOM/jaringan.",
@@ -851,6 +891,163 @@
         "packages/admin-dashboard/src/utils/swipeGesture.ts"
       ],
       "test": "tests/unit/swipe-gesture.test.ts"
+    },
+    {
+      "id": "security.tenant_id",
+      "title": "Validasi identitas tenant kanonik",
+      "description": "Pola tenant id kanonik dan guard untuk mencegah traversal/path injection saat tenant dipakai sebagai komponen path, kunci cache, atau filter query.",
+      "canonical": "src/utils/tenant-id.ts",
+      "exports": [
+        "TENANT_ID_PATTERN",
+        "isValidTenantId",
+        "assertValidTenantId"
+      ],
+      "forbiddenDeclarations": [
+        "TENANT_ID_PATTERN",
+        "isValidTenantId",
+        "assertValidTenantId"
+      ],
+      "allowedFiles": [
+        "src/utils/tenant-id.ts"
+      ],
+      "test": "tests/unit/tenant-id.test.ts"
+    },
+    {
+      "id": "security.script_escape",
+      "title": "Escaping konteks script HTML",
+      "description": "Escaping nilai dinamis yang disisipkan ke dalam <script>: netralkan </script>, <, >, &, dan U+2028/2029 tanpa merusak JSON JavaScript.",
+      "canonical": "src/utils/script-escape.ts",
+      "exports": [
+        "escapeScriptText",
+        "jsStringLiteral",
+        "safeJsonForScript"
+      ],
+      "forbiddenDeclarations": [
+        "escapeScriptText",
+        "jsStringLiteral",
+        "safeJsonForScript"
+      ],
+      "allowedFiles": [
+        "src/utils/script-escape.ts"
+      ],
+      "test": "tests/unit/script-escape.test.ts"
+    },
+    {
+      "id": "ai.copilot_quota",
+      "title": "Kuota admission Copilot per principal",
+      "description": "Bucket 6 request/menit per principal (staf, sesi admin, atau API key) yang dipakai bersama oleh /chat dan /stream; identitas header klien tidak boleh menjadi principal.",
+      "canonical": "src/services/copilot/copilot-quota.ts",
+      "exports": [
+        "checkCopilotQuota",
+        "copilotPrincipalKey",
+        "resetCopilotQuota"
+      ],
+      "forbiddenDeclarations": [
+        "checkCopilotQuota",
+        "copilotPrincipalKey"
+      ],
+      "allowedFiles": [
+        "src/services/copilot/copilot-quota.ts"
+      ],
+      "test": "tests/unit/f6-copilot-contract.test.ts"
+    },
+    {
+      "id": "ai.copilot_token_budget",
+      "title": "Anggaran token Copilot per turn dan harian",
+      "description": "Plafon 20k token/turn dan 500k token/hari/tenant (env-overridable) dengan agregasi llm_audit_logs terbatas task_type AI_COPILOT_CHAT dan lantai in-memory saat buffer audit belum ter-flush atau DB offline.",
+      "canonical": "src/services/copilot/copilot-budget.ts",
+      "exports": [
+        "assertCopilotDailyBudget",
+        "estimateTurnTokens",
+        "getCopilotDailyTokensUsed",
+        "maxTokensPerDay",
+        "maxTokensPerTurn",
+        "recordCopilotTokens",
+        "resetCopilotBudgetCache"
+      ],
+      "forbiddenDeclarations": [
+        "assertCopilotDailyBudget",
+        "getCopilotDailyTokensUsed",
+        "recordCopilotTokens"
+      ],
+      "allowedFiles": [
+        "src/services/copilot/copilot-budget.ts"
+      ],
+      "test": "tests/unit/f6-copilot-budget.test.ts"
+    },
+    {
+      "id": "security.inbound_event_dedup",
+      "title": "Klaim sekali-pakai event inbound non-pesan",
+      "description": "Dedup idempoten untuk event webhook yang dimutasi sebelum jalur idempotensi pesan (reaction, ack): klaim SET NX di DistributedKv dengan fallback memori, TTL 10 menit.",
+      "canonical": "src/services/inbound-event-dedup.service.ts",
+      "exports": [
+        "inboundEventDedup"
+      ],
+      "forbiddenDeclarations": [
+        "inboundEventDedup"
+      ],
+      "allowedFiles": [
+        "src/services/inbound-event-dedup.service.ts"
+      ],
+      "test": "tests/unit/f8-reaction-dedup.test.ts"
+    },
+    {
+      "id": "data.spreadsheet_escape",
+      "title": "Netralisasi formula spreadsheet",
+      "description": "Encoder sel CSV/Google Sheets yang menetralkan awalan formula (= + - @ TAB CR) untuk mencegah formula injection.",
+      "canonical": "src/utils/spreadsheet-escape.ts",
+      "exports": [
+        "neutralizeFormula",
+        "escapeCsvCell",
+        "escapeSheetCell"
+      ],
+      "forbiddenDeclarations": [],
+      "allowedFiles": [
+        "src/utils/spreadsheet-escape.ts",
+        "src/services/financial-analytics.service.ts"
+      ],
+      "test": "tests/unit/spreadsheet-escape.test.ts"
+    },
+    {
+      "id": "landing.field_contract",
+      "title": "Kontrak field landing",
+      "description": "Validasi dan sanitasi metaPixelId/whatsappNumber pada batas tulis dan render landing agar tidak masuk ke konteks script sebagai nilai bebas.",
+      "canonical": "src/utils/landing-fields.ts",
+      "exports": [
+        "parseMetaPixelId",
+        "parseWhatsappNumber",
+        "sanitizePixelForRender",
+        "sanitizePhoneForRender"
+      ],
+      "forbiddenDeclarations": [
+        "parseMetaPixelId",
+        "parseWhatsappNumber",
+        "sanitizePixelForRender",
+        "sanitizePhoneForRender"
+      ],
+      "allowedFiles": [
+        "src/utils/landing-fields.ts"
+      ],
+      "test": "tests/unit/landing-fields.test.ts"
+    },
+    {
+      "id": "analytics.financial_targets",
+      "title": "Resolusi target finansial bulanan per-tenant",
+      "description": "Resolver target omset dan booking bulanan tenant-aware dari Tenant.settings dengan cache 5 menit dan fallback aman.",
+      "canonical": "src/config/financial-targets.ts",
+      "exports": [
+        "getFinancialTargets",
+        "clearFinancialTargetsCache",
+        "DEFAULT_FINANCIAL_TARGETS"
+      ],
+      "forbiddenDeclarations": [
+        "getFinancialTargets",
+        "clearFinancialTargetsCache"
+      ],
+      "allowedFiles": [
+        "src/config/financial-targets.ts"
+      ],
+      "test": "tests/unit/financial-targets-config.test.ts"
     }
   ]
 }

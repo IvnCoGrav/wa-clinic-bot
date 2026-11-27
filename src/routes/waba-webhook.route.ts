@@ -1,12 +1,15 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { verifyMetaSignature } from '../integrations/whatsapp/signature';
-import { normalizeWabaPayload, normalizeWabaStatuses } from '../integrations/whatsapp/normalizer';
+import { MAX_INBOUND_DOCUMENT_BYTES } from '../utils/media-limits';
+import { normalizeWabaPayload, normalizeWabaStatuses, buildWabaCanonicalContent } from '../integrations/whatsapp/normalizer';
 import { customerService } from '../services/customer.service';
 import { conversationService } from '../services/conversation.service';
 import { messageService } from '../services/message.service';
 import { queueService } from '../services/queue.service';
 import { burstCoalesceService } from '../services/burst-coalesce.service';
 import { wabaTenantService } from '../services/waba-tenant.service';
+import { wabaOptOutService } from '../services/waba-optout.service';
+import { inboundEventDedup } from '../services/inbound-event-dedup.service';
 import { enforceAiScopeGate } from '../services/ai-scope-gate.service';
 import { matchAdClickAndFireContact } from '../services/ad-attribution.service';
 import { DEFAULT_TENANT_ID } from '../config/tenant';
@@ -17,6 +20,7 @@ import {
   resolveMaxInboundAgeSeconds,
 } from '../services/ingress/inbound-guard.service';
 import { contextStorage } from '../utils/context';
+import { maskPhoneNumber } from '../utils/pii-masker';
 import type { NormalizedQuotedMessage } from '../utils/canonical-message-normalizer';
 import crypto from 'crypto';
 import dotenv from 'dotenv';
@@ -43,11 +47,28 @@ export async function wabaWebhookRoutes(fastify: FastifyInstance) {
     const correlationId = crypto.randomUUID();
     return contextStorage.run({ correlationId }, async () => {
 
+    const body = request.body as any;
+    const phoneNumberIds = new Set<string>();
+    for (const entry of Array.isArray(body?.entry) ? body.entry : []) {
+      for (const change of Array.isArray(entry?.changes) ? entry.changes : []) {
+        const id = change?.value?.metadata?.phone_number_id;
+        if (id) phoneNumberIds.add(String(id));
+      }
+    }
+
     let appSecret = process.env.WABA_APP_SECRET || '';
     if (!appSecret) {
+      // Mode app-secret per tenant: satu signature HMAC hanya bisa memverifikasi
+      // SATU app secret. Payload dengan lebih dari satu phone_number_id tidak
+      // boleh diproses (entry tenant lain akan lolos tanpa otorisasi).
+      if (phoneNumberIds.size > 1) {
+        console.warn(
+          `[WABA SECURITY] Payload memuat ${phoneNumberIds.size} phone_number_id pada mode app-secret per tenant — DITOLAK. [${correlationId}]`
+        );
+        return reply.status(400).send({ error: 'Multi-tenant payload rejected' });
+      }
+      const phoneNumberId = Array.from(phoneNumberIds)[0];
       try {
-        const body = request.body as any;
-        const phoneNumberId = body?.entry?.[0]?.changes?.[0]?.value?.metadata?.phone_number_id;
         if (phoneNumberId) {
           appSecret = await wabaTenantService.resolveAppSecretByPhoneNumberId(phoneNumberId);
         }
@@ -72,7 +93,6 @@ export async function wabaWebhookRoutes(fastify: FastifyInstance) {
       return reply.status(401).send({ error: 'Invalid signature' });
     }
 
-    const body = request.body as any;
     if (!body || body.object !== 'whatsapp_business_account') {
       return reply.status(200).send({ status: 'IGNORED' });
     }
@@ -84,7 +104,21 @@ export async function wabaWebhookRoutes(fastify: FastifyInstance) {
     let processedStatuses = 0;
     if (statuses.length > 0) {
       for (const st of statuses) {
-        const tenantId = await wabaTenantService.resolveTenantByPhoneNumberId(st.phoneNumberId);
+        // M02-10: status untuk phone_number_id tak dikenal TIDAK boleh melempar
+        // 500 — respons 5xx memicu Meta mengulang seluruh batch dan status lain
+        // ikut hilang. Abaikan status itu (200) lalu lanjut ke status berikutnya.
+        let tenantId: string;
+        try {
+          tenantId = await wabaTenantService.resolveTenantByPhoneNumberId(st.phoneNumberId);
+        } catch (err: any) {
+          if (err?.message === 'UNKNOWN_PHONE_NUMBER_ID') {
+            console.warn(
+              `[WABA STATUS] phone_number_id=${st.phoneNumberId || '(kosong)'} tidak terdaftar → status ${st.messageId} diabaikan (200).`
+            );
+            continue;
+          }
+          throw err;
+        }
         const errCode = st.errors?.[0]?.code ? String(st.errors[0].code) : null;
         const errDesc = st.errors?.map((e: any) => e?.error_data?.details || e?.title || e?.message).filter(Boolean).join(' | ') || null;
         const pricingCategory = (st as any).pricing?.category || (st as any).pricing_category || null;
@@ -145,6 +179,13 @@ export async function wabaWebhookRoutes(fastify: FastifyInstance) {
         const targetMessageId = rawReaction?.message_id;
         const emoji = rawReaction?.emoji || msg.text || '';
         if (targetMessageId) {
+          // M02-11: Meta mengulang webhook yang sama; klaim SEBELUM mutasi.
+          const reactionKey = `waba:reaction:${tenantId}:${msg.messageId}`;
+          const firstDelivery = await inboundEventDedup.claimOnce(reactionKey);
+          if (!firstDelivery) {
+            console.log(`[WABA REACTION WEBHOOK] duplikat diabaikan (${msg.messageId}).`);
+            return reply.status(200).send({ status: 'REACTION_DUPLICATE' });
+          }
           console.log(`[WABA REACTION WEBHOOK] targetMsgId=${targetMessageId}, emoji="${emoji}", from=${msg.fromNumber}`);
           await messageService.addOrUpdateReaction(targetMessageId, tenantId, {
             emoji,
@@ -198,6 +239,8 @@ export async function wabaWebhookRoutes(fastify: FastifyInstance) {
             const response = await axios.get(mediaUrl, {
               responseType: 'arraybuffer',
               timeout: 15000,
+              maxContentLength: MAX_INBOUND_DOCUMENT_BYTES,
+              maxBodyLength: MAX_INBOUND_DOCUMENT_BYTES,
               headers,
             });
             const { mediaService } = await import('../services/media.service');
@@ -253,17 +296,49 @@ export async function wabaWebhookRoutes(fastify: FastifyInstance) {
         return res;
       };
 
-      const wabaCanonicalContent =
-        (msg as any).originalText ||
-        msg.text ||
-        (msg.location ? `[LOCATION: Lat ${msg.location.latitude}, Lng ${msg.location.longitude}${msg.location.address ? ` | ${msg.location.address}` : ''}]` : undefined) ||
-        (msg.type === 'voice_note' ? '[VOICE_NOTE]' : undefined) ||
-        (msg.type === 'audio' ? '[AUDIO]' : undefined) ||
-        (msg.type === 'document' ? `[DOCUMENT: ${msg.caption || 'Dokumen'}]` : undefined) ||
-        (msg.type === 'video' ? (msg.caption ? `[VIDEO: ${msg.caption}]` : '[VIDEO]') : undefined) ||
-        (msg.type === 'sticker' ? '[STICKER]' : undefined) ||
-        (msg.type === 'contact' ? `[CONTACT: ${msg.text || 'Kontak'}]` : undefined) ||
-        (msg.caption ? `[IMAGE: ${msg.caption}]` : '[IMAGE]');
+      const wabaCanonicalContent = buildWabaCanonicalContent(msg as any);
+
+      const existingCustomer = await customerService.getCustomerByPhone(msg.fromNumber, tenantId);
+      const isNewCustomerRecord = !existingCustomer;
+
+      // --- PRIORITAS OPT-OUT MARKETING (M02-12) ---
+      // Dievaluasi SEBELUM early-return apa pun (stale, bypass, blocked, abuse,
+      // scope-gate silence, HUMAN_HANDLING). Tanpa choke point ini, STOP dari
+      // pelanggan lama yang di-silence atau pesan catch-up tidak pernah sampai ke
+      // state machine — pelanggan tetap menerima promo meski sudah minta berhenti.
+      if (msg.text && wabaOptOutService.isOptOutMessage(msg.text).matched) {
+        try {
+          const optCustomer =
+            existingCustomer ||
+            (await customerService.getOrCreateCustomer(msg.fromNumber, msg.contactName, tenantId, {
+              skipFollowUpScheduling: true,
+            }));
+          const optConversation = await conversationService.getOrCreateConversation(optCustomer.id, tenantId);
+          const optRes = await wabaOptOutService.handleOptOut(optCustomer.id, tenantId);
+          console.log(
+            `[WABA OPT-OUT] Customer ${maskPhoneNumber(msg.fromNumber)} opt-out (tenant=${tenantId}); follow-up dibatalkan: ${optRes.cancelledFollowUps}.`
+          );
+          await logInboundWithoutReply({
+            tenantId,
+            phone: msg.fromNumber,
+            contactName: msg.contactName,
+            customer: optCustomer,
+            conversation: optConversation,
+            content: wabaCanonicalContent,
+            waMessageId: msg.messageId,
+            payloadRaw: mergeWabaMedia(msg.rawPayload),
+            skipMqlEvaluation: true,
+          });
+          // Ack transaksional hanya bila bukan sesi CS manusia (jangan menyela admin).
+          if (!optConversation.is_human_handling) {
+            await wabaOptOutService.sendOptOutAck(optCustomer, optConversation.id, tenantId);
+          }
+          processed++;
+        } catch (optErr: any) {
+          console.warn('[WABA OPT-OUT] Gagal memproses opt-out:', optErr?.message || optErr);
+        }
+        continue;
+      }
 
       // --- FAST-PATH GUARD: STALE / CATCH-UP MESSAGE FOR WABA ---
       // ING-10: keputusan basi dipusatkan di `inbound-guard.service` (seam bersama WAHA).
@@ -295,8 +370,22 @@ export async function wabaWebhookRoutes(fastify: FastifyInstance) {
         }
       }
 
-      const existingCustomer = await customerService.getCustomerByPhone(msg.fromNumber, tenantId);
-      const isNewCustomerRecord = !existingCustomer;
+      // M02-13: notifikasi sistem WhatsApp / pesan yang tidak didukung gateway
+      // BUKAN pesan customer. Catat untuk audit trail, tapi JANGAN diantrekan ke
+      // bot (mencegah AI membalas "Nomor pelanggan berubah" sebagai pertanyaan).
+      if (msg.type === 'system' || msg.type === 'unsupported') {
+        await logInboundWithoutReply({
+          tenantId,
+          phone: msg.fromNumber,
+          contactName: msg.contactName,
+          content: wabaCanonicalContent,
+          waMessageId: msg.messageId,
+          payloadRaw: mergeWabaMedia(msg.rawPayload),
+          skipMqlEvaluation: true,
+        });
+        processed++;
+        continue;
+      }
 
       // ING-10: bypass admin/Skip memakai seam bersama WAHA.
       const isBypass = await resolveInboundBypass({
@@ -482,6 +571,7 @@ export async function wabaWebhookRoutes(fastify: FastifyInstance) {
         timestamp: String(msg.timestamp),
         type: msg.type,
         text: msg.text ? { body: msg.text } : undefined,
+        buttonPayload: (msg as any).buttonPayload,
         originalText: (msg as any).originalText || msg.text,
         location: msg.location
           ? { latitude: msg.location.latitude, longitude: msg.location.longitude }

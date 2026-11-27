@@ -178,7 +178,7 @@ export class CustomerService {
     const repo = (await import('../repositories/customer.repository')).getCustomerRepository();
     await repo.updateManyByPhoneTenant(phone, tenantId, data);
     const cust = memoryCustomers.get(phone);
-    if (cust) {
+    if (cust && cust.tenant_id === tenantId) {
       if (flags.isAdminLabeled !== undefined) cust.is_admin_labeled = flags.isAdminLabeled;
       if (flags.isHoldLabeled !== undefined) cust.is_hold_labeled = flags.isHoldLabeled;
       cust.labels_synced_at = new Date();
@@ -1650,17 +1650,31 @@ export class CustomerService {
   }
 
   /**
+   * Lookup lintas tenant HANYA untuk pemegang API key root (media avatar).
+   * Pemanggil wajib sudah memverifikasi otorisasi root.
+   */
+  public async getCustomerByIdAnyTenant(customerId: string): Promise<any> {
+    if (!customerId) return null;
+    try {
+      return await prisma.customer.findUnique({ where: { id: customerId } });
+    } catch {
+      return memoryCustomers.get(customerId) || null;
+    }
+  }
+
+  /**
    * Cari customer berdasarkan nomor telepon
    */
-  public async getCustomerByPhone(phone: string, tenantId: string): Promise<any> {
-    // PLAN 8 FASE 5a: baca via Repository (fail-closed di produksi).
+  public async getCustomerByPhone(phone: string, tenantId: string): Promise<any> {    // PLAN 8 FASE 5a: baca via Repository (fail-closed di produksi).
     const repo = (await import('../repositories/customer.repository')).getCustomerRepository();
+    const cached = memoryCustomers.get(phone);
+    const cachedForTenant = cached && cached.tenant_id === tenantId ? cached : null;
     try {
       const customer = await repo.findByPhone(phone, tenantId);
-      return customer || memoryCustomers.get(phone) || null;
+      return customer || cachedForTenant || null;
     } catch (error) {
       console.warn('[Customer Service] getCustomerByPhone DB error (fail-closed, cek cache baca):', (error as Error)?.message);
-      return memoryCustomers.get(phone) || null;
+      return cachedForTenant;
     }
   }
 
@@ -2474,6 +2488,13 @@ export class CustomerService {
             totalMql: totalMqlCount,
             totalProspects: Math.max(0, totalCustomersCount - totalPurchasersCount),
             totalRevenue: totalRevAgg?._sum?.purchase_value || 0,
+            revenueBasis: {
+              basis: 'all_time',
+              source: 'purchase_value',
+              includesDeliveryFee: false,
+              discountApplied: false,
+              label: 'Total Belanja Pasien (All-Time)',
+            },
           };
           responseCacheService.set(cacheKeyStats, stats, 15);
         } catch {
@@ -2483,6 +2504,13 @@ export class CustomerService {
             totalMql: 0,
             totalProspects: total,
             totalRevenue: 0,
+            revenueBasis: {
+              basis: 'all_time',
+              source: 'purchase_value',
+              includesDeliveryFee: false,
+              discountApplied: false,
+              label: 'Total Belanja Pasien (All-Time)',
+            },
           };
         }
       }
@@ -2640,6 +2668,13 @@ export class CustomerService {
     totalMql: number;
     totalProspects: number;
     totalRevenue: number;
+    revenueBasis?: {
+      basis: string;
+      source: string;
+      includesDeliveryFee: boolean;
+      discountApplied: boolean;
+      label: string;
+    };
   }> {
     const cacheKey = `customers:stats:${tenantId}`;
     let stats = responseCacheService.get<any>(cacheKey);
@@ -2665,6 +2700,13 @@ export class CustomerService {
         totalMql: totalMqlCount,
         totalProspects: Math.max(0, totalCustomersCount - totalPurchasersCount),
         totalRevenue: totalRevAgg?._sum?.purchase_value || 0,
+        revenueBasis: {
+          basis: 'all_time',
+          source: 'purchase_value',
+          includesDeliveryFee: false,
+          discountApplied: false,
+          label: 'Total Belanja Pasien (All-Time)',
+        },
       };
       responseCacheService.set(cacheKey, stats, 60);
     } catch {
@@ -2674,6 +2716,13 @@ export class CustomerService {
         totalMql: 0,
         totalProspects: 0,
         totalRevenue: 0,
+        revenueBasis: {
+          basis: 'all_time',
+          source: 'purchase_value',
+          includesDeliveryFee: false,
+          discountApplied: false,
+          label: 'Total Belanja Pasien (All-Time)',
+        },
       };
     }
     return stats;

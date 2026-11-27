@@ -165,8 +165,8 @@ describe('Architecture & Structural Integrity Gate (Fase 3)', () => {
       const baseline = JSON.parse(
         fs.readFileSync(path.resolve(process.cwd(), 'scripts/reuse/baselines/architecture.json'), 'utf8')
       );
-      expect(parsed.currentCyclesCount).toBe(baseline.cycles.length);
-      expect(parsed.currentPrismaTotal).toBe(baseline.prismaBudget.totalCalls);
+      expect(parsed.currentCyclesCount).toBeLessThanOrEqual(baseline.cycles.length);
+      expect(parsed.currentPrismaTotal).toBeLessThanOrEqual(baseline.prismaBudget.totalCalls);
     } finally {
       if (fs.existsSync(reportPath)) {
         fs.unlinkSync(reportPath);

@@ -8,6 +8,34 @@ export interface OptOutResult {
 
 export class WabaOptOutService {
   /**
+   * Kirim ack opt-out + log OUTBOUND. Dipakai choke point ingress WABA agar
+   * konfirmasi tetap terkirim walau pesan tidak masuk antrean bot (silence/CS).
+   * Best-effort: kegagalan gateway tidak membatalkan opt-out DB.
+   */
+  public async sendOptOutAck(
+    customer: { id: string; phone: string },
+    conversationId: string,
+    tenantId: string
+  ): Promise<void> {
+    try {
+      const { resolveGatewayForTenant } = await import('../integrations/whatsapp/factory');
+      const { messageService } = await import('./message.service');
+      const { Direction } = await import('@prisma/client');
+      const gateway = await resolveGatewayForTenant(tenantId);
+      const ack = this.getAckMessage();
+      const send = await gateway.sendTextMessage(customer.phone, ack);
+      await messageService.logMessage({
+        tenantId,
+        conversationId,
+        direction: Direction.OUTBOUND,
+        content: ack,
+        waMessageId: send.messageId,
+      });
+    } catch (err: any) {
+      console.warn('[OPT-OUT] Gagal kirim ack opt-out:', err?.message || err);
+    }
+  }
+  /**
    * Deteksi apakah teks masuk mengandung keyword opt-out marketing.
    * Scope: WABA only — WAHA tidak punya marketing_opt_in.
    * BERHENTI hanya dianggap opt-out jika dikombinasikan dengan kata

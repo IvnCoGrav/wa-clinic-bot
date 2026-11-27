@@ -10,6 +10,8 @@ packages/**/dist
 .env
 .env.*
 *.local
+*.pem
+*.key
 
 # Runtime storage & data sensitif (VAPID key, dump SQL, backup CSV)
 storage
@@ -19,6 +21,26 @@ storage/**
 .watchdog.env
 vapid_keys.json
 children-null-backup.csv
+
+# Data runtime & arsip sensitif (JANGAN pernah masuk build context):
+# dump backup berisi PII, snapshot live-chat, basis data lokal, dan audit lokal.
+logs
+logs/**
+backups
+backups/**
+audit
+audit/**
+data
+data/**
+docs/live-snapshots
+docs/live-snapshots/**
+
+# Tooling agen/skill & artefak sesi (bukan bagian runtime)
+.agents
+.opencode
+opencode.json
+skills-lock.json
+scripts/*.json
 
 # Git & tooling
 .git

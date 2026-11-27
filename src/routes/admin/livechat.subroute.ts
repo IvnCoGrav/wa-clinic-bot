@@ -11,6 +11,7 @@ import { staffDepartureWatchdogService } from '../../services/staff-departure-wa
 import { responseCacheService } from '../../services/response-cache.service';
 import { ConversationState } from '@prisma/client';
 import { createMonotonicSseSequencer } from '../../utils/sse-sequence';
+import { sanitizeStaffHubPayload } from '../../utils/pii-masker';
 import { encodeMessageCursor } from '../../utils/message-cursor';
 import { resolveSessionTenantId } from './route-helpers';
 
@@ -454,15 +455,16 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
 
   /**
    * GET /api/admin/live-chat/conversations/:id/messages
-   * Thread pesan sebuah percakapan (kronologis) + cursor pagination opsional:
-   * ?limit=50&before=<ISO timestamp>. Tanpa param = 50 pesan terakhir (identik legacy).
+   * Thread pesan sebuah percakapan (kronologis) + cursor pagination dua arah:
+   * ?limit=50&before=<cursor> (riwayat lama) atau ?after=<cursor> (pesan lebih baru).
+   * Tanpa param = 50 pesan terakhir (identik legacy).
    */
   fastify.get(
     '/api/admin/live-chat/conversations/:id/messages',
     async (
       request: FastifyRequest<{
         Params: { id: string };
-        Querystring: { limit?: string; before?: string; focusMessageId?: string };
+        Querystring: { limit?: string; before?: string; after?: string; focusMessageId?: string };
       }>,
       reply
     ) => {
@@ -471,13 +473,15 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
       try {
         const limit = Math.min(Math.max(parseInt(request.query.limit || '50', 10) || 50, 1), 200);
         const before = request.query.before?.trim() || undefined;
+        const after = request.query.after?.trim() || undefined;
         const focusMessageId = request.query.focusMessageId?.trim() || undefined;
-        const { messages, hasMore, pinnedMessage } = await liveChatService.getConversationMessagesPaged(
+        const { messages, hasMore, hasNewer, newestCursor, pinnedMessage } = await liveChatService.getConversationMessagesPaged(
           id,
           tenantId,
           limit,
           before,
-          focusMessageId
+          focusMessageId,
+          after
         );
         // Cursor komposit (created_at|id) agar pesan bertimestamp sama tidak
         // terlewat di batas halaman (audit #316 / T-09).
@@ -487,6 +491,8 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
           count: messages.length,
           data: messages,
           hasMore,
+          hasNewer: !!hasNewer,
+          newestCursor: newestCursor || null,
           oldestCursor: oldest ? encodeMessageCursor(oldest.created_at, oldest.id) : null,
           pinnedMessage: pinnedMessage || null,
         });
@@ -798,11 +804,8 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
     const { id, messageId } = request.params;
     const { isPinned } = request.body || {};
     const tenantId = resolveSessionTenantId(request);
-    const adminName =
-      (request.headers['x-admin-name'] as string) ||
-      (request.body as any)?.adminName ||
-      (request as any).adminIdentity ||
-      'Admin';
+    // Identitas audit WAJIB dari sesi server-side; header/body tidak boleh memalsukan.
+    const adminName = (request as any).adminIdentity || 'Admin';
     const apiKey = (request as any).adminKeyUsed || 'ADMIN_API';
     const ip = request.ip;
 
@@ -849,11 +852,8 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
     const { id, messageId } = request.params;
     const { isHidden } = request.body || {};
     const tenantId = resolveSessionTenantId(request);
-    const adminName =
-      (request.headers['x-admin-name'] as string) ||
-      (request.body as any)?.adminName ||
-      (request as any).adminIdentity ||
-      'Admin';
+    // Identitas audit WAJIB dari sesi server-side; header/body tidak boleh memalsukan.
+    const adminName = (request as any).adminIdentity || 'Admin';
     const apiKey = (request as any).adminKeyUsed || 'ADMIN_API';
     const ip = request.ip;
 
@@ -932,11 +932,22 @@ export async function livechatAdminRoutes(fastify: FastifyInstance) {
     let closed = false;
     let unsubscribe: (() => void) | null = null;
 
+    // Event staf (GPS/nama+alamat pasien) hanya untuk peran operasional.
+    const STAFF_OPS_EVENTS = new Set(['staff.telemetry_updated', 'staff.task_assigned', 'staff.delay_alert']);
+    const role = String((request as any).staffRole || '').toUpperCase();
+    const canSeeStaffOps = !role || role === 'SUPER_ADMIN' || role === 'SPV_CS';
+    const seesFullPhone = !role || role === 'SUPER_ADMIN' || role === 'SPV_CS' || role === 'ADMIN_CS';
+
     const sendEvent = (event: any) => {
       if (closed) return;
+      if (STAFF_OPS_EVENTS.has(event.type) && !canSeeStaffOps) return;
       try {
         const eventId = liveChatSseSeq.next();
-        const data = JSON.stringify(event.payload || {});
+        let payload = event.payload || {};
+        if (event.type === 'message.created' || event.type === 'message.updated' || event.type === 'message.status_updated') {
+          payload = sanitizeStaffHubPayload(payload, event.type, { maskPhone: !seesFullPhone });
+        }
+        const data = JSON.stringify(payload);
         reply.raw.write(`id: ${eventId}\nevent: ${event.type}\ndata: ${data}\n\n`);
       } catch (err: any) {
         console.error('[LIVE CHAT SSE] Failed to serialize event:', err.message);

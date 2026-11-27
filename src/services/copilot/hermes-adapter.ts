@@ -54,6 +54,10 @@ export interface HermesBridgeCallOpts {
   openaiUrl?: string;
   openaiKey?: string;
   openaiModel?: string;
+  /** Abort dari pemanggil (route/SSE) — diteruskan ke fetch. */
+  signal?: AbortSignal;
+  /** Callback usage provider (bila tersedia) untuk akuntansi biaya. */
+  onUsage?: (usage: any) => void;
 }
 
 export interface HermesRouterDecision {
@@ -80,12 +84,16 @@ async function postJson(
   url: string,
   secret: string,
   body: Record<string, any>,
-  timeoutMs: number
+  timeoutMs: number,
+  externalSignal?: AbortSignal
 ): Promise<any | null> {
   // Fail-closed: tanpa secret, jangan panggil tanpa auth.
   if (!secret) return null;
+  if (externalSignal?.aborted) return null;
   const ms = Math.max(1, Math.floor(timeoutMs));
   const ctrl = new AbortController();
+  const onExternalAbort = () => ctrl.abort();
+  externalSignal?.addEventListener('abort', onExternalAbort, { once: true });
   // Race deterministik: abort saja tidak cukup bila implementasi fetch
   // mengabaikan signal (tidak pernah settle) — timer menjamin null.
   let timer: ReturnType<typeof setTimeout>;
@@ -116,6 +124,7 @@ async function postJson(
     return await Promise.race([attempt, deadline]);
   } finally {
     clearTimeout(timer!);
+    externalSignal?.removeEventListener('abort', onExternalAbort);
   }
 }
 
@@ -124,10 +133,11 @@ async function postAsk(
   secret: string,
   kind: 'router' | 'summarize',
   prompt: string,
-  timeoutMs: number
+  timeoutMs: number,
+  signal?: AbortSignal
 ): Promise<any | null> {
   const url = `${baseUrl.replace(/\/+$/, '')}${HERMES_ASK_PATH}`;
-  return postJson(url, secret, { kind, prompt }, timeoutMs);
+  return postJson(url, secret, { kind, prompt }, timeoutMs, signal);
 }
 
 /**
@@ -149,8 +159,16 @@ async function requestOpenaiText(
     url,
     key,
     { model, messages: [{ role: 'user', content: prompt }], temperature, max_tokens: maxTokens },
-    opts.timeoutMs
+    opts.timeoutMs,
+    opts.signal
   );
+  if (data?.usage) {
+    try {
+      opts.onUsage?.(data.usage);
+    } catch {
+      /* akuntansi best-effort */
+    }
+  }
   const content = data?.choices?.[0]?.message?.content;
   if (typeof content !== 'string' || !content.trim()) return null;
   return content;
@@ -181,7 +199,7 @@ export async function requestHermesRouter(
       return null;
     }
   }
-  const data = await postAsk(opts.baseUrl, opts.secret, 'router', prompt, opts.timeoutMs);
+  const data = await postAsk(opts.baseUrl, opts.secret, 'router', prompt, opts.timeoutMs, opts.signal);
   return toRouterDecision(data);
 }
 
@@ -195,7 +213,7 @@ export async function requestHermesSummarize(
     if (!content) return null;
     return content.trim() || null;
   }
-  const data = await postAsk(opts.baseUrl, opts.secret, 'summarize', prompt, opts.timeoutMs);
+  const data = await postAsk(opts.baseUrl, opts.secret, 'summarize', prompt, opts.timeoutMs, opts.signal);
   if (!data || typeof data.text !== 'string' || !data.text.trim()) return null;
   return data.text;
 }

@@ -175,7 +175,7 @@ export async function googleIntegrationAdminRoutes(fastify: FastifyInstance) {
       }>,
       reply: FastifyReply
     ) => {
-      const tenantId = request.body?.tenantId || resolveTenant(request);
+      const tenantId = resolveTenant(request);
 
       try {
         const status = await googleContactsService.getIntegrationStatus(tenantId);
@@ -220,7 +220,7 @@ export async function googleIntegrationAdminRoutes(fastify: FastifyInstance) {
       }>,
       reply: FastifyReply
     ) => {
-      const tenantId = request.body?.tenantId || resolveTenant(request);
+      const tenantId = resolveTenant(request);
 
       try {
         const status = await googleContactsService.getIntegrationStatus(tenantId);
@@ -265,7 +265,7 @@ export async function googleIntegrationAdminRoutes(fastify: FastifyInstance) {
       }>,
       reply: FastifyReply
     ) => {
-      const tenantId = request.body?.tenantId || resolveTenant(request);
+      const tenantId = resolveTenant(request);
 
       try {
         await googleOAuthClientManager.revokeAndDisconnect(tenantId);
@@ -335,7 +335,7 @@ export async function googleIntegrationAdminRoutes(fastify: FastifyInstance) {
       }>,
       reply: FastifyReply
     ) => {
-      const tenantId = request.body?.tenantId || resolveTenant(request);
+      const tenantId = resolveTenant(request);
       const body = request.body || {};
       try {
         const { sheetsSyncService } = await import('../../services/sheets/sheets-sync.service');
@@ -363,6 +363,32 @@ export async function googleIntegrationAdminRoutes(fastify: FastifyInstance) {
   );
 
   /**
+   * POST /api/admin/integrations/google/sheets/outbox/requeue
+   * Dead-letter requeue: kembalikan baris `failed` ke antrean.
+   */
+  fastify.post(
+    '/api/admin/integrations/google/sheets/outbox/requeue',
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const tenantId = resolveTenant(request);
+      try {
+        const { sheetsSyncService } = await import('../../services/sheets/sheets-sync.service');
+        const requeued = await sheetsSyncService.requeueFailed(tenantId);
+        await auditService.logAdminAction({
+          apiKey: (request as any).adminKeyUsed,
+          adminIdentity: (request as any).adminIdentity,
+          tenantId,
+          action: 'SHEETS_OUTBOX_REQUEUE',
+          payload: { requeued },
+          ipAddress: request.ip,
+        });
+        return reply.status(200).send({ success: true, requeued });
+      } catch (err: any) {
+        return reply.status(500).send({ success: false, error: err?.message });
+      }
+    }
+  );
+
+  /**
    * POST /api/admin/integrations/google/sheets-test
    * Uji koneksi tulis: pastikan tab bulan berjalan siap (duplikat template bila
    * perlu) tanpa menulis baris data. Mengembalikan pesan jujur bila izin kurang.
@@ -370,7 +396,7 @@ export async function googleIntegrationAdminRoutes(fastify: FastifyInstance) {
   fastify.post(
     '/api/admin/integrations/google/sheets-test',
     async (request: FastifyRequest<{ Body: { tenantId?: string } }>, reply: FastifyReply) => {
-      const tenantId = request.body?.tenantId || resolveTenant(request);
+      const tenantId = resolveTenant(request);
       try {
         const { sheetsSyncService } = await import('../../services/sheets/sheets-sync.service');
         const result = await sheetsSyncService.testConnection(tenantId);

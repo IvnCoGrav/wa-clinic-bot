@@ -45,6 +45,23 @@ export async function gracefulShutdown(server: FastifyInstance, signal: string):
     console.error('[SHUTDOWN] clearAllIntervals() gagal:', e?.message);
   }
 
+  // Tutup hub realtime lebih dulu agar SSE/Redis tidak menahan server.close().
+  try {
+    const { getLiveChatHub } = await import('../services/live-chat-hub.service');
+    await getLiveChatHub().close();
+    console.log('[SHUTDOWN] Live chat hub ditutup.');
+  } catch (e: any) {
+    console.error('[SHUTDOWN] liveChatHub.close() gagal:', e?.message);
+  }
+
+  try {
+    const { drainInFlightCronTasks } = await import('./background-crons');
+    const drained = await drainInFlightCronTasks(Math.max(0, FORCE_EXIT_MS - 1500));
+    console.log(`[SHUTDOWN] Cron in-flight ${drained ? 'selesai' : 'timeout'} didrain.`);
+  } catch (e: any) {
+    console.error('[SHUTDOWN] drainInFlightCronTasks() gagal:', e?.message);
+  }
+
   try {
     await server.close();
     console.log('[SHUTDOWN] HTTP server ditutup.');

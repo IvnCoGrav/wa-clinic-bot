@@ -31,6 +31,7 @@
 # TANPA dependency npm baru (mandat zero new runtime dependencies).
 #
 set -uo pipefail
+umask 077
 
 APP_DIR="${WATCHDOG_APP_DIR:-/opt/wa-clinic-bot}"
 CONFIG_FILE="${WATCHDOG_CONFIG:-$APP_DIR/.watchdog.env}"
@@ -48,15 +49,35 @@ log() {
   echo "[$(date -u +%FT%TZ)] $1" >> "$LOG_FILE"
 }
 
+# --- Parser KEY=VALUE aman (tanpa `source`/xargs) ---
+# `source` mengeksekusi substitusi perintah di dalam file dan mengekspor seluruh
+# variabel; file konfigurasi/state hanya boleh menyumbang key yang diizinkan.
+parse_kv_file() { # $1=file, sisa=key yang diizinkan
+  local file="$1"; shift
+  local allowed=" $* "
+  local line key value
+  [[ -f "$file" ]] || return 1
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    [[ "$line" =~ ^[[:space:]]*# ]] && continue
+    [[ -z "${line//[[:space:]]/}" ]] && continue
+    key="${line%%=*}"
+    key="${key//[[:space:]]/}"
+    value="${line#*=}"
+    [[ "$key" =~ ^[A-Z0-9_]+$ ]] || continue
+    [[ "$allowed" == *" $key "* ]] || continue
+    value="${value%\"}"; value="${value#\"}"
+    value="${value%\'}"; value="${value#\'}"
+    printf -v "$key" '%s' "$value"
+  done < "$file"
+  return 0
+}
+
 # --- Muat kredensial (JANGAN pernah echo nilainya ke log) ---
 if [[ ! -f "$CONFIG_FILE" ]]; then
   log "ERROR: file konfigurasi tidak ada: $CONFIG_FILE (jalankan install-server-watchdog.sh)"
   exit 2
 fi
-# shellcheck disable=SC1090
-set -a
-source "$CONFIG_FILE"
-set +a
+parse_kv_file "$CONFIG_FILE" WATCHDOG_BOT_TOKEN WATCHDOG_CHAT_ID WATCHDOG_TOPIC WATCHDOG_HOST_LABEL || true
 
 if [[ -z "${WATCHDOG_BOT_TOKEN:-}" || -z "${WATCHDOG_CHAT_ID:-}" ]]; then
   log "ERROR: WATCHDOG_BOT_TOKEN / WATCHDOG_CHAT_ID kosong di $CONFIG_FILE"
@@ -76,8 +97,7 @@ PREV_CONSEC=0
 DOWN_SINCE=0
 LAST_ALERT=0
 if [[ -f "$STATE_FILE" ]]; then
-  # shellcheck disable=SC1090
-  source "$STATE_FILE"
+  parse_kv_file "$STATE_FILE" STATE CONSEC DOWN_SINCE LAST_ALERT || true
   PREV_STATE="${STATE:-OK}"
   PREV_CONSEC="${CONSEC:-0}"
   DOWN_SINCE="${DOWN_SINCE:-0}"
@@ -98,14 +118,27 @@ Host: ${WATCHDOG_HOST_LABEL:-wa-clinic-bot}
 $extra
 Cek manual: $SITE_URL/health"
 
-  local args=( -sS --max-time 20 -o /dev/null -w '%{http_code}'
+  # M17-13-WATCHDOG: token TIDAK boleh muncul di argv (terlihat via `ps`).
+  # URL ber-token ditulis ke file config curl mode 600; teks dikirim via file
+  # agar aman terhadap newline/karakter khusus.
+  local cfg textfile code
+  cfg="$(mktemp "$STATE_DIR/curl-cfg.XXXXXX")"
+  textfile="$(mktemp "$STATE_DIR/tg-text.XXXXXX")"
+  chmod 600 "$cfg" "$textfile" 2>/dev/null || true
+  printf '%s' "$text" > "$textfile"
+  {
+    printf 'url = "%s/bot%s/sendMessage"\n' "$API_URL" "$WATCHDOG_BOT_TOKEN"
+    printf 'silent\nshow-error\noutput = "/dev/null"\nmax-time = 20\n'
+  } > "$cfg"
+
+  local args=( -K "$cfg" -w '%{http_code}'
     --data-urlencode "chat_id=$WATCHDOG_CHAT_ID"
-    --data-urlencode "text=$text" )
+    --data-urlencode "text@$textfile" )
   if [[ -n "${WATCHDOG_TOPIC:-}" ]]; then
     args+=( --data-urlencode "message_thread_id=$WATCHDOG_TOPIC" )
   fi
-  local code
-  code="$(curl "${args[@]}" "$API_URL/bot$WATCHDOG_BOT_TOKEN/sendMessage" 2>/dev/null || echo 000)"
+  code="$(curl "${args[@]}" 2>/dev/null || echo 000)"
+  rm -f "$cfg" "$textfile"
   if [[ "$code" == "200" ]]; then
     return 0
   fi

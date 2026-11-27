@@ -29,8 +29,8 @@ describe('Task S2.3 — Provider-Aware Readiness Probe (/ready)', () => {
     expect(res.statusCode).toBe(200);
     const body = res.json();
     expect(body.status).toBe('READY');
-    expect(body.checks.database).toBe('CONNECTED');
-    expect(body.checks.waha).toBe('WORKING');
+    // M19-09: detail dependency tidak lagi diekspos di endpoint publik.
+    expect(body.checks).toBeUndefined();
   });
 
   it('mengembalikan 503 jika WAHA down pada tenant yang menggunakan WAHA', async () => {
@@ -44,19 +44,21 @@ describe('Task S2.3 — Provider-Aware Readiness Probe (/ready)', () => {
 
     expect(res.statusCode).toBe(503);
     const body = res.json();
-    expect(body.status).toBe('NOT_READY');
-    expect(body.checks.waha).toContain('FAILED');
+    expect(body).toEqual({ status: 'NOT_READY' });
+    expect(res.payload).not.toContain('Connection refused');
   });
 
   it('mengembalikan 200 READY pada lingkungan WABA-only meskipun WAHA server down/mati', async () => {
-    vi.spyOn(prisma, '$queryRaw').mockResolvedValueOnce([1] as any);
+    // Panggilan raw pertama: SELECT 1. Kedua: COUNT tenant WABA tanpa kredensial.
+    vi.spyOn(prisma, '$queryRaw')
+      .mockResolvedValueOnce([1] as any)
+      .mockResolvedValueOnce([{ missing: 0 }] as any);
     // Seluruh tenant menggunakan provider WABA murni
     vi.spyOn(prisma.tenant, 'findMany').mockResolvedValueOnce([
       {
         id: 'tenant-waba',
         whatsapp_provider: 'WABA',
         waba_phone_number_id: '10987654321',
-        waba_access_token: 'secret-token',
       },
     ] as any);
     // Jika wahaClient dipanggil, dia akan throw error
@@ -67,9 +69,7 @@ describe('Task S2.3 — Provider-Aware Readiness Probe (/ready)', () => {
     expect(res.statusCode).toBe(200);
     const body = res.json();
     expect(body.status).toBe('READY');
-    expect(body.checks.database).toBe('CONNECTED');
-    expect(body.checks.waba).toBe('CONFIGURED');
-    expect(body.checks.waha).toBeUndefined();
+    expect(body.checks).toBeUndefined();
     // Memastikan WAHA tidak pernah disentuh sama sekali saat WABA-only
     expect(wahaSpy).not.toHaveBeenCalled();
   });
@@ -80,15 +80,44 @@ describe('Task S2.3 — Provider-Aware Readiness Probe (/ready)', () => {
     vi.spyOn(prisma.tenant, 'findMany').mockResolvedValueOnce([
       { id: 'default-tenant', whatsapp_provider: 'WAHA' },
     ] as any);
+    // G8: heartbeat worker harus terlihat agar cron dianggap sehat.
+    (prisma as any).cronJobHeartbeat = {
+      findMany: vi.fn().mockResolvedValue([
+        {
+          job_name: 'sheets-sync',
+          last_started_at: new Date(Date.now() - 60_000),
+          last_finished_at: new Date(Date.now() - 30_000),
+          last_status: 'SUCCESS',
+          last_error: null,
+          consecutive_failures: 0,
+        },
+      ]),
+    };
     vi.spyOn(wahaClient, 'getSessionStatus').mockResolvedValueOnce('WORKING');
     vi.spyOn(queueService, 'isRedisEnabled').mockReturnValueOnce(true);
-    vi.spyOn(queueService, 'pingRedis').mockResolvedValueOnce(true);
+    const pingSpy = vi.spyOn(queueService, 'pingRedis').mockResolvedValueOnce(true);
 
     const res = await app.inject({ method: 'GET', url: '/ready' });
 
     expect(res.statusCode).toBe(200);
-    const body = res.json();
-    expect(body.status).toBe('READY');
-    expect(body.checks.queue).toBe('CONNECTED');
+    expect(res.json()).toEqual({ status: 'READY' });
+    expect(pingSpy).toHaveBeenCalled();
+  });
+
+  it('queue tidak responsif pada mode worker terpisah → 503 tanpa detail', async () => {
+    process.env.SEPARATE_WORKER = 'true';
+    vi.spyOn(prisma, '$queryRaw').mockResolvedValueOnce([1] as any);
+    vi.spyOn(prisma.tenant, 'findMany').mockResolvedValueOnce([
+      { id: 'default-tenant', whatsapp_provider: 'WAHA' },
+    ] as any);
+    (prisma as any).cronJobHeartbeat = { findMany: vi.fn().mockResolvedValue([]) };
+    vi.spyOn(wahaClient, 'getSessionStatus').mockResolvedValueOnce('WORKING');
+    vi.spyOn(queueService, 'isRedisEnabled').mockReturnValueOnce(true);
+    vi.spyOn(queueService, 'pingRedis').mockResolvedValueOnce(false);
+
+    const res = await app.inject({ method: 'GET', url: '/ready' });
+
+    expect(res.statusCode).toBe(503);
+    expect(res.json()).toEqual({ status: 'NOT_READY' });
   });
 });

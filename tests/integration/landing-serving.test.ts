@@ -53,7 +53,7 @@ describe('Landing Serving di Bot — /go, /promo/:slug, /:slug (offline DB)', ()
     expect(String(res.headers['content-security-policy'])).toContain('frame-ancestors');
 
     const html = res.body;
-    expect(html).toContain("fbq('init', 'PIXEL_123')");
+    expect(html).toContain(`fbq('init', "PIXEL_123")`);
     // PageView kini dengan eventID kembar untuk dedup CAPI (Fase 1)
     expect(html).toContain("fbq('track', 'PageView'");
     expect(html).toContain('eventID');
@@ -89,7 +89,7 @@ describe('Landing Serving di Bot — /go, /promo/:slug, /:slug (offline DB)', ()
     expect(html).toContain('<script nonce=');
     expect(html).toContain('Judul Template');
     expect(html).toContain('id="wa-cta"');
-    expect(html).toContain("fbq('init', 'PIXEL_SYS')");
+    expect(html).toContain(`fbq('init', "PIXEL_SYS")`);
     expect(html).toContain("fbq('track', 'ViewContent')");
     // tracking same-origin: base kosong → fetch relatif
     expect(html).toContain("'/api/tracking/click'");
@@ -127,13 +127,9 @@ describe('Landing Serving di Bot — /go, /promo/:slug, /:slug (offline DB)', ()
     expect(JSON.parse(res.body).status).toBe('OK');
   });
 
-  it('8. JSON API /api/tenant/:slug tetap fail-open (backward-compat)', async () => {
+  it('8. JSON API /api/tenant/:slug tidak fail-open untuk slug tak dikenal', async () => {
     const res = await app.inject({ method: 'GET', url: '/api/tenant/promo-baby' });
-    expect(res.statusCode).toBe(200);
-    const body = JSON.parse(res.body);
-    expect(body.events).toEqual([]);
-    expect(body.slug).toBe('promo-baby');
-    expect(body.meta_capi_access_token).toBeUndefined();
+    expect(res.statusCode).toBe(404);
   });
 
   it('9. GET /assets/external-tracker.js tersaji (jembatan LP eksternal)', async () => {
@@ -144,9 +140,9 @@ describe('Landing Serving di Bot — /go, /promo/:slug, /:slug (offline DB)', ()
     expect(res.body).toContain('data-external-tracker-applied');
   });
 
-  it('10. GET /assets/:filename menolak filename tidak valid', async () => {
+  it('10. GET /assets/:filename menolak filename tidak valid / tidak ada di allowlist', async () => {
     const res = await app.inject({ method: 'GET', url: '/assets/foo%20bar.js' });
-    expect(res.statusCode).toBe(400);
+    expect(res.statusCode).toBe(404);
   });
 
   it('11. GET /pricelist menyajikan landing page pricelist resmi dan alias me-redirect', async () => {

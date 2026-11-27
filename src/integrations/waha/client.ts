@@ -2,6 +2,7 @@ import axios from 'axios';
 import dotenv from 'dotenv';
 import { DEFAULT_TENANT_ID } from '../../config/tenant';
 import { normalizeWhatsAppFormat } from '../../utils/whatsapp-format';
+import { MAX_INBOUND_DOCUMENT_BYTES } from '../../utils/media-limits';
 import {
   getCachedLabels,
   setCachedLabels,
@@ -1204,6 +1205,8 @@ export class WahaClient implements IWahaClient {
               },
               responseType: 'arraybuffer',
               timeout: 15000,
+              maxContentLength: MAX_INBOUND_DOCUMENT_BYTES,
+              maxBodyLength: MAX_INBOUND_DOCUMENT_BYTES,
             });
 
             if (response.status >= 200 && response.status < 300 && response.data) {
@@ -1239,6 +1242,8 @@ export class WahaClient implements IWahaClient {
           headers: { 'X-Api-Key': this.apiKey || undefined },
           responseType: 'arraybuffer',
           timeout: 15000,
+          maxContentLength: MAX_INBOUND_DOCUMENT_BYTES,
+          maxBodyLength: MAX_INBOUND_DOCUMENT_BYTES,
         }
       );
       if (response.status >= 200 && response.status < 300 && response.data) {
@@ -1265,6 +1270,8 @@ export class WahaClient implements IWahaClient {
         headers: { 'X-Api-Key': this.apiKey || undefined },
         responseType: 'arraybuffer',
         timeout: 15000,
+        maxContentLength: MAX_INBOUND_DOCUMENT_BYTES,
+        maxBodyLength: MAX_INBOUND_DOCUMENT_BYTES,
       });
       if (response.status >= 200 && response.status < 300 && response.data) {
         return Buffer.from(response.data);

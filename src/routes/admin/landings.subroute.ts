@@ -9,6 +9,7 @@ import {
   VALID_LANDING_EVENTS,
   purgeLandingCache,
 } from './stores';
+import { parseMetaPixelId, parseWhatsappNumber } from '../../utils/landing-fields';
 
 export async function landingAdminRoutes(fastify: FastifyInstance) {
   const previewBaseUrlForLanding = () =>
@@ -36,12 +37,6 @@ export async function landingAdminRoutes(fastify: FastifyInstance) {
     return Array.from(
       new Set(raw.filter((e) => typeof e === 'string' && VALID_LANDING_EVENTS.includes(e)))
     ) as string[];
-  };
-
-  const normalizeNullableString = (raw: any): string | null => {
-    if (typeof raw !== 'string') return null;
-    const t = raw.trim();
-    return t ? t : null;
   };
 
   /**
@@ -307,8 +302,9 @@ export async function landingAdminRoutes(fastify: FastifyInstance) {
     '/api/admin/landings/:id',
     async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
       const { id } = request.params;
+      const tenantId = resolveSessionTenantId(request);
       try {
-        const l = await prisma.landingPage.findUnique({ where: { id } });
+        const l = await prisma.landingPage.findFirst({ where: { id, tenant_id: tenantId } });
         if (!l) return reply.status(404).send({ error: `Landing page '${id}' tidak ditemukan.` });
         return reply.status(200).send({
           success: true,
@@ -321,7 +317,9 @@ export async function landingAdminRoutes(fastify: FastifyInstance) {
       } catch (err: any) {
         console.warn(`[LANDING GET FALLBACK] DB offline:`, err.message);
         const l = memoryLandings.get(id);
-        if (!l) return reply.status(200).send({ success: true, data: null });
+        if (!l || l.tenant_id !== tenantId) {
+          return reply.status(200).send({ success: true, data: null });
+        }
         return reply.status(200).send({
           success: true,
           data: { ...toLandingListItem(l), rawHtmlContent: l.html_content || '', metaPixelId: l.meta_pixel_id || '' },
@@ -356,6 +354,13 @@ export async function landingAdminRoutes(fastify: FastifyInstance) {
       landingType = 'RAW_HTML';
     }
 
+    const pixelInput = parseMetaPixelId(body.metaPixelId);
+    if (!pixelInput.ok) return reply.status(400).send({ error: pixelInput.error });
+    const waInput = parseWhatsappNumber(body.whatsappNumber);
+    if (!waInput.ok) return reply.status(400).send({ error: waInput.error });
+    const metaPixelId = pixelInput.value;
+    const whatsappNumber = waInput.value;
+
     try {
       const existing = await prisma.landingPage.findFirst({ where: { slug, tenant_id: tenantId } });
       if (existing) return reply.status(409).send({ error: `Slug '${slug}' sudah dipakai landing page lain.` });
@@ -374,8 +379,8 @@ export async function landingAdminRoutes(fastify: FastifyInstance) {
           landing_type: landingType,
           html_content: sanitizedHtml,
           events,
-          meta_pixel_id: normalizeNullableString(body.metaPixelId),
-          whatsapp_number: normalizeNullableString(body.whatsappNumber),
+          meta_pixel_id: metaPixelId,
+          whatsapp_number: whatsappNumber,
           is_active: body.isActive !== false,
         },
       });
@@ -416,8 +421,8 @@ export async function landingAdminRoutes(fastify: FastifyInstance) {
         landing_type: landingType,
         html_content: sanitizedHtml,
         events,
-        meta_pixel_id: normalizeNullableString(body.metaPixelId),
-        whatsapp_number: normalizeNullableString(body.whatsappNumber),
+        meta_pixel_id: metaPixelId,
+        whatsapp_number: whatsappNumber,
         is_active: body.isActive !== false,
         created_at: new Date(),
         updated_at: new Date(),
@@ -440,9 +445,21 @@ export async function landingAdminRoutes(fastify: FastifyInstance) {
     async (request: FastifyRequest<{ Params: { id: string }; Body: any }>, reply: FastifyReply) => {
       const { id } = request.params;
       const body = (request.body || {}) as any;
+      const tenantId = resolveSessionTenantId(request);
+
+      const pixelOverrideResult = body.metaPixelId !== undefined ? parseMetaPixelId(body.metaPixelId) : null;
+      if (pixelOverrideResult && !pixelOverrideResult.ok) {
+        return reply.status(400).send({ error: pixelOverrideResult.error });
+      }
+      const waOverrideResult = body.whatsappNumber !== undefined ? parseWhatsappNumber(body.whatsappNumber) : null;
+      if (waOverrideResult && !waOverrideResult.ok) {
+        return reply.status(400).send({ error: waOverrideResult.error });
+      }
+      const metaPixelOverride = pixelOverrideResult && pixelOverrideResult.ok ? pixelOverrideResult.value : undefined;
+      const whatsappOverride = waOverrideResult && waOverrideResult.ok ? waOverrideResult.value : undefined;
 
       try {
-        const existing = await prisma.landingPage.findUnique({ where: { id } });
+        const existing = await prisma.landingPage.findFirst({ where: { id, tenant_id: tenantId } });
         if (!existing) return reply.status(404).send({ error: `Landing page '${id}' tidak ditemukan.` });
 
         const title = typeof body.title === 'string' ? body.title.trim() : existing.title;
@@ -482,8 +499,8 @@ export async function landingAdminRoutes(fastify: FastifyInstance) {
             landing_type: landingType,
             html_content: sanitizedHtml,
             events,
-            meta_pixel_id: body.metaPixelId !== undefined ? normalizeNullableString(body.metaPixelId) : existing.meta_pixel_id,
-            whatsapp_number: body.whatsappNumber !== undefined ? normalizeNullableString(body.whatsappNumber) : existing.whatsapp_number,
+            meta_pixel_id: metaPixelOverride !== undefined ? metaPixelOverride : existing.meta_pixel_id,
+            whatsapp_number: whatsappOverride !== undefined ? whatsappOverride : existing.whatsapp_number,
             is_active: body.isActive !== undefined ? !!body.isActive : existing.is_active,
           },
         });
@@ -522,7 +539,9 @@ export async function landingAdminRoutes(fastify: FastifyInstance) {
           });
         }
         const rec = memoryLandings.get(id);
-        if (!rec) return reply.status(404).send({ error: `Landing page '${id}' tidak ditemukan.` });
+        if (!rec || rec.tenant_id !== tenantId) {
+          return reply.status(404).send({ error: `Landing page '${id}' tidak ditemukan.` });
+        }
 
         const title = typeof body.title === 'string' ? body.title.trim() : rec.title;
         const slug = typeof body.slug === 'string' ? body.slug.trim().toLowerCase() : rec.slug;
@@ -544,8 +563,8 @@ export async function landingAdminRoutes(fastify: FastifyInstance) {
         rec.landing_type = landingType;
         rec.html_content = sanitizedHtml;
         rec.events = body.events !== undefined ? normalizeLandingEvents(body.events) : rec.events || [];
-        rec.meta_pixel_id = body.metaPixelId !== undefined ? normalizeNullableString(body.metaPixelId) : rec.meta_pixel_id;
-        rec.whatsapp_number = body.whatsappNumber !== undefined ? normalizeNullableString(body.whatsappNumber) : rec.whatsapp_number;
+        rec.meta_pixel_id = metaPixelOverride !== undefined ? metaPixelOverride : rec.meta_pixel_id;
+        rec.whatsapp_number = whatsappOverride !== undefined ? whatsappOverride : rec.whatsapp_number;
         rec.is_active = body.isActive !== undefined ? !!body.isActive : rec.is_active;
         rec.updated_at = new Date();
         memoryLandings.set(id, rec);
@@ -567,8 +586,9 @@ export async function landingAdminRoutes(fastify: FastifyInstance) {
     '/api/admin/landings/:id',
     async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
       const { id } = request.params;
+      const tenantId = resolveSessionTenantId(request);
       try {
-        const existing = await prisma.landingPage.findUnique({ where: { id } });
+        const existing = await prisma.landingPage.findFirst({ where: { id, tenant_id: tenantId } });
         if (!existing) return reply.status(404).send({ error: `Landing page '${id}' tidak ditemukan.` });
 
         await prisma.landingPage.delete({ where: { id } });
@@ -595,7 +615,9 @@ export async function landingAdminRoutes(fastify: FastifyInstance) {
           });
         }
         const rec = memoryLandings.get(id);
-        if (!rec) return reply.status(404).send({ error: `Landing page '${id}' tidak ditemukan.` });
+        if (!rec || rec.tenant_id !== tenantId) {
+          return reply.status(404).send({ error: `Landing page '${id}' tidak ditemukan.` });
+        }
         memoryLandings.delete(id);
         await purgeLandingCache(rec.slug);
         return reply

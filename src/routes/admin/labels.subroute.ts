@@ -374,6 +374,7 @@ export async function labelsAdminRoutes(fastify: FastifyInstance) {
         // Resolve customer from DB
         let customer = await prisma.customer.findFirst({
           where: {
+            tenant_id: tenantId,
             OR: [{ id: customerId }, { phone: customerId }],
           },
         });
@@ -440,7 +441,7 @@ export async function labelsAdminRoutes(fastify: FastifyInstance) {
         }
 
         // Resolve label from DB (with fallback to default label auto-creation)
-        let targetLabel = await prisma.label.findUnique({ where: { id: labelId } });
+        let targetLabel = await prisma.label.findFirst({ where: { id: labelId, tenant_id: tenantId } });
         if (!targetLabel) {
           const memLbl = memoryLabels.get(labelId);
           const lookupName = memLbl?.name || labelId;

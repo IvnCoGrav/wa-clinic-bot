@@ -44,6 +44,13 @@ export interface CostOptions {
  * (Qwen, OpenAI, Gemini, Mimo, MiniMax, BytePlus, Tencent, embeddings).
  */
 const MODEL_PRICING_MAP: Record<string, ModelPricing> = {
+  // Hermes dijalankan internal (tanpa tarif per-token yang dapat diverifikasi).
+  // Biaya 0 eksplisit agar dashboard tidak memakai fallback-unverified.
+  'hermes-agent': {
+    provider: 'Hermes (internal)',
+    promptCostPer1kIdr: 0,
+    completionCostPer1kIdr: 0,
+  },
   // Qwen Models (Alibaba) — Primary & Fallback Models
   'qwen3.7-flash-2026-07-15': {
     provider: 'Alibaba Qwen',

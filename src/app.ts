@@ -8,6 +8,7 @@ import { healthRoutes } from './routes/health.route';
 import { trackingRoutes } from './routes/tracking.route';
 import { landingRoutes } from './routes/landing.route';
 import { mediaRoutes } from './routes/media.route';
+import { publicConfigRoutes } from './routes/public-config.route';
 import { telegramWebhookRoutes } from './routes/telegram-webhook.route';
 import rateLimit from '@fastify/rate-limit';
 import compress from '@fastify/compress';
@@ -78,6 +79,9 @@ export function buildApp() {
 
   const app = Fastify({
     trustProxy: trustProxyConfig,
+    // Tutup koneksi long-lived (SSE hijack/keep-alive) saat shutdown agar
+    // server.close() tidak menggantung sampai force-exit.
+    forceCloseConnections: true,
     logger: {
       level: process.env.FASTIFY_LOG_LEVEL || (process.env.NODE_ENV === 'production' ? 'warn' : (process.env.LOG_LEVEL === 'debug' ? 'debug' : 'info')),
     },
@@ -151,10 +155,12 @@ export function buildApp() {
     "media-src 'self' data: blob: https:; " +
     "frame-ancestors 'self'; base-uri 'self'; form-action 'self'; object-src 'none';";
   app.addHook('onSend', async (request, reply, payload) => {
+    // SEMUA respons: cegah browser menebak MIME (media kiriman WhatsApp, file
+    // upstream, dsb) dan merendernya sebagai HTML di origin aplikasi.
+    reply.header('X-Content-Type-Options', 'nosniff');
     const path = request.url.split('?')[0];
     if (path === '/admin' || path.startsWith('/admin/')) {
       reply.header('Content-Security-Policy', ADMIN_CSP);
-      reply.header('X-Content-Type-Options', 'nosniff');
       reply.header('Referrer-Policy', 'strict-origin-when-cross-origin');
       reply.header('X-Frame-Options', 'SAMEORIGIN');
       reply.header('Permissions-Policy', 'camera=(), microphone=(), geolocation=(self)');
@@ -284,6 +290,7 @@ export function buildApp() {
   app.register(trackingRoutes);
   app.register(landingRoutes);
   app.register(mediaRoutes);
+  app.register(publicConfigRoutes);
   app.register(telegramWebhookRoutes);
 
   // AUDIT FASE 3 (K-03b): humanizer (typing/sendSeen/sendText) WAJIB memakai

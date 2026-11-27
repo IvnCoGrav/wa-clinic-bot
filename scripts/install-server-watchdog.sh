@@ -15,6 +15,7 @@
 # Meta. Satu-satunya efek samping: 1 pesan uji ke grup Telegram + 1 baris cron.
 #
 set -uo pipefail
+umask 077
 
 APP_DIR="/opt/wa-clinic-bot"
 ENV_FILE="$APP_DIR/.env"
@@ -85,12 +86,23 @@ crontab -l | grep "server-watchdog.sh"
 
 echo "=== 4. Uji kirim pesan Telegram ==="
 chmod +x "$APP_DIR/scripts/server-watchdog.sh"
-# Pesan uji langsung (terpisah dari logika watchdog agar pasti terkirim sekali):
+# Pesan uji langsung (terpisah dari logika watchdog agar pasti terkirim sekali).
+# M17-13-WATCHDOG: token tidak boleh masuk argv — pakai config curl dari file 600.
 TEXT="✅ Watchdog server AKTIF — notifikasi DOWN/RECOVERY akan masuk ke sini."
-ARGS=( -sS --max-time 20 -o /dev/null -w '%{http_code}'
-  --data-urlencode "chat_id=$CHAT_ID" --data-urlencode "text=$TEXT" )
+CFG_FILE="$(mktemp)"
+TEXT_FILE="$(mktemp)"
+chmod 600 "$CFG_FILE" "$TEXT_FILE"
+printf '%s' "$TEXT" > "$TEXT_FILE"
+{
+  printf 'url = "https://api.telegram.org/bot%s/sendMessage"\n' "$BOT_TOKEN"
+  printf 'silent\nshow-error\noutput = "/dev/null"\nmax-time = 20\n'
+} > "$CFG_FILE"
+ARGS=( -K "$CFG_FILE" -w '%{http_code}'
+  --data-urlencode "chat_id=$CHAT_ID"
+  --data-urlencode "text@$TEXT_FILE" )
 [[ -n "$TOPIC" ]] && ARGS+=( --data-urlencode "message_thread_id=$TOPIC" )
-CODE="$(curl "${ARGS[@]}" "https://api.telegram.org/bot$BOT_TOKEN/sendMessage" 2>/dev/null || echo 000)"
+CODE="$(curl "${ARGS[@]}" 2>/dev/null || echo 000)"
+rm -f "$CFG_FILE" "$TEXT_FILE"
 if [[ "$CODE" == "200" ]]; then
   echo "Pesan uji TERKIRIM (http 200). Selesai."
 else

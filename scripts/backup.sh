@@ -19,9 +19,12 @@ echo "=== MEMULAI PROSES CADANGAN (BACKUP) ==="
 # 2. Backup Database PostgreSQL
 echo "[1/3] Melakukan dump database PostgreSQL..."
 if [ -z "${DATABASE_URL:-}" ]; then
-  # Fallback jika var tidak diset di shell, coba baca dari .env
+  # Fallback jika var tidak diset di shell: baca AMAN dari .env (tanpa `source`/
+  # xargs — hanya key yang dibutuhkan, nilai tidak dieksekusi/dipecah spasi).
   if [ -f .env ]; then
-    export $(grep -v '^#' .env | xargs)
+    DATABASE_URL="$(sed -n 's/^DATABASE_URL=//p' .env | head -1 | tr -d '"')"
+    POSTGRES_DB="$(sed -n 's/^POSTGRES_DB=//p' .env | head -1 | tr -d '"')"
+    export DATABASE_URL POSTGRES_DB
   fi
 fi
 

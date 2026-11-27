@@ -6,34 +6,64 @@
 #   bash scripts/vps-migrate-import.sh [PATH_TO_BUNDLE_TAR_GZ]
 # =============================================================================
 set -euo pipefail
+# F7/M17-13: seluruh berkas restore memuat PII/.env — paksa mode privat.
+umask 077
 
 APP_DIR="/opt/wa-clinic-bot"
 cd "$APP_DIR"
 
 BUNDLE_FILE="${1:-}"
 if [ -z "$BUNDLE_FILE" ]; then
-  # Cari bundle terbaru di /opt atau $APP_DIR/backups
-  BUNDLE_FILE=$(ls -t /opt/wa-clinic-migration-*.tar.gz "$APP_DIR"/backups/wa-clinic-migration-*.tar.gz 2>/dev/null | head -1 || true)
+  # Cari bundle terbaru di /opt atau $APP_DIR/backups (utamakan terenkripsi).
+  BUNDLE_FILE=$(ls -t /opt/wa-clinic-migration-*.tar.gz.enc "$APP_DIR"/backups/wa-clinic-migration-*.tar.gz.enc \
+    /opt/wa-clinic-migration-*.tar.gz "$APP_DIR"/backups/wa-clinic-migration-*.tar.gz 2>/dev/null | head -1 || true)
 fi
 
 if [ -z "$BUNDLE_FILE" ] || [ ! -f "$BUNDLE_FILE" ]; then
   echo "ERROR: File bundle migrasi tidak ditemukan!"
-  echo "Penggunaan: bash scripts/vps-migrate-import.sh /path/to/wa-clinic-migration-*.tar.gz"
+  echo "Penggunaan: bash scripts/vps-migrate-import.sh /path/to/wa-clinic-migration-*.tar.gz.enc"
   exit 1
 fi
 
 echo "======================================================"
 echo "==> [1/7] VERIFIKASI & EKSTRAK BUNDLE: $BUNDLE_FILE ..."
 echo "======================================================"
-if [ -f "$BUNDLE_FILE.sha256" ]; then
-  echo "Memeriksa integritas checksum SHA256..."
-  sha256sum -c "$BUNDLE_FILE.sha256"
-  echo "Integritas bundle VALID ✓"
+# F7/M17-13: checksum WAJIB (bukan opsional). Tanpa checksum, integritas bundel
+# tidak terbukti dan restore PII tidak boleh dilanjutkan.
+CHECKSUM_FILE="$BUNDLE_FILE.sha256"
+if [ ! -f "$CHECKSUM_FILE" ]; then
+  echo "ERROR: checksum $CHECKSUM_FILE tidak ada. Restore dibatalkan (fail-closed)." >&2
+  exit 1
+fi
+echo "Memeriksa integritas checksum SHA256..."
+( cd "$(dirname "$BUNDLE_FILE")" && sha256sum -c "$(basename "$CHECKSUM_FILE")" )
+echo "Integritas bundle VALID ✓"
+
+# Dekripsi bundel ENC1 (AES-256-GCM) sebelum ekstraksi.
+RESTORE_INPUT="$BUNDLE_FILE"
+if [ "${BUNDLE_FILE##*.}" = "enc" ]; then
+  if [ -z "${BACKUP_ENCRYPTION_KEY:-}" ]; then
+    echo "ERROR: BACKUP_ENCRYPTION_KEY kosong — tidak bisa mendekripsi bundel." >&2
+    echo "  Kunci TIDAK bisa diambil dari bundel (berkas .env ikut terenkripsi)." >&2
+    echo "  Jalankan: BACKUP_ENCRYPTION_KEY='<kunci>' bash scripts/vps-migrate-import.sh $BUNDLE_FILE" >&2
+    exit 1
+  fi
+  if ! command -v npx >/dev/null 2>&1; then
+    echo "ERROR: npx tidak tersedia di host — dibutuhkan untuk dekripsi ENC1." >&2
+    exit 1
+  fi
+  RESTORE_INPUT="${BUNDLE_FILE%.enc}.decrypted"
+  npx tsx scripts/decrypt-backup.ts "$BUNDLE_FILE" "$RESTORE_INPUT"
+  chmod 600 "$RESTORE_INPUT"
+else
+  echo "WARN: bundel plaintext (format lama). Segera enkripsi dan hapus setelah restore." >&2
 fi
 
 TMP_DIR="/tmp/migration_restore_$(date +%s)"
 mkdir -p "$TMP_DIR"
-tar -xzf "$BUNDLE_FILE" -C "$TMP_DIR"
+chmod 700 "$TMP_DIR"
+tar -xzf "$RESTORE_INPUT" -C "$TMP_DIR"
+rm -f "$RESTORE_INPUT"
 
 BUNDLE_CONTENT_DIR=$(find "$TMP_DIR" -mindepth 1 -maxdepth 1 -type d | head -1)
 if [ -z "$BUNDLE_CONTENT_DIR" ]; then
@@ -45,7 +75,12 @@ echo "======================================================"
 echo "==> [2/7] MEMULIHKAN .ENV & STORAGE ..."
 echo "======================================================"
 cp "$BUNDLE_CONTENT_DIR/.env" "$APP_DIR/.env"
-echo "File .env berhasil dipulihkan ✓"
+chmod 600 "$APP_DIR/.env"
+echo "File .env berhasil dipulihkan (mode 600) ✓"
+
+# G11(a): turunkan .env.worker dari .env yang baru dipulihkan.
+node scripts/generate-worker-env.mjs
+node scripts/check-env-contract.mjs
 
 if [ -f "$BUNDLE_CONTENT_DIR/storage.tar.gz" ]; then
   tar -xzf "$BUNDLE_CONTENT_DIR/storage.tar.gz" -C "$APP_DIR"
@@ -61,11 +96,11 @@ docker volume create wa-clinic-bot_waha_sessions
 docker volume create wa-clinic-bot_caddy_data
 
 echo "Memulihkan volume sesi WhatsApp (anti-scan QR)..."
-docker run --rm -v wa-clinic-bot_waha_sessions:/data -v "$BUNDLE_CONTENT_DIR":/backup alpine sh -c "rm -rf /data/* && tar -xzf /backup/waha_sessions.tar.gz -C /data"
+docker run --rm -v wa-clinic-bot_waha_sessions:/data -v "$BUNDLE_CONTENT_DIR":/backup alpine:3@sha256:f59abe656b692d901e184be3445e084786602108599d2a51d229c0f5a48c71bf sh -c "rm -rf /data/* && tar -xzf /backup/waha_sessions.tar.gz -C /data"
 echo "Sesi WhatsApp berhasil dipulihkan ✓"
 
 echo "Memulihkan volume sertifikat Caddy SSL..."
-docker run --rm -v wa-clinic-bot_caddy_data:/data -v "$BUNDLE_CONTENT_DIR":/backup alpine sh -c "rm -rf /data/* && tar -xzf /backup/caddy_data.tar.gz -C /data"
+docker run --rm -v wa-clinic-bot_caddy_data:/data -v "$BUNDLE_CONTENT_DIR":/backup alpine:3@sha256:f59abe656b692d901e184be3445e084786602108599d2a51d229c0f5a48c71bf sh -c "rm -rf /data/* && tar -xzf /backup/caddy_data.tar.gz -C /data"
 echo "Sertifikat Caddy SSL berhasil dipulihkan ✓"
 
 echo

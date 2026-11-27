@@ -128,7 +128,7 @@ describe('Fase 1.5 — Raw HTML Custom Upload & 17-Layer Security Addendum Tests
     expect(injected).toContain(`script nonce="${nonce}"`);
     expect(injected).toContain('6288000000019'); // Reads server config phone
     expect(injected).toContain('kenanga');
-    expect(injected).toContain('fbq(\'init\', \'123456789\')');
+    expect(injected).toContain(`fbq('init', "123456789")`);
   });
 
   it('6. Payload Size Limit: HTML > 500 KB MUST return 413 Payload Too Large', async () => {

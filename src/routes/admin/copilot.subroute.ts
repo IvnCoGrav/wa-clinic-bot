@@ -4,6 +4,12 @@ import { isCopilotTenantAllowed, COPILOT_DEPRECATED_ERROR } from '../../config/c
 import { auditService } from '../../services/audit.service';
 import { copilotService, resolveCopilotConfig } from '../../services/copilot/copilot.service';
 import { resolveSessionTenantId } from './route-helpers';
+import { checkCopilotQuota, copilotPrincipalKey } from '../../services/copilot/copilot-quota';
+import {
+  assertCopilotDailyBudget,
+  estimateTurnTokens,
+  recordCopilotTokens,
+} from '../../services/copilot/copilot-budget';
 
 /**
  * Semaphore konkurensi Copilot per-tenant (in-memory).
@@ -11,18 +17,86 @@ import { resolveSessionTenantId } from './route-helpers';
  * mencegah lonjakan biaya LLM dan kelebihan beban database.
  */
 const activeTenantTurns = new Map<string, boolean>();
+/** TTL fail-safe: turn tanpa pelepasan tidak boleh mengunci tenant selamanya. */
+const activeTenantSince = new Map<string, number>();
+const TURN_LOCK_TTL_MS = 330_000;
 
 export function isCopilotBusy(tenantId: string): boolean {
-  return activeTenantTurns.get(tenantId) === true;
+  if (activeTenantTurns.get(tenantId) !== true) return false;
+  const since = activeTenantSince.get(tenantId) || 0;
+  if (since && Date.now() - since > TURN_LOCK_TTL_MS) {
+    activeTenantTurns.delete(tenantId);
+    activeTenantSince.delete(tenantId);
+    return false;
+  }
+  return true;
 }
 
 export function releaseCopilotTurn(tenantId: string): void {
   activeTenantTurns.delete(tenantId);
+  activeTenantSince.delete(tenantId);
+}
+
+const COPILOT_ID_RE = /^[a-z0-9][a-z0-9_-]{0,63}$/i;
+const MAX_HISTORY_TURNS = 10;
+const MAX_HISTORY_CONTENT = 4000;
+
+type ParsedCopilotBody =
+  | { ok: true; message: string; history: Array<{ role: 'user' | 'assistant'; content: string }>; activeContext?: { conversationId?: string; customerId?: string } }
+  | { ok: false; error: string };
+
+/**
+ * Kontrak body runtime (T6.1): role history hanya user/assistant dan content
+ * dibatasi. Role `system` kiriman klien DILARANG masuk ke transcript provider.
+ */
+function parseCopilotBody(body: any): ParsedCopilotBody {
+  const message = typeof body?.message === 'string' ? body.message.trim() : '';
+  if (!message) return { ok: false, error: 'message wajib diisi.' };
+  if (message.length > 2000) return { ok: false, error: 'message maksimal 2000 karakter.' };
+
+  const rawHistory = body?.history;
+  const history: Array<{ role: 'user' | 'assistant'; content: string }> = [];
+  if (rawHistory !== undefined) {
+    if (!Array.isArray(rawHistory)) return { ok: false, error: 'history harus berupa array.' };
+    if (rawHistory.length > MAX_HISTORY_TURNS) {
+      return { ok: false, error: `history maksimal ${MAX_HISTORY_TURNS} pesan.` };
+    }
+    for (const h of rawHistory) {
+      if (!h || typeof h !== 'object') return { ok: false, error: 'history berisi entri tidak valid.' };
+      const role = (h as any).role;
+      const content = (h as any).content;
+      if (role !== 'user' && role !== 'assistant') {
+        return { ok: false, error: 'history.role hanya boleh user atau assistant.' };
+      }
+      if (typeof content !== 'string' || !content.trim()) {
+        return { ok: false, error: 'history.content wajib berupa teks tidak kosong.' };
+      }
+      if (content.length > MAX_HISTORY_CONTENT) {
+        return { ok: false, error: `history.content maksimal ${MAX_HISTORY_CONTENT} karakter.` };
+      }
+      history.push({ role, content });
+    }
+  }
+
+  const conversationId = typeof body?.conversationId === 'string' ? body.conversationId.trim() : '';
+  const customerId = typeof body?.customerId === 'string' ? body.customerId.trim() : '';
+  if (conversationId && !COPILOT_ID_RE.test(conversationId)) {
+    return { ok: false, error: 'conversationId tidak valid.' };
+  }
+  if (customerId && !COPILOT_ID_RE.test(customerId)) {
+    return { ok: false, error: 'customerId tidak valid.' };
+  }
+  const activeContext =
+    conversationId || customerId
+      ? { conversationId: conversationId || undefined, customerId: customerId || undefined }
+      : undefined;
+
+  return { ok: true, message, history, activeContext };
 }
 
 /**
  * copilot.subroute.ts (Fase 6r + GLM-5.3 2026-11-03) — endpoint AI Clinic Copilot.
- * Auth admin + tenant-scope + rate-limit 6/min + SSE heartbeat 15s + single turn lock + audit.
+ * Auth admin + tenant-scope + kuota 6/menit per principal + SSE heartbeat 15s + single turn lock + audit.
  */
 export async function copilotAdminRoutes(fastify: FastifyInstance) {
   /**
@@ -31,15 +105,9 @@ export async function copilotAdminRoutes(fastify: FastifyInstance) {
    */
   fastify.post(
     '/api/admin/copilot/chat',
-    {
-      // Gerbang kode: batasi 6 per menit agar tidak membanjiri kuota LLM & anggaran.
-      config: {
-        rateLimit: {
-          max: 6,
-          timeWindow: '1 minute',
-        },
-      },
-    },
+    // Kuota 6/menit dikelola `checkCopilotQuota` (bucket per principal), bukan
+    // limiter global yang memakai bucket API-key bersama — limiter bersama akan
+    // menolak staf lain hanya karena satu staf sudah memakai kuotanya.
     async (
       request: FastifyRequest<{
         Body: {
@@ -52,13 +120,18 @@ export async function copilotAdminRoutes(fastify: FastifyInstance) {
       reply: FastifyReply
     ) => {
       const tenantId = resolveSessionTenantId(request);
-      const { message, history, conversationId, customerId } = request.body || {};
-
-      if (!message || !message.trim()) {
-        return reply.status(400).send({ success: false, error: 'message wajib diisi.' });
+      const parsed = parseCopilotBody(request.body);
+      if (!parsed.ok) {
+        return reply.status(400).send({ success: false, error: parsed.error });
       }
-      if (message.length > 2000) {
-        return reply.status(400).send({ success: false, error: 'message maksimal 2000 karakter.' });
+      const { message, history, activeContext } = parsed;
+
+      const quota = checkCopilotQuota(copilotPrincipalKey(request));
+      if (!quota.allowed) {
+        return reply
+          .status(429)
+          .header('Retry-After', String(quota.retryAfterSec))
+          .send({ success: false, error: 'Kuota Copilot per menit habis. Coba lagi sebentar.', code: 'COPILOT_QUOTA_EXCEEDED' });
       }
 
       // ADR-001: gerbang single-tenant lapis-1 — tolak tenant non-owner SEBELUM
@@ -80,8 +153,18 @@ export async function copilotAdminRoutes(fastify: FastifyInstance) {
         });
       }
 
+      // Anggaran token harian per tenant (G9).
+      const budget = await assertCopilotDailyBudget(tenantId, estimateTurnTokens(message, history));
+      if (!budget.allowed) {
+        return reply.status(429).send({
+          success: false,
+          error: `Kuota token Copilot harian tenant habis (${budget.used}/${budget.limit}).`,
+          code: 'COPILOT_DAILY_BUDGET_EXCEEDED',
+        });
+      }
+
       // Gerbang konkurensi per-tenant: maks 1 turn aktif
-      if (activeTenantTurns.get(tenantId)) {
+      if (isCopilotBusy(tenantId)) {
         return reply.status(429).send({
           success: false,
           error: 'Copilot sedang memproses pertanyaan sebelumnya. Mohon tunggu giliran selesai.',
@@ -91,15 +174,27 @@ export async function copilotAdminRoutes(fastify: FastifyInstance) {
       const startedAt = Date.now();
       const cop = resolveCopilotConfig();
       activeTenantTurns.set(tenantId, true);
+      activeTenantSince.set(tenantId, startedAt);
+
+      // Batalkan panggilan LLM bila klien menutup koneksi (non-SSE juga).
+      // `reply.raw` dipakai (bukan request.raw) karena request 'close' bisa
+      // sudah/akan segera menyala setelah body selesai dibaca — bukan sinyal
+      // klien pergi. `writableEnded` membedakan respons selesai normal.
+      const abortCtrl = new AbortController();
+      const onClose = () => {
+        if (!reply.raw.writableEnded) abortCtrl.abort();
+      };
+      reply.raw.once('close', onClose);
 
       try {
-        // Konteks pasien aktif (opsional) — divalidasi ulang tenant-scoped oleh tool.
-        const activeContext =
-          conversationId || customerId
-            ? { conversationId: conversationId?.trim() || undefined, customerId: customerId?.trim() || undefined }
-            : undefined;
-
-        const result = await copilotService.chat({ tenantId, message: message.trim(), history, activeContext });
+        const result = await copilotService.chat({
+          tenantId,
+          message,
+          history,
+          activeContext,
+          signal: abortCtrl.signal,
+        });
+        recordCopilotTokens(tenantId, result.tokensUsed || 0);
 
         await auditService.logAdminAction({
           apiKey: (request as any).adminKeyUsed,
@@ -114,6 +209,7 @@ export async function copilotAdminRoutes(fastify: FastifyInstance) {
             engine: result.engine,
             model: cop.model,
             llmCalls: result.llmCalls,
+            tokensUsed: result.tokensUsed || 0,
             elapsedMs: Date.now() - startedAt,
             budgetMs: cop.totalBudgetMs,
           },
@@ -123,7 +219,8 @@ export async function copilotAdminRoutes(fastify: FastifyInstance) {
 
         return reply.status(200).send({ success: result.success, data: result });
       } finally {
-        activeTenantTurns.delete(tenantId);
+        reply.raw.removeListener('close', onClose);
+        releaseCopilotTurn(tenantId);
       }
     }
   );
@@ -135,9 +232,7 @@ export async function copilotAdminRoutes(fastify: FastifyInstance) {
    */
   fastify.post(
     '/api/admin/copilot/stream',
-    {
-      config: { rateLimit: { max: 6, timeWindow: '1 minute' } },
-    },
+    // Sama seperti /chat: kuota per principal, bukan bucket API-key bersama.
     async (
       request: FastifyRequest<{
         Body: {
@@ -150,14 +245,20 @@ export async function copilotAdminRoutes(fastify: FastifyInstance) {
       reply: FastifyReply
     ) => {
       const tenantId = resolveSessionTenantId(request);
-      const { message, history, conversationId, customerId } = request.body || {};
+      const parsed = parseCopilotBody(request.body);
+      if (!parsed.ok) {
+        return reply.status(400).send({ success: false, error: parsed.error });
+      }
+      const { message, history, activeContext } = parsed;
 
-      if (!message || !message.trim()) {
-        return reply.status(400).send({ success: false, error: 'message wajib diisi.' });
+      const quota = checkCopilotQuota(copilotPrincipalKey(request));
+      if (!quota.allowed) {
+        return reply
+          .status(429)
+          .header('Retry-After', String(quota.retryAfterSec))
+          .send({ success: false, error: 'Kuota Copilot per menit habis. Coba lagi sebentar.', code: 'COPILOT_QUOTA_EXCEEDED' });
       }
-      if (message.length > 2000) {
-        return reply.status(400).send({ success: false, error: 'message maksimal 2000 karakter.' });
-      }
+
       if (!isCopilotTenantAllowed(tenantId)) {
         await auditService.logAdminAction({
           apiKey: (request as any).adminKeyUsed,
@@ -175,8 +276,17 @@ export async function copilotAdminRoutes(fastify: FastifyInstance) {
         });
       }
 
+      const budget = await assertCopilotDailyBudget(tenantId, estimateTurnTokens(message, history));
+      if (!budget.allowed) {
+        return reply.status(429).send({
+          success: false,
+          error: `Kuota token Copilot harian tenant habis (${budget.used}/${budget.limit}).`,
+          code: 'COPILOT_DAILY_BUDGET_EXCEEDED',
+        });
+      }
+
       // Gerbang konkurensi per-tenant: jika turn sedang aktif, tolak langsung sebelum hijack SSE
-      if (activeTenantTurns.get(tenantId)) {
+      if (isCopilotBusy(tenantId)) {
         return reply.status(429).send({
           success: false,
           error: 'Copilot sedang memproses pertanyaan sebelumnya. Mohon tunggu giliran selesai.',
@@ -186,19 +296,21 @@ export async function copilotAdminRoutes(fastify: FastifyInstance) {
       const startedAt = Date.now();
       const cop = resolveCopilotConfig();
       activeTenantTurns.set(tenantId, true);
+      activeTenantSince.set(tenantId, startedAt);
 
-      const activeContext =
-        conversationId || customerId
-          ? { conversationId: conversationId?.trim() || undefined, customerId: customerId?.trim() || undefined }
-          : undefined;
-
-      reply.hijack();
-      reply.raw.writeHead(200, {
-        'Content-Type': 'text/event-stream',
-        'Cache-Control': 'no-cache, no-transform, no-store',
-        Connection: 'keep-alive',
-        'X-Accel-Buffering': 'no',
-      });
+      try {
+        reply.hijack();
+        reply.raw.writeHead(200, {
+          'Content-Type': 'text/event-stream',
+          'Cache-Control': 'no-cache, no-transform, no-store',
+          Connection: 'keep-alive',
+          'X-Accel-Buffering': 'no',
+        });
+      } catch (err) {
+        // Jangan pernah menyisakan semaphore terkunci bila hijack gagal.
+        releaseCopilotTurn(tenantId);
+        throw err;
+      }
 
       let closed = false;
       let aborted = false;
@@ -259,6 +371,8 @@ export async function copilotAdminRoutes(fastify: FastifyInstance) {
           },
         });
 
+        recordCopilotTokens(tenantId, result.tokensUsed || 0);
+
         await auditService.logAdminAction({
           apiKey: (request as any).adminKeyUsed,
           adminIdentity: (request as any).adminIdentity,
@@ -274,6 +388,7 @@ export async function copilotAdminRoutes(fastify: FastifyInstance) {
             engine: result.engine,
             model: cop.model,
             llmCalls: result.llmCalls,
+            tokensUsed: result.tokensUsed || 0,
             elapsedMs: Date.now() - startedAt,
             budgetMs: cop.totalBudgetMs,
           },
@@ -289,7 +404,7 @@ export async function copilotAdminRoutes(fastify: FastifyInstance) {
         sendEvent('done', { success: false, answer: 'Copilot gagal menjawab.' });
       } finally {
         clearInterval(hb);
-        activeTenantTurns.delete(tenantId);
+        releaseCopilotTurn(tenantId);
         try {
           if (!reply.raw.writableEnded) {
             reply.raw.end();

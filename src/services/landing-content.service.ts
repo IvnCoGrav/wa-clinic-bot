@@ -2,8 +2,7 @@ import { prisma } from '../db/client';
 import { DEFAULT_TENANT_ID } from '../config/tenant';
 import { getBrandIdentity } from '../config/brand';
 
-export interface LandingContent {
-  tenant_id: string;
+export interface LandingContent {  tenant_id: string;
   slug: string;
   title: string;
   landing_type: string;
@@ -16,6 +15,40 @@ export interface LandingContent {
   faq: { question: string; answer: string }[];
   whatsapp_number: string;
   meta_pixel_id: string;
+}
+
+export interface PublicTenantDto {
+  slug: string;
+  title: string;
+  structured_content: {
+    clinic_name: string;
+    headline: string;
+    subheadline: string;
+    benefits: string[];
+  };
+  brand: { name: string; logoUrl: string };
+  whatsapp_number: string;
+  faq: { question: string; answer: string }[];
+}
+
+/**
+ * DTO publik: hanya field yang memang untuk pengunjung. HTML pra-sanitasi,
+ * tenant_id, dan meta_pixel_id tidak boleh keluar dari endpoint anonim.
+ */
+export function toPublicTenantDto(content: LandingContent): PublicTenantDto {
+  return {
+    slug: content.slug,
+    title: content.title,
+    structured_content: {
+      clinic_name: content.clinic_name,
+      headline: content.headline,
+      subheadline: content.subheadline,
+      benefits: content.benefits,
+    },
+    brand: { name: content.clinic_name, logoUrl: '/admin/pwa-512x512.png' },
+    whatsapp_number: String(content.whatsapp_number || '').replace(/\D/g, ''),
+    faq: content.faq,
+  };
 }
 
 const FALLBACK_HEADLINE = 'Solusi Pijat & Perawatan Bayi Profesional di Rumah Anda';

@@ -1426,7 +1426,11 @@ export async function staffTodayRoutes(fastify: FastifyInstance) {
         // Zero Metadata Leak: sanitasi payload sebelum pancar ke browser.
         // Masking HP HANYA untuk terapis; supervisor (CS/SPV) melihat apa adanya.
         let payloadToSend: any = event.payload || {};
-        if (event.type === 'message.created' || event.type === 'message.updated') {
+        if (
+          event.type === 'message.created' ||
+          event.type === 'message.updated' ||
+          event.type === 'message.status_updated'
+        ) {
           payloadToSend = sanitizeStaffHubPayload(payloadToSend, event.type, { maskPhone: !isSupervisor });
         }
         // Pesan hidden: jangan bocorkan isi ke terapis biasa — samarkan content,

@@ -7,6 +7,9 @@ import { getPricelistPayload, serializePayloadForHtml } from '../services/pricel
 import { isCatalogDegraded, getCatalogSource } from '../services/treatment-catalog.service';
 import { DEFAULT_TENANT_ID } from '../config/tenant';
 import { prisma } from '../db/client';
+import { sanitizePhoneForRender, sanitizePixelForRender } from '../utils/landing-fields';
+import { jsStringLiteral } from '../utils/script-escape';
+import { trustLandingUrlForCapi } from '../utils/landing-url';
 
 const RESERVED_SLUGS = new Set([
   'go',
@@ -69,6 +72,19 @@ function escapeHtmlAttribute(value: string): string {
     .replace(/>/g, '&gt;');
 }
 
+/** Batasi field laporan CSP agar endpoint anonim tidak bisa membanjiri log. */
+export function clampReportField(value: unknown, max = 512): string {
+  if (typeof value === 'number' && Number.isFinite(value)) return String(value).slice(0, max);
+  if (typeof value !== 'string') return 'unknown';
+  const trimmed = value.trim();
+  return trimmed ? trimmed.slice(0, max) : 'unknown';
+}
+
+/**
+ * event_source_url untuk Meta CAPI tidak boleh sepenuhnya dikendalikan klien.
+ * Implementasi kanonis ada di `src/utils/landing-url.ts`.
+ */
+
 /**
  * Isi placeholder metadata publik. Tanpa ini, pratinjau tautan di WhatsApp
  * menampilkan URL mentah tanpa judul/gambar.
@@ -81,10 +97,10 @@ function applyPublicMetadata(
   const canonical = base && opts.path ? `${base}${opts.path}` : '';
   const image = base ? `${base}/admin/pwa-512x512.png` : '';
   return html
-    .replace(/__CANONICAL_URL__/g, canonical)
+    .replace(/__CANONICAL_URL__/g, escapeHtmlAttribute(canonical))
     .replace(/__OG_TITLE__/g, escapeHtmlAttribute(opts.title || ''))
     .replace(/__OG_DESCRIPTION__/g, escapeHtmlAttribute(opts.description || ''))
-    .replace(/__OG_IMAGE__/g, image)
+    .replace(/__OG_IMAGE__/g, escapeHtmlAttribute(image))
     .replace(/__CLINIC_NAME_SAFE__/g, escapeHtmlAttribute(opts.clinicName || ''));
 }
 
@@ -226,7 +242,13 @@ async function renderPricelist(reply: FastifyReply, request: FastifyRequest): Pr
     clinicName: brandName,
   });
 
-  applyLandingSecurityHeaders(reply);
+  const nonce = crypto.randomBytes(16).toString('base64');
+  html = html
+    .replace(/<script>/g, `<script nonce="${nonce}">`)
+    .replace(/<script /g, `<script nonce="${nonce}" `);
+
+  applyLandingSecurityHeaders(reply, nonce);
+  applyLandingCacheHeaders(reply);
   return reply.type('text/html; charset=utf-8').status(200).send(html);
 }
 
@@ -237,11 +259,20 @@ async function renderPricelist(reply: FastifyReply, request: FastifyRequest): Pr
  */
 export function applyLandingSecurityHeaders(reply: FastifyReply, nonce?: string): void {
   const scriptSrc = nonce
-    ? `'nonce-${nonce}' https://connect.facebook.net`
+    ? `'nonce-${nonce}' 'self' https://connect.facebook.net`
     : `'self' 'unsafe-inline' https://connect.facebook.net`;
 
   const cspDirectives = [
+    "default-src 'self'",
+    "object-src 'none'",
+    "base-uri 'none'",
     `script-src ${scriptSrc}`,
+    // Template landing memakai <style> inline dan atribut style.
+    "style-src 'self' 'unsafe-inline'",
+    "img-src 'self' data: https://www.facebook.com https://connect.facebook.net",
+    "font-src 'self' data:",
+    // ipify dipakai go.html untuk fallback IP; sisanya endpoint Meta.
+    "connect-src 'self' https://api64.ipify.org https://connect.facebook.net https://www.facebook.com",
     "frame-ancestors 'none'",
     "upgrade-insecure-requests",
     'report-to csp',
@@ -253,9 +284,20 @@ export function applyLandingSecurityHeaders(reply: FastifyReply, nonce?: string)
   reply.header('X-Content-Type-Options', 'nosniff');
 }
 
+/**
+ * HTML landing bergantung pada Host/X-Forwarded-Host dan query tenant.
+ * Tanpa penanda ini, cache bersama (CDN/proxy) dapat menyajikan halaman satu
+ * tenant ke tenant lain.
+ */
+function applyLandingCacheHeaders(reply: FastifyReply): void {
+  reply.header('Cache-Control', 'private, max-age=0, must-revalidate');
+  reply.header('Vary', 'X-Forwarded-Host');
+}
+
 async function renderLanding(reply: FastifyReply, request: FastifyRequest, content: LandingContent, slug: string) {
   const nonce = crypto.randomBytes(16).toString('base64');
   applyLandingSecurityHeaders(reply, nonce);
+  applyLandingCacheHeaders(reply);
 
   if (content.landing_type === 'RAW_HTML' && content.raw_html_content) {
     const { TenantHtmlService } = await import('../services/tenant-html.service');
@@ -264,15 +306,18 @@ async function renderLanding(reply: FastifyReply, request: FastifyRequest, conte
     const injectedHtml = TenantHtmlService.injectTracking(
       sanitizedHtml,
       // Isolasi multi-tenant: env FB_PIXEL_ID HANYA untuk default-tenant.
-      content.meta_pixel_id ||
-        (content.tenant_id === DEFAULT_TENANT_ID ? process.env.FB_PIXEL_ID || '' : ''),
+      sanitizePixelForRender(
+        content.meta_pixel_id ||
+          (content.tenant_id === DEFAULT_TENANT_ID ? process.env.FB_PIXEL_ID || '' : '')
+      ),
       nonce,
       {
         trackingApiBaseUrl: '',
         trackingApiKey: '',
-        whatsappNumber:
+        whatsappNumber: sanitizePhoneForRender(
           content.whatsapp_number ||
-          (content.tenant_id === DEFAULT_TENANT_ID ? process.env.DEFAULT_WHATSAPP_PHONE || '' : ''),
+            (content.tenant_id === DEFAULT_TENANT_ID ? process.env.DEFAULT_WHATSAPP_PHONE || '' : '')
+        ),
         tenantId: content.tenant_id,
         tenantSlug: content.slug || slug,
       },
@@ -291,7 +336,7 @@ async function renderLanding(reply: FastifyReply, request: FastifyRequest, conte
   }
 
   const benefitsHtml = (content.benefits || [])
-    .map((b: string) => `<div class="benefit-item"><span class="benefit-icon">✓</span><span>${b}</span></div>`)
+    .map((b: string) => `<div class="benefit-item"><span class="benefit-icon">✓</span><span>${escapeHtmlAttribute(b)}</span></div>`)
     .join('\n');
 
   const events: string[] = content.events || [];
@@ -310,9 +355,21 @@ async function renderLanding(reply: FastifyReply, request: FastifyRequest, conte
     .map((e) => `      if (typeof fbq !== 'undefined') { fbq('track', '${e}', {}, { eventID: trackingCode }); }`)
     .join('\n');
 
-  const resolvedPixelId =
+  const resolvedPixelId = sanitizePixelForRender(
     content.meta_pixel_id ||
-    (content.tenant_id === DEFAULT_TENANT_ID ? process.env.FB_PIXEL_ID || '' : '');
+      (content.tenant_id === DEFAULT_TENANT_ID ? process.env.FB_PIXEL_ID || '' : '')
+  );
+
+  const resolvedPhone = sanitizePhoneForRender(
+    content.whatsapp_number ||
+      (content.tenant_id === DEFAULT_TENANT_ID ? process.env.DEFAULT_WHATSAPP_PHONE || '' : '')
+  );
+
+  const safeTenantId = /^[a-z0-9][a-z0-9._-]{0,63}$/i.test(content.tenant_id || '')
+    ? content.tenant_id
+    : DEFAULT_TENANT_ID;
+  const candidateSlug = content.slug || slug;
+  const safeSlug = /^[a-z0-9][a-z0-9-]{1,62}$/i.test(candidateSlug) ? candidateSlug : 'default';
 
   // Isolasi multi-tenant (Q4): tanpa pixel valid, blok Meta Pixel dihapus total
   // dari template (tidak ada fbevents.js / fbq('init') / noscript img).
@@ -321,20 +378,20 @@ async function renderLanding(reply: FastifyReply, request: FastifyRequest, conte
   }
 
   htmlContent = htmlContent
-    .replace(/__CLINIC_NAME__/g, content.clinic_name || 'Moms & Baby Spa Homecare')
-    .replace(/__HEADLINE__/g, content.headline || 'Solusi Pijat & Perawatan Bayi')
-    .replace(/__SUBHEADLINE__/g, content.subheadline || 'Bidan bersertifikasi resmi datang ke lokasi Anda.')
+    .replace(/__CLINIC_NAME__/g, escapeHtmlAttribute(content.clinic_name || 'Moms & Baby Spa Homecare'))
+    .replace(/__HEADLINE__/g, escapeHtmlAttribute(content.headline || 'Solusi Pijat & Perawatan Bayi'))
+    .replace(/__SUBHEADLINE__/g, escapeHtmlAttribute(content.subheadline || 'Bidan bersertifikasi resmi datang ke lokasi Anda.'))
     .replace(/__BENEFITS_HTML__/g, benefitsHtml)
     .replace(/__TRACKING_API_BASE_URL__/g, '')
     .replace(/__TRACKING_API_KEY__/g, '')
     .replace(/__FB_PIXEL_ID__/g, resolvedPixelId)
-    .replace(
-      /__DEFAULT_WHATSAPP_PHONE__/g,
-      content.whatsapp_number ||
-        (content.tenant_id === DEFAULT_TENANT_ID ? process.env.DEFAULT_WHATSAPP_PHONE || '' : '')
-    )
-    .replace(/__TENANT_ID__/g, content.tenant_id)
-    .replace(/__TENANT_SLUG__/g, content.slug || slug)
+    .replace(/__DEFAULT_WHATSAPP_PHONE__/g, resolvedPhone)
+    .replace(/__TENANT_ID__/g, safeTenantId)
+    .replace(/__TENANT_SLUG__/g, safeSlug)
+    .replace(/__FB_PIXEL_ID_JS__/g, jsStringLiteral(resolvedPixelId))
+    .replace(/__DEFAULT_WHATSAPP_PHONE_JS__/g, jsStringLiteral(resolvedPhone))
+    .replace(/__TENANT_ID_JS__/g, jsStringLiteral(safeTenantId))
+    .replace(/__TENANT_SLUG_JS__/g, jsStringLiteral(safeSlug))
     .replace(/__EVENTS_ONLOAD__/g, eventsOnload)
     .replace(/__EVENTS_ONCLICK__/g, eventsOnclick);
 
@@ -414,6 +471,14 @@ async function resolveLandingTenantId(request: FastifyRequest): Promise<string |
   return null;
 }
 
+// Hanya aset publik yang boleh disajikan lewat /assets. Template HTML mentah
+// (go.html/pricelist.html) TIDAK termasuk — jangan pernah menyajikan sumbernya.
+const PUBLIC_ASSET_ALLOWLIST = new Set([
+  'clientParamBuilder.bundle.js',
+  'external-tracker.js',
+  'kala-logo.svg',
+]);
+
 export async function landingRoutes(fastify: FastifyInstance) {
   // /go — pintu masuk kampanye iklan (selalu tersedia, fail-open generik)
   fastify.get('/go', async (request: FastifyRequest, reply: FastifyReply) => {
@@ -458,19 +523,29 @@ export async function landingRoutes(fastify: FastifyInstance) {
     // Env FB_PIXEL_ID dan kontak tenant default juga HANYA untuk default-tenant —
     // tenant lain tanpa nomor/pixel TIDAK boleh meminjam milik tenant default.
     const isDefaultTenant = content.tenant_id === DEFAULT_TENANT_ID;
+    // Sanitasi TIAP kandidat sebelum memilih, agar nilai tidak valid tidak
+    // "menang" lalu menutupi fallback yang sah.
     const pixelId =
-      (isDefaultTenant ? query.p : undefined) ||
-      content.meta_pixel_id ||
-      (isDefaultTenant ? tenantContact.meta_pixel_id : '') ||
-      (isDefaultTenant ? process.env.FB_PIXEL_ID || '' : '');
+      [
+        isDefaultTenant ? query.p : '',
+        content.meta_pixel_id,
+        isDefaultTenant ? tenantContact.meta_pixel_id : '',
+        isDefaultTenant ? process.env.FB_PIXEL_ID || '' : '',
+      ]
+        .map((candidate) => sanitizePixelForRender(candidate))
+        .find(Boolean) || '';
 
     // SELALU gunakan nomor WA dari pengaturan Customer Service / Tenant (Single Source of Truth),
     // dengan fallback query.phone & env. DB tenant didahulukan sebelum env.
     const phone =
-      (content.whatsapp_number || '').trim() ||
-      query.phone ||
-      (isDefaultTenant ? tenantContact.whatsapp_number : '') ||
-      (isDefaultTenant ? process.env.DEFAULT_WHATSAPP_PHONE || '' : '');
+      [
+        content.whatsapp_number,
+        query.phone,
+        isDefaultTenant ? tenantContact.whatsapp_number : '',
+        isDefaultTenant ? process.env.DEFAULT_WHATSAPP_PHONE || '' : '',
+      ]
+        .map((candidate) => sanitizePhoneForRender(candidate))
+        .find(Boolean) || '';
 
     let rawMsg = query.msg || query.greetings || '';
     if (!rawMsg) {
@@ -496,7 +571,12 @@ export async function landingRoutes(fastify: FastifyInstance) {
     // Capture attribution & generate tracking code if needed (BOT diabaikan kecuali test eksplisit)
     let trackingCode = '';
     const ua = request.headers['user-agent'] || '';
-    const isTest = query.is_test === 'true' || query.test === '1' || query.debug === 'true' || query.utm_source === 'test' || query.divisi === 'test';
+    // Klien tidak boleh menentukan status "test" di produksi (bisa dipakai
+    // mematikan filter bot / memicu CAPI). Hanya env test atau header internal.
+    const isTest =
+      process.env.NODE_ENV === 'test'
+        ? query.is_test === 'true' || query.test === '1' || query.debug === 'true' || query.utm_source === 'test' || query.divisi === 'test'
+        : String(request.headers['x-internal-traffic'] || '') === '1';
     
     try {
       const { generateTrackingCode, memoryAdClicks, isBotOrCrawler } = await import('./tracking.route');
@@ -651,7 +731,7 @@ export async function landingRoutes(fastify: FastifyInstance) {
                       fbc: viewData.fbc,
                       ipAddress: viewData.ipAddress,
                       userAgent: viewData.userAgent,
-                      landingUrl: viewData.landingUrl,
+                      landingUrl: trustLandingUrlForCapi(viewData.landingUrl, tenantDomain),
                       trackingCode: trackingCode || undefined,
                       utmSource: viewData.utmSource,
                       utmMedium: viewData.utmMedium,
@@ -752,8 +832,8 @@ export async function landingRoutes(fastify: FastifyInstance) {
   t.src=v;s=b.getElementsByTagName(e)[0];
   s.parentNode.insertBefore(t,s)}(window, document,'script',
   'https://connect.facebook.net/en_US/fbevents.js');
-  fbq('init', '${pixelId}');
-  fbq('track', 'AddToCart', { content_name: 'WhatsApp CTA', content_category: 'CTWA' }${trackingCode ? `, { eventID: '${trackingCode}' }` : ''});`
+  fbq('init', ${jsStringLiteral(pixelId)});
+  fbq('track', 'AddToCart', { content_name: 'WhatsApp CTA', content_category: 'CTWA' }${trackingCode ? `, { eventID: ${jsStringLiteral(trackingCode)} }` : ''});`
       : '';
 
     const html = `<!DOCTYPE html>
@@ -799,8 +879,8 @@ export async function landingRoutes(fastify: FastifyInstance) {
       reply: FastifyReply
     ) => {
     const { filename } = request.params;
-    if (!/^[a-zA-Z0-9._-]+$/.test(filename)) {
-      return reply.status(400).send({ error: 'Invalid filename' });
+    if (!/^[a-zA-Z0-9._-]+$/.test(filename) || !PUBLIC_ASSET_ALLOWLIST.has(filename)) {
+      return reply.status(404).send({ error: 'Not Found' });
     }
     try {
       const filePath = path.join(__dirname, '../landing/public', filename);
@@ -922,16 +1002,16 @@ export async function landingRoutes(fastify: FastifyInstance) {
     async (request: FastifyRequest, reply: FastifyReply) => {
       try {
         const body: any = request.body || {};
-        const report = body['csp-report'] || (Array.isArray(body) ? body[0]?.body : body);
+        const rawReport = body['csp-report'] || (Array.isArray(body) ? body[0]?.body : body);
+        const report = rawReport && typeof rawReport === 'object' && !Array.isArray(rawReport) ? rawReport : null;
 
         if (report) {
-          const documentUri =
-            typeof report['document-uri'] === 'string'
-              ? report['document-uri'].split('?')[0]
-              : 'unknown';
-          const blockedUri = report['blocked-uri'] || 'unknown';
-          const violatedDirective =
-            report['violated-directive'] || report['effective-directive'] || 'unknown';
+          const documentUriRaw = clampReportField(report['document-uri'], 1024);
+          const documentUri = documentUriRaw === 'unknown' ? 'unknown' : documentUriRaw.split('?')[0].slice(0, 512);
+          const blockedUri = clampReportField(report['blocked-uri']);
+          const violatedDirective = clampReportField(
+            report['violated-directive'] ?? report['effective-directive']
+          );
 
           request.log.warn(
             {

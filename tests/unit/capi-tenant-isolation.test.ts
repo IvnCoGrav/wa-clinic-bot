@@ -164,7 +164,7 @@ describe('Isolasi multi-tenant Meta CAPI & Pixel (anti-leakage)', () => {
     const res = await app.inject({ method: 'GET', url: '/go?slug=cabang-b2' });
 
     expect(res.statusCode).toBe(200);
-    expect(res.body).toContain("fbq('init', 'PIXEL_CABANG_B')");
+    expect(res.body).toContain(`fbq('init', "PIXEL_CABANG_B")`);
     expect(res.body).not.toContain(ENV_PIXEL);
   });
 

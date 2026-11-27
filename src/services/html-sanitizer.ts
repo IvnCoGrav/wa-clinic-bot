@@ -1,5 +1,6 @@
 import * as cheerio from 'cheerio';
 import sanitizeHtml from 'sanitize-html';
+import { jsStringLiteral, safeJsonForScript } from '../utils/script-escape';
 
 export interface ServerTrackingConfig {
   trackingApiBaseUrl: string;
@@ -142,7 +143,7 @@ export class TenantHtmlService {
       return CLICK_EVENTS.includes(e);
     });
 
-    const clickPixelEvents = JSON.stringify(filteredClickEvents);
+    const clickPixelEvents = safeJsonForScript(filteredClickEvents);
 
     // 1. Inject Meta Pixel into <head> with nonce — DITIADAKAN bila ID kosong
     // (isolasi multi-tenant: tenant tanpa pixel tidak memuat fbevents.js sama sekali).
@@ -160,7 +161,7 @@ export class TenantHtmlService {
         t.src=v;s=b.getElementsByTagName(e)[0];
         s.parentNode.insertBefore(t,s)}(window, document,'script',
         'https://connect.facebook.net/en_US/fbevents.js');
-        fbq('init', '${metaPixelId}');
+        fbq('init', ${jsStringLiteral(metaPixelId)});
         (function(){
           var pvEventId = 'pv_' + Date.now() + '_' + Math.random().toString(36).substring(2, 8);
           window._kala_pv_event_id = pvEventId;
@@ -170,7 +171,7 @@ ${pixelOnloadLines ? `          try { ${pixelOnloadLines.trim()} } catch(e) {}` 
           try {
             if (window._kala_pageview_tracked) return;
             window._kala_pageview_tracked = true;
-            var baseUrl = ${JSON.stringify(config.trackingApiBaseUrl)} ? ${JSON.stringify(config.trackingApiBaseUrl)}.replace(/\\/+$/, '') : '';
+            var baseUrl = ${safeJsonForScript(config.trackingApiBaseUrl)} ? ${safeJsonForScript(config.trackingApiBaseUrl)}.replace(/\\/+$/, '') : '';
             var endpoint = baseUrl + '/api/tracking/pageview';
             var params = new URLSearchParams(window.location.search);
             var getCookie = function(n){ var v='; '+document.cookie; var p=v.split('; '+n+'='); return p.length===2?p.pop().split(';').shift():null; };
@@ -186,8 +187,8 @@ ${pixelOnloadLines ? `          try { ${pixelOnloadLines.trim()} } catch(e) {}` 
               utm_term: params.get('utm_term') || null,
               utm_content: params.get('utm_content') || null,
               utm_id: params.get('utm_id') || null,
-              tenantId: ${JSON.stringify(config.tenantId)},
-              tenant_id: ${JSON.stringify(config.tenantId)}
+              tenantId: ${safeJsonForScript(config.tenantId)},
+              tenant_id: ${safeJsonForScript(config.tenantId)}
             };
             var body = JSON.stringify(payload);
             if (navigator.sendBeacon) {
@@ -216,11 +217,11 @@ ${pixelOnloadLines ? `          try { ${pixelOnloadLines.trim()} } catch(e) {}` 
     const clickCatcherSnippet = `
       <script nonce="${nonce}">
         (function() {
-          const trackingApiBaseUrl = ${JSON.stringify(config.trackingApiBaseUrl)};
-          const trackingApiKey = ${JSON.stringify(config.trackingApiKey)};
-          const defaultPhone = ${JSON.stringify(config.whatsappNumber)};
-          const tenantId = ${JSON.stringify(config.tenantId)};
-          const tenantSlug = ${JSON.stringify(config.tenantSlug)};
+          const trackingApiBaseUrl = ${safeJsonForScript(config.trackingApiBaseUrl)};
+          const trackingApiKey = ${safeJsonForScript(config.trackingApiKey)};
+          const defaultPhone = ${safeJsonForScript(config.whatsappNumber)};
+          const tenantId = ${safeJsonForScript(config.tenantId)};
+          const tenantSlug = ${safeJsonForScript(config.tenantSlug)};
           // Fallback beacon PageView untuk kasus tanpa pixel (hasPixel=false) — idempoten via _kala_pageview_tracked
           (function(){
             try {

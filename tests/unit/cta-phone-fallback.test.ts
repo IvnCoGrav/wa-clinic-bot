@@ -76,7 +76,7 @@ describe('RC-CTA-01 — /cta tanpa ?slug tetap punya nomor tujuan', () => {
 
   it('2. pixel browser memakai pixel tenant asli, bukan mock_pixel_123', async () => {
     const res = await hitCta();
-    expect(res.body).toContain("fbq('init', '1465457801784141')");
+    expect(res.body).toContain(`fbq('init', "1465457801784141")`);
     expect(res.body).not.toContain('mock_pixel_123');
   });
 

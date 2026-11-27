@@ -3,6 +3,7 @@ import { Direction } from '@prisma/client';
 import { conversationService, buildConversationUpdatedPayload } from './conversation.service';
 import { customerService } from './customer.service';
 import { messageService } from './message.service';
+import { messageThreadService } from './message-thread.service';
 import { resolveGatewayForTenant } from '../integrations/whatsapp/factory';
 import { ClientIdempotencyStore } from '../utils/client-idempotency';
 import { alertService, AlertType, AlertSeverity } from './alert.service';
@@ -113,7 +114,7 @@ export class LiveChatService {
         const text = r.treatment_detail || r.raw_text;
         if (text) {
           if (!treatmentPriceCache.has(text)) {
-            const val = (await resolveTreatmentValue(text)) || 0;
+            const val = (await resolveTreatmentValue(text, tenantId)) || 0;
             treatmentPriceCache.set(text, val);
           }
           ltv += treatmentPriceCache.get(text) || 0;
@@ -250,7 +251,7 @@ export class LiveChatService {
     let ltv = 0;
     const resList = cust?.reservations || [];
     for (const r of resList) {
-      const val = await resolveTreatmentValue(r.treatment_detail || r.raw_text);
+      const val = await resolveTreatmentValue(r.treatment_detail || r.raw_text, tenantId);
       ltv += val || 0;
     }
 
@@ -283,9 +284,27 @@ export class LiveChatService {
     tenantId: string,
     limit = 50,
     before?: string | Date,
-    focusMessageId?: string
-  ): Promise<{ messages: any[]; hasMore: boolean; pinnedMessage?: any }> {
-    return messageService.getRecentMessagesWithHasMore(conversationId, limit, tenantId, before, focusMessageId);
+    focusMessageId?: string,
+    after?: string | Date
+  ): Promise<{
+    messages: any[];
+    hasMore: boolean;
+    hasNewer: boolean;
+    newestCursor: string | null;
+    pinnedMessage?: any;
+  }> {
+    const page = await messageThreadService.getRecentMessagesWithHasMore(
+      conversationId,
+      limit,
+      tenantId,
+      before,
+      focusMessageId,
+      after
+    );
+    // Pin diambil di lapisan pemanggil agar modul thread tidak bergantung pada
+    // message-pin.service (mencegah siklus import baru).
+    const pinnedMessage = await messageService.getPinnedMessage(conversationId, tenantId);
+    return { ...page, pinnedMessage };
   }
 
   /**
@@ -1270,7 +1289,7 @@ export class LiveChatService {
       // percakapan customer; mencegah koordinasi staf bocor ke draf balasan.
       const recentReal = recent.filter((m: any) => m?.sender_type !== 'INTERNAL_NOTE');
       const historyFormatted = recentReal.map((m) => `${m.direction === 'INBOUND' ? 'Customer' : 'Bidan'}: ${m.content}`).join('\n');
-      const cfg = getLlmEndpointConfig({ modelConfigKey: 'CHAT_REPLY' });
+      const cfg = getLlmEndpointConfig({ modelConfigKey: 'CHAT_REPLY', tenantId });
 
       const resp = await callChatCompletionsWithFallback({
         model: cfg.model,

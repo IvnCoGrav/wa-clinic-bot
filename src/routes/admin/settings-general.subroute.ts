@@ -2,6 +2,7 @@ import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { prisma } from '../../db/client';
 import { auditService } from '../../services/audit.service';
 import { requireTenantId, resolveTenantId, updateTenantSettingsSafely } from './settings-helpers';
+import { parseMetaPixelId, parseWhatsappNumber } from '../../utils/landing-fields';
 
 let cachedWahaHealth = { status: 'WORKING', lastChecked: 0 };
 
@@ -748,7 +749,9 @@ export async function settingsGeneralRoutes(fastify: FastifyInstance) {
         const data: any = {};
 
         if (metaPixelId !== undefined) {
-          data.meta_pixel_id = metaPixelId ? String(metaPixelId).trim() || null : null;
+          const parsed = parseMetaPixelId(metaPixelId);
+          if (!parsed.ok) return reply.status(400).send({ error: parsed.error });
+          data.meta_pixel_id = parsed.value;
         }
         if (capiAccessToken !== undefined) {
           if (capiAccessToken) {
@@ -826,9 +829,9 @@ export async function settingsGeneralRoutes(fastify: FastifyInstance) {
       ? 'ACTIVE'
       : 'IN_MEMORY_FALLBACK_ACTIVE';
 
-    // K-005: status cron (kegagalan beruntun) ikut dilaporkan, bukan hanya uptime.
-    const { getCronHealthSnapshot } = await import('../../lifecycle/cron-health');
-    const cronHealth = getCronHealthSnapshot();
+    // K-005/G8: status cron dari heartbeat DB (menjangkau proses worker terpisah).
+    const { getCronHealthSnapshotAsync } = await import('../../lifecycle/cron-health');
+    const cronHealth = await getCronHealthSnapshotAsync();
 
     return reply.status(200).send({
       success: true,

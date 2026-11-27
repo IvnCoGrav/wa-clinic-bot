@@ -5,6 +5,8 @@ import { prisma } from '../db/client';
 import { DEFAULT_TENANT_ID } from '../config/tenant';
 import { DEFAULT_BRAND_IDENTITY } from '../config/brand';
 import { resolveExtForSave, detectKindFromMagic } from '../utils/media-kind';
+import { assertValidTenantId } from '../utils/tenant-id';
+import { assertInboundMediaBudget } from '../utils/media-limits';
 
 /**
  * Escape XML standar untuk teks yang disuntik ke SVG watermark.
@@ -138,6 +140,7 @@ const MEDIA_ROOT = path.join(process.cwd(), 'storage', 'media');
 const ALLOWED_MIME = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif']);
 
 const MAX_OUTBOUND_BYTES = 8 * 1024 * 1024; // 8 MB
+export { MAX_INBOUND_MEDIA_BYTES, MAX_INBOUND_DOCUMENT_BYTES, MAX_INBOUND_BYTES } from '../utils/media-limits';
 const DEFAULT_QUOTA_BYTES = 1024 * 1024 * 1024; // 1 GB default per tenant
 const HIGH_WATERMARK_RATIO = 0.85; // 85% pemicu auto-pruning
 const LOW_WATERMARK_RATIO = 0.65;  // 65% target storage pasca-pruning
@@ -156,23 +159,39 @@ export interface SavedMedia {
 const PAYMENT_PROOF_FOLDER = 'payment-proofs';
 
 function paymentProofDir(tenantId: string): string {
-  const dir = path.join(MEDIA_ROOT, PAYMENT_PROOF_FOLDER, tenantId);
+  const safeTenantId = assertValidTenantId(tenantId);
+  const dir = path.join(MEDIA_ROOT, PAYMENT_PROOF_FOLDER, safeTenantId);
   fs.mkdirSync(dir, { recursive: true });
   return dir;
 }
 
 function toPaymentProofUrl(tenantId: string, filename: string): string {
-  return `/media/${PAYMENT_PROOF_FOLDER}/${tenantId}/${filename}`;
+  return `/media/${PAYMENT_PROOF_FOLDER}/${assertValidTenantId(tenantId)}/${filename}`;
 }
 
 function scopeDir(scope: 'outbound' | 'inbound', tenantId: string): string {
-  const dir = path.join(MEDIA_ROOT, scope, tenantId);
+  const safeTenantId = assertValidTenantId(tenantId);
+  const dir = path.join(MEDIA_ROOT, scope, safeTenantId);
   fs.mkdirSync(dir, { recursive: true });
   return dir;
 }
 
 function toRelativeUrl(scope: 'outbound' | 'inbound', tenantId: string, filename: string): string {
-  return `/media/${scope}/${tenantId}/${filename}`;
+  return `/media/${scope}/${assertValidTenantId(tenantId)}/${filename}`;
+}
+
+/**
+ * Basis direktori baca/prune untuk tenant. Tidak membuat direktori; memastikan
+ * hasil resolve tetap di bawah MEDIA_ROOT (anti traversal).
+ */
+function tenantMediaBase(scope: 'outbound' | 'inbound', tenantId: string): string {
+  const safeTenantId = assertValidTenantId(tenantId);
+  const resolvedRoot = path.resolve(MEDIA_ROOT);
+  const resolved = path.resolve(path.join(MEDIA_ROOT, scope, safeTenantId));
+  if (resolved !== resolvedRoot && !resolved.startsWith(resolvedRoot + path.sep)) {
+    throw new Error('Invalid tenant media path');
+  }
+  return resolved;
 }
 
 // Konvensi penamaan: HD `{stem}.jpg` → thumb `{stem}_thumb.jpg`.
@@ -327,7 +346,8 @@ export class MediaService {
     mimeType?: string;
   }): Promise<{ hdPath: string; hdUrl: string; thumbPath: string | null; thumbUrl: string | null }> {
     const { tenantId, buffer, mimeType } = params;
-    const mime = (mimeType || '').trim();
+    const mime = (mimeType || '').trim().toLowerCase();
+    assertInboundMediaBudget(buffer.length, mime);
     const ext = resolveExtForSave(mime, buffer);
     const effectiveMime = mime || (ext === 'jpg' || ext === 'png' || ext === 'webp' || ext === 'gif' ? `image/${ext === 'jpg' ? 'jpeg' : ext}` : 'application/octet-stream');
 
@@ -628,7 +648,12 @@ export class MediaService {
     const scope = match[1] as 'outbound' | 'inbound';
     const tenantId = match[2];
     const hdFile = match[3];
-    const thumbDir = path.join(MEDIA_ROOT, scope, tenantId);
+    let thumbDir: string;
+    try {
+      thumbDir = tenantMediaBase(scope, tenantId);
+    } catch {
+      return null;
+    }
     const candidates = [
       withThumbName(hdFile), // thumb ekstensi sama (thumb kustom)
       `${hdFile.replace(/(\.\w+)$/, '')}_thumb.jpg`, // blur thumb default .jpg
@@ -807,7 +832,7 @@ export class MediaService {
 
     let total = 0;
     for (const scope of ['outbound', 'inbound'] as const) {
-      const base = path.join(MEDIA_ROOT, scope, tenantId);
+      const base = tenantMediaBase(scope, tenantId);
       let entries: fs.Dirent[] = [];
       try {
         entries = await fs.promises.readdir(base, { withFileTypes: true });
@@ -840,7 +865,7 @@ export class MediaService {
     }
     let total = 0;
     for (const scope of ['outbound', 'inbound'] as const) {
-      const base = path.join(MEDIA_ROOT, scope, tenantId);
+      const base = tenantMediaBase(scope, tenantId);
       let entries: fs.Dirent[] = [];
       try {
         entries = fs.readdirSync(base, { withFileTypes: true });
@@ -898,7 +923,7 @@ export class MediaService {
     for (const scope of ['inbound', 'outbound'] as const) {
       if (currentUsage <= targetUsage) break;
 
-      const base = path.join(MEDIA_ROOT, scope, tenantId);
+      const base = tenantMediaBase(scope, tenantId);
       let entries: fs.Dirent[] = [];
       try {
         entries = await fs.promises.readdir(base, { withFileTypes: true });
@@ -1035,7 +1060,7 @@ export class MediaService {
     }
 
     const processDir = async (scope: 'outbound' | 'inbound') => {
-      const base = path.join(MEDIA_ROOT, scope, tenantId);
+      const base = tenantMediaBase(scope, tenantId);
       let entries: fs.Dirent[] = [];
       try {
         entries = fs.readdirSync(base, { withFileTypes: true });
@@ -1361,7 +1386,7 @@ export class MediaService {
     const now = Date.now();
 
     for (const scope of ['inbound', 'outbound'] as const) {
-      const base = path.join(MEDIA_ROOT, scope, tenantId);
+      const base = tenantMediaBase(scope, tenantId);
       let entries: fs.Dirent[] = [];
       try {
         entries = fs.readdirSync(base, { withFileTypes: true });

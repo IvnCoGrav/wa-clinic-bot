@@ -62,8 +62,8 @@ describe('Robustness & Hardening Suite', () => {
       expect(response.statusCode).toBe(200);
       const body = JSON.parse(response.body);
       expect(body.status).toBe('READY');
-      expect(body.checks.database).toBe('CONNECTED');
-      expect(body.checks.waha).toBe('WORKING');
+      // M19-09: detail dependency TIDAK boleh tampil di endpoint publik.
+      expect(Object.keys(body)).toEqual(['status']);
     });
 
     it('/ready should return 503 Service Unavailable when DB is down', async () => {
@@ -78,7 +78,7 @@ describe('Robustness & Hardening Suite', () => {
       expect(response.statusCode).toBe(503);
       const body = JSON.parse(response.body);
       expect(body.status).toBe('NOT_READY');
-      expect(body.checks.database).toContain('FAILED');
+      expect(body.checks).toBeUndefined();
     });
   });
 

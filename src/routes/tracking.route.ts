@@ -3,6 +3,7 @@ import { prisma } from '../db/client';
 import { safeCompare } from '../utils/auth';
 import { DEFAULT_TENANT_ID } from '../config/tenant';
 import crypto from 'crypto';
+import { trustLandingUrlForCapi } from '../utils/landing-url';
 
 // In-Memory map untuk melacak hasil tracking klik saat database offline (Unit Test / Dev fallback)
 export const memoryAdClicks = new Map<string, any>();
@@ -14,9 +15,18 @@ export const memoryAdClicks = new Map<string, any>();
  * Fase 3a (issue #136): index diperkaya `host → tenant_id` sehingga dipakai bersama
  * oleh origin-check DAN resolusi tenant PageView (satu query, dua konsumen).
  */
-let cachedLandingHosts: { at: number; hosts: Set<string>; byHost: Map<string, string> } | null = null;
+let cachedLandingHosts: {
+  at: number;
+  hosts: Set<string>;
+  byHost: Map<string, string>;
+  domainById: Map<string, string>;
+} | null = null;
 
-async function getLandingHostIndex(): Promise<{ hosts: Set<string>; byHost: Map<string, string> }> {
+async function getLandingHostIndex(): Promise<{
+  hosts: Set<string>;
+  byHost: Map<string, string>;
+  domainById: Map<string, string>;
+}> {
   const now = Date.now();
   if (!cachedLandingHosts || now - cachedLandingHosts.at > 60_000) {
     const tenants = await prisma.tenant.findMany({
@@ -25,16 +35,20 @@ async function getLandingHostIndex(): Promise<{ hosts: Set<string>; byHost: Map<
     });
     const hosts = new Set<string>();
     const byHost = new Map<string, string>();
+    const domainById = new Map<string, string>();
     for (const t of tenants as any[]) {
       const d = String(t?.landing_domain || '').trim().toLowerCase().replace(/\/$/, '');
       if (!d) continue;
       try {
         const h = new URL(d.includes('://') ? d : `https://${d}`).hostname;
         hosts.add(h);
-        if (t?.id) byHost.set(h, t.id);
+        if (t?.id) {
+          byHost.set(h, t.id);
+          domainById.set(String(t.id), d);
+        }
       } catch {}
     }
-    cachedLandingHosts = { at: now, hosts, byHost };
+    cachedLandingHosts = { at: now, hosts, byHost, domainById };
   }
   return cachedLandingHosts;
 }
@@ -78,8 +92,7 @@ async function isTrustedTrackingOrigin(request: FastifyRequest): Promise<boolean
 export async function resolveViewTenantId(
   rawHint: unknown,
   landingUrl: unknown,
-): Promise<string> {
-  const hint = typeof rawHint === 'string' && rawHint.trim() ? rawHint.trim() : null;
+): Promise<string> {  const hint = typeof rawHint === 'string' && rawHint.trim() ? rawHint.trim() : null;
   if (hint) {
     try {
       const t = (await prisma.tenant.findFirst({
@@ -110,6 +123,16 @@ export async function resolveViewTenantId(
     }
   }
   return DEFAULT_TENANT_ID;
+}
+
+/** Domain landing kanonis tenant untuk event_source_url CAPI (dari index cache, tanpa query baru). */
+async function resolveTenantLandingDomain(tenantId: string): Promise<string> {
+  try {
+    const { domainById } = await getLandingHostIndex();
+    return domainById.get(tenantId) || '';
+  } catch {
+    return '';
+  }
 }
 
 /**
@@ -248,22 +271,28 @@ export async function trackingRoutes(fastify: FastifyInstance) {
    */
   fastify.get(
     '/api/tenant/:slug',
-
+    {
+      config: {
+        rateLimit: { max: 120, timeWindow: '1 minute' },
+      },
+    },
     async (request: FastifyRequest<{ Params: { slug: string } }>, reply: FastifyReply) => {
       const { slug } = request.params;
 
       try {
-        const { resolveLandingContent, defaultLandingContent } = await import('../services/landing-content.service');
+        const { resolveLandingContent, toPublicTenantDto } = await import('../services/landing-content.service');
         const content = await resolveLandingContent(slug);
-        if (content) {
-          return reply.status(200).send(content);
+        if (!content) {
+          return reply.status(404).send({ error: 'Tenant tidak ditemukan' });
         }
-        // Fail-open: slug tak dikenal / DB offline → konten generik (perilaku legacy)
-        return reply.status(200).send(defaultLandingContent(slug));
-      } catch (err: any) {
-        console.error(`[TENANT SLUG RESOLVE ERROR] Failed to resolve content for slug ${slug}:`, err.message);
-        const { defaultLandingContent } = await import('../services/landing-content.service');
-        return reply.status(200).send(defaultLandingContent(slug));
+        request.log.info(
+          { slug, userAgent: request.headers['user-agent'] || '' },
+          'PUBLIC_TENANT_DTO_HIT'
+        );
+        return reply.status(200).send(toPublicTenantDto(content));
+      } catch {
+        // Slug tak dikenal / DB offline → 404, bukan konten default (anti-enumerasi).
+        return reply.status(404).send({ error: 'Tenant tidak ditemukan' });
       }
     }
   );
@@ -464,6 +493,7 @@ export async function trackingRoutes(fastify: FastifyInstance) {
       if (body.eventID) {
         try {
           const { capiService } = await import('../services/capi.service');
+          const tenantLandingDomain = await resolveTenantLandingDomain(tenant_id);
           capiService.sendCapiEvent({
             eventName: 'PageView',
             customer: { phone: '', id: `pv_${Date.now()}` },
@@ -473,7 +503,7 @@ export async function trackingRoutes(fastify: FastifyInstance) {
               fbc: viewData.fbc,
               ipAddress: viewData.ipAddress,
               userAgent: viewData.userAgent,
-              landingUrl: viewData.landingUrl,
+              landingUrl: trustLandingUrlForCapi(viewData.landingUrl, tenantLandingDomain),
               trackingCode: body.eventID,
               utmSource: viewData.utmSource,
               utmMedium: viewData.utmMedium,

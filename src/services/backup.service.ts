@@ -26,6 +26,17 @@ const execFileAsync = promisify(execFile);
 /** Ukuran minimum dump SQL agar file kosong/terpotong tidak dianggap backup sah. */
 const MIN_SQL_DUMP_BYTES = 1024;
 
+/** Batas hasil dekompresi restore (anti gzip bomb). */
+const MAX_RESTORE_BYTES = 512 * 1024 * 1024;
+
+function getMaxRestoreBytes(): number {
+  const configured = Number(process.env.BACKUP_MAX_RESTORE_BYTES || MAX_RESTORE_BYTES);
+  return Number.isFinite(configured) && configured >= 1024 ? configured : MAX_RESTORE_BYTES;
+}
+
+/** Jumlah backup lokal yang dipertahankan per tenant. */
+const LOCAL_BACKUP_RETENTION = 14;
+
 export interface BackupItem {
   id: string;
   name: string;
@@ -60,8 +71,9 @@ export class BackupService {
    */
   public async createDatabaseDump(
     tenantId: string = DEFAULT_TENANT_ID,
-    options?: { prefix?: string }
+    options?: { prefix?: string; scope?: 'tenant' | 'global' }
   ): Promise<BackupResult> {
+    const scope: 'tenant' | 'global' = options?.scope || 'tenant';
     ensureBackupDirectory();
     const fileName = generateBackupFileName(options?.prefix || 'wa_clinic_backup');
     const filePath = path.join(BACKUP_STORAGE_DIR, fileName);
@@ -69,7 +81,8 @@ export class BackupService {
     const dbUrl = process.env.DATABASE_URL;
     const hasPgDump = await this.isPgDumpAvailable();
 
-    if (hasPgDump && dbUrl && !dbUrl.includes('localhost') && !process.env.WAHA_MOCK) {
+    // pg_dump menyalin SELURUH database → hanya boleh untuk scope 'global'.
+    if (scope === 'global' && hasPgDump && dbUrl && !dbUrl.includes('localhost') && !process.env.WAHA_MOCK) {
       // Task 3.4 / backup SQL: jangan pakai pipeline shell `pg_dump | gzip`.
       // Pipeline tanpa pipefail dapat mengembalikan exit 0 walau pg_dump gagal,
       // sehingga terbentuk gzip kosong yang tampak "sukses". Tulis SQL ke file
@@ -114,11 +127,12 @@ export class BackupService {
       }
     } else {
       // Fallback programmatic dump (kompatibel lintas platform Windows/Linux & offline tests)
-      await this.createProgrammaticDump(filePath, tenantId);
+      await this.createProgrammaticDump(filePath, tenantId, scope);
     }
 
     const stat = fs.statSync(filePath);
     console.log(`[BackupService] Backup created successfully: ${fileName} (${stat.size} bytes)`);
+    this.pruneLocalBackups();
 
     return {
       filePath,
@@ -127,11 +141,38 @@ export class BackupService {
     };
   }
 
+  /** Retensi file backup lokal: simpan N terbaru agar disk tidak penuh. */
+  private pruneLocalBackups(): void {
+    try {
+      const files = fs
+        .readdirSync(BACKUP_STORAGE_DIR)
+        .filter((f) => f.endsWith('.sql.gz') || f.endsWith('.json.gz'))
+        .map((f) => {
+          const full = path.join(BACKUP_STORAGE_DIR, f);
+          return { full, mtimeMs: fs.statSync(full).mtimeMs };
+        })
+        .sort((a, b) => b.mtimeMs - a.mtimeMs);
+      for (const old of files.slice(LOCAL_BACKUP_RETENTION)) {
+        try {
+          fs.unlinkSync(old.full);
+        } catch {}
+      }
+    } catch {
+      // best-effort
+    }
+  }
+
   /**
    * Export database tables secara programatik menggunakan Prisma, gzip & AES-256-GCM
    */
-  private async createProgrammaticDump(filePath: string, tenantId: string): Promise<void> {
-    // Task 3.1 & 3.2: Fail-closed (tanpa .catch(() => [])) agar pembacaan tabel yang gagal membatalkan backup
+  private async createProgrammaticDump(
+    filePath: string,
+    tenantId: string,
+    scope: 'tenant' | 'global' = 'tenant'
+  ): Promise<void> {
+    // Task 3.1 & 3.2: Fail-closed (tanpa .catch(() => [])) agar pembacaan tabel yang gagal membatalkan backup.
+    // Scope 'tenant' WAJIB memfilter tenant_id agar dump tidak mencampur data tenant lain.
+    const where = scope === 'tenant' ? { where: { tenant_id: tenantId } } : undefined;
     const [
       customers,
       children,
@@ -146,18 +187,18 @@ export class BackupService {
       conversations,
       messages,
     ] = await Promise.all([
-      prisma.customer.findMany(),
-      prisma.child.findMany(),
-      prisma.reservation.findMany(),
-      prisma.reservationArchive.findMany(),
-      prisma.clinicService.findMany(),
-      prisma.deliveryTier.findMany(),
-      prisma.staff.findMany(),
-      prisma.tenantPersona.findMany(),
-      prisma.tenantAiConfig.findMany(),
-      prisma.knowledgeChunk.findMany(),
-      prisma.conversation.findMany(),
-      prisma.message.findMany(),
+      (prisma.customer as any).findMany(where),
+      (prisma.child as any).findMany(where),
+      (prisma.reservation as any).findMany(where),
+      (prisma.reservationArchive as any).findMany(where),
+      (prisma.clinicService as any).findMany(where),
+      (prisma.deliveryTier as any).findMany(where),
+      (prisma.staff as any).findMany(where),
+      (prisma.tenantPersona as any).findMany(where),
+      (prisma.tenantAiConfig as any).findMany(where),
+      (prisma.knowledgeChunk as any).findMany(where),
+      (prisma.conversation as any).findMany(where),
+      (prisma.message as any).findMany(where),
     ]);
 
     const tableCounts: Record<string, number> = {
@@ -180,6 +221,7 @@ export class BackupService {
         schemaVersion: '2.0',
         exportedAt: new Date().toISOString(),
         tenantId,
+        scope,
         tableCounts,
         format: 'JSON_GZIP_ENCRYPTED_V1',
       },
@@ -345,7 +387,7 @@ export class BackupService {
 
       let decompressed: string;
       if (payloadToGunzip.length >= 2 && payloadToGunzip[0] === 0x1f && payloadToGunzip[1] === 0x8b) {
-        decompressed = zlib.gunzipSync(payloadToGunzip).toString('utf-8');
+        decompressed = zlib.gunzipSync(payloadToGunzip, { maxOutputLength: getMaxRestoreBytes() }).toString('utf-8');
       } else {
         decompressed = payloadToGunzip.toString('utf-8');
       }
@@ -405,7 +447,7 @@ export class BackupService {
     let decompressed: string;
     if (payloadToGunzip.length >= 2 && payloadToGunzip[0] === 0x1f && payloadToGunzip[1] === 0x8b) {
       try {
-        decompressed = zlib.gunzipSync(payloadToGunzip).toString('utf-8');
+        decompressed = zlib.gunzipSync(payloadToGunzip, { maxOutputLength: getMaxRestoreBytes() }).toString('utf-8');
       } catch (err: any) {
         throw new Error(`Gagal mengekstrak isi file backup gzip: ${err?.message}`);
       }
@@ -449,6 +491,13 @@ export class BackupService {
 
     const tables = parsed.tables || {};
 
+    // G7: dump global hanya untuk operator (pg_restore), bukan restore tenant.
+    if (parsed?.meta?.scope === 'global') {
+      throw new Error(
+        'Dump global (scope=global) tidak dapat direstore lewat endpoint tenant. Gunakan pg_restore oleh operator.'
+      );
+    }
+
     // I-002: dump lintas tenant DILARANG direstore ke tenant lain.
     const dumpTenantId = parsed?.meta?.tenantId;
     if (dumpTenantId && dumpTenantId !== tenantId) {
@@ -475,9 +524,17 @@ export class BackupService {
       const incomingCustCount = Array.isArray(tables.customers) ? tables.customers.length : 0;
 
       // 1. Cek terhadap data aktif DB saat ini
+      const countSafe = async (model: any): Promise<number> => {
+        try {
+          if (!model || typeof model.count !== 'function') return 0;
+          return await model.count({ where: { tenant_id: tenantId } });
+        } catch {
+          return 0;
+        }
+      };
       const [currentResCount, currentCustCount] = await Promise.all([
-        prisma.reservation.count({ where: { tenant_id: tenantId } }).catch(() => 0),
-        prisma.customer.count({ where: { tenant_id: tenantId } }).catch(() => 0),
+        countSafe(prisma.reservation),
+        countSafe(prisma.customer),
       ]);
 
       // 2. Cek terhadap backup sebelumnya jika ada
@@ -556,6 +613,8 @@ export class BackupService {
       }
     }
 
+    const restoreWriteFailures: string[] = [];
+
     {
       try {
         // 1. Pulihkan Staff
@@ -581,7 +640,7 @@ export class BackupService {
                   tenant_id: st.tenant_id || tenantId,
                 },
               });
-            } catch {}
+            } catch (writeErr: any) { restoreWriteFailures.push(writeErr?.message || 'write failed'); }
           }
           restoredSummary.push(`${tables.staff.length} staff`);
           tablesRestored++;
@@ -614,7 +673,7 @@ export class BackupService {
                   tenant_id: c.tenant_id || tenantId,
                 },
               });
-            } catch {}
+            } catch (writeErr: any) { restoreWriteFailures.push(writeErr?.message || 'write failed'); }
           }
           restoredSummary.push(`${tables.customers.length} pasien`);
           tablesRestored++;
@@ -677,7 +736,7 @@ export class BackupService {
                   tenant_id: s.tenant_id || tenantId,
                 },
               });
-            } catch {}
+            } catch (writeErr: any) { restoreWriteFailures.push(writeErr?.message || 'write failed'); }
           }
           restoredSummary.push(`${tables.services.length} layanan treatment`);
           tablesRestored++;
@@ -689,7 +748,9 @@ export class BackupService {
             await prisma.deliveryTier.deleteMany({
               where: { tenant_id: tenantId },
             });
-          } catch {}
+          } catch (writeErr: any) {
+            restoreWriteFailures.push(writeErr?.message || 'deliveryTier delete failed');
+          }
 
           for (const dt of tables.deliveryTiers) {
             try {
@@ -703,7 +764,7 @@ export class BackupService {
                   tenant_id: dt.tenant_id || tenantId,
                 },
               });
-            } catch {}
+            } catch (writeErr: any) { restoreWriteFailures.push(writeErr?.message || 'write failed'); }
           }
           restoredSummary.push(`${tables.deliveryTiers.length} tier ongkir`);
           tablesRestored++;
@@ -730,7 +791,7 @@ export class BackupService {
                   booking_date: r.booking_date ? new Date(r.booking_date) : undefined,
                 },
               });
-            } catch {}
+            } catch (writeErr: any) { restoreWriteFailures.push(writeErr?.message || 'write failed'); }
           }
           restoredSummary.push(`${tables.reservations.length} reservasi`);
           tablesRestored++;
@@ -785,7 +846,7 @@ export class BackupService {
                 update: { ...p },
                 create: { ...p },
               });
-            } catch {}
+            } catch (writeErr: any) { restoreWriteFailures.push(writeErr?.message || 'write failed'); }
           }
           tablesRestored++;
         }
@@ -799,7 +860,7 @@ export class BackupService {
                 update: { ...rest },
                 create: { ...a },
               });
-            } catch {}
+            } catch (writeErr: any) { restoreWriteFailures.push(writeErr?.message || 'write failed'); }
           }
           tablesRestored++;
         }
@@ -813,7 +874,7 @@ export class BackupService {
                 update: { ...k },
                 create: { ...k },
               });
-            } catch {}
+            } catch (writeErr: any) { restoreWriteFailures.push(writeErr?.message || 'write failed'); }
           }
           restoredSummary.push(`${tables.knowledgeChunks.length} knowledge chunks`);
           tablesRestored++;
@@ -846,7 +907,7 @@ export class BackupService {
                   pinned_at: conv.pinned_at ? new Date(conv.pinned_at) : undefined,
                 },
               });
-            } catch {}
+            } catch (writeErr: any) { restoreWriteFailures.push(writeErr?.message || 'write failed'); }
           }
           restoredSummary.push(`${tables.conversations.length} percakapan`);
           tablesRestored++;
@@ -877,27 +938,33 @@ export class BackupService {
                   revoked_at: m.revoked_at ? new Date(m.revoked_at) : undefined,
                 },
               });
-            } catch {}
+            } catch (writeErr: any) { restoreWriteFailures.push(writeErr?.message || 'write failed'); }
           }
           restoredSummary.push(`${tables.messages.length} pesan chat`);
           tablesRestored++;
         }
       } catch (err: any) {
         console.warn('[BackupService] Partial error during JSON restore:', err?.message);
+        restoreWriteFailures.push(err?.message || 'restore block failed');
       }
     }
 
-    // Audit Log
+    const restoreSucceeded = tablesRestored > 0 && restoreWriteFailures.length === 0;
+    const writeErrorSample = restoreWriteFailures.slice(0, 3).join('; ');
+
+    // Audit Log: sukses dan partial dibedakan.
     try {
       await prisma.auditLog.create({
         data: {
           tenant_id: tenantId,
           admin_key: 'ADMIN',
           admin_identity: 'ADMIN_MANUAL',
-          action: 'RESTORE_DATABASE',
+          action: restoreSucceeded ? 'RESTORE_DATABASE' : 'RESTORE_DATABASE_PARTIAL',
           payload: JSON.stringify({
             fileName: path.basename(filePath),
             tablesRestored,
+            writeFailures: restoreWriteFailures.length,
+            errorSample: writeErrorSample,
             summary: restoredSummary.join(', '),
           }),
         },
@@ -907,6 +974,17 @@ export class BackupService {
     }
 
     const detailMsg = restoredSummary.length > 0 ? ` (${restoredSummary.join(', ')})` : '';
+
+    if (!restoreSucceeded) {
+      return {
+        success: false,
+        message:
+          tablesRestored === 0
+            ? `Restore gagal: tidak ada tabel yang berhasil ditulis dari ${path.basename(filePath)}.`
+            : `Restore sebagian: ${tablesRestored} tabel tercatat, ${restoreWriteFailures.length} kegagalan tulis (${writeErrorSample}).`,
+        tablesRestored,
+      };
+    }
 
     return {
       success: true,

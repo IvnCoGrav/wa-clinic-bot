@@ -93,7 +93,17 @@ export async function staffRoutes(fastify: FastifyInstance) {
       });
     }
 
-    // Pasang konteks sesi & ID staff ke request untuk digunakan handler subroute
+    // Pasang konteks sesi & ID staff ke request untuk digunakan handler subroute.
+    // Tenant WAJIB dari sesi (M05-13): header/query tidak boleh memindahkan staf
+    // ke tenant lain. Impersonation admin sudah menetapkan tenant di sesi.
+    const sessionTenantId = String((session as any)?.staff?.tenant_id || '').trim();
+    if (!/^[a-z0-9][a-z0-9._-]{0,63}$/i.test(sessionTenantId)) {
+      return reply.status(401).send({
+        error: 'Unauthorized: tenant sesi staff tidak valid.',
+        code: 'INVALID_SESSION_TENANT',
+      });
+    }
+    (request as any).tenantId = sessionTenantId;
     (request as any).staffSession = session;
     (request as any).staffId = session.staff.id;
   });

@@ -134,7 +134,7 @@ export const MODULE_PATH_TO_API_SCOPES: Readonly<Record<string, readonly Derived
   // A-009: /admin/overview TIDAK BOLEH otomatis memberi /api/admin/financial-analytics!
   '/admin/overview': [
     { apiPrefix: '/api/admin/reservations/count', methods: 'GET' },
-    { apiPrefix: '/api/admin/live-chat', methods: 'GET' },
+    { apiPrefix: '/api/admin/live-chat/unread-count', methods: 'GET' },
     { apiPrefix: '/api/admin/settings', methods: 'GET' },
   ],
   '/admin/financial-analytics': [

@@ -51,9 +51,9 @@ export async function reservationDispatchPaymentProofRoutes(fastify: FastifyInst
           const { mediaService } = await import('../../services/media.service');
           const rawB64 = imageB64.replace(/^data:image\/[^;]+;base64,/, '');
           const resized = await mediaService.resizeImageToMax(Buffer.from(rawB64, 'base64'), 800);
-          const saved = await mediaService.saveOutboundMedia({
+          const saved = await mediaService.savePaymentProof({
             tenantId: tenantId,
-            imageB64: resized.toString('base64'),
+            buffer: resized,
             mimeType: mimeType && mimeType !== 'application/octet-stream' ? mimeType : 'image/jpeg',
             fileName: fileName || `proof-${id}.jpg`,
           });
@@ -577,6 +577,10 @@ export async function reservationDispatchPaymentProofRoutes(fastify: FastifyInst
       try {
         if (id.startsWith('lead_')) {
           const customerId = id.replace('lead_', '');
+          const { isLeadOwnedByTenant } = await import('../../services/lead-moderation.service');
+          if (!(await isLeadOwnedByTenant(customerId, tenantId))) {
+            return reply.status(404).send({ error: 'Lead tidak ditemukan untuk tenant ini.' });
+          }
           await auditService.logAdminAction({
             apiKey: (request as any).adminKeyUsed,
             adminIdentity: (request as any).adminIdentity,
@@ -652,6 +656,10 @@ export async function reservationDispatchPaymentProofRoutes(fastify: FastifyInst
       try {
         if (id.startsWith('lead_')) {
           const customerId = id.replace('lead_', '');
+          const { isLeadOwnedByTenant } = await import('../../services/lead-moderation.service');
+          if (!(await isLeadOwnedByTenant(customerId, tenantId))) {
+            return reply.status(404).send({ error: 'Lead tidak ditemukan untuk tenant ini.' });
+          }
           await auditService.logAdminAction({
             apiKey: (request as any).adminKeyUsed,
             adminIdentity: (request as any).adminIdentity,

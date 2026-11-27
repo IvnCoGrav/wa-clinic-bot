@@ -41,6 +41,7 @@ require_env() {
 
 require_env "ADMIN_API_KEY"
 require_env "WAHA_WEBHOOK_SECRET"
+require_env "TRACKING_API_KEY"
 
 WAHA_API_KEY_VAL=$(grep -E "^WAHA_API_KEY=" .env | head -1 | cut -d'=' -f2- | tr -d '"')
 if [[ -z "${WAHA_API_KEY_VAL}" ]]; then
@@ -48,13 +49,26 @@ if [[ -z "${WAHA_API_KEY_VAL}" ]]; then
   exit 1
 fi
 
+# Integrasi opsional: peringatkan, jangan gagalkan deploy (fitur degrade jujur).
+for optional in FB_CAPI_ACCESS_TOKEN TELEGRAM_BOT_TOKEN; do
+  val=$(grep -E "^${optional}=" .env | head -1 | cut -d'=' -f2- | tr -d '"' || true)
+  if [[ -z "${val}" ]]; then
+    echo "  WARN: ${optional} kosong — fitur terkait (CAPI/Telegram) tidak aktif sampai diisi." >&2
+  fi
+done
+
 if grep -qE "^WAHA_BASE_URL=(http://)?localhost|^WAHA_BASE_URL=127\." .env; then
   echo "ERROR: WAHA_BASE_URL di .env menunjuk localhost. Dari dalam container app harus 'http://waha:3000'." >&2
   echo "  Fix: set WAHA_BASE_URL=http://waha:3000 di .env server (jangan localhost:3001)." >&2
   exit 1
 fi
 
-echo "  OK: ADMIN_API_KEY ✓ WAHA_WEBHOOK_SECRET ✓ WAHA_API_KEY ✓ WAHA_BASE_URL ✓"
+echo "  OK: ADMIN_API_KEY ✓ WAHA_WEBHOOK_SECRET ✓ TRACKING_API_KEY ✓ WAHA_API_KEY ✓ WAHA_BASE_URL ✓"
+
+# G11(a): turunkan .env.worker (tanpa secret inbound webhook) + gerbang kontrak.
+echo "  Menyiapkan .env.worker (worker tanpa secret inbound) ..."
+node scripts/generate-worker-env.mjs
+node scripts/check-env-contract.mjs
 
 # Pastikan Docker network eksternal hermes-net (docker-compose.yml) sudah ada
 if ! docker network inspect hermes-net >/dev/null 2>&1; then
@@ -158,5 +172,6 @@ echo "  Log worker (10 baris terakhir, pastikan tidak crash-loop):"
 docker compose logs --tail 10 worker 2>&1 || true
 echo
 echo
-echo "Selesai. Kalau /ready menunjukkan waha bukan WORKING, scan QR via admin dashboard."
+echo "Selesai. /ready publik hanya berisi {status}; detail dependency/cron ada di dashboard"
+echo "GET /api/admin/health (ber-auth). Kalau WAHA bukan WORKING, scan QR via admin dashboard."
 echo "Lalu kirim 1 pesan WhatsApp asli untuk smoke test."

@@ -44,6 +44,39 @@ export interface CronHealthSnapshot {
 const registry = new Map<string, CronJobHealth>();
 
 const DEFAULT_FAILURE_ALERT_THRESHOLD = 3;
+const HEARTBEAT_INSTANCE_ID = `${process.pid}`;
+
+/** Tulis heartbeat ke DB agar proses app bisa membaca status cron worker (G8). */
+function persistHeartbeat(job: CronJobHealth): void {
+  import('../db/client')
+    .then(({ prisma }) => {
+      const delegate = (prisma as any).cronJobHeartbeat;
+      if (!delegate?.upsert) return;
+      return delegate.upsert({
+        where: { job_name: job.name },
+        update: {
+          instance_id: HEARTBEAT_INSTANCE_ID,
+          last_started_at: job.lastStartedAt ? new Date(job.lastStartedAt) : null,
+          last_finished_at: job.lastFinishedAt ? new Date(job.lastFinishedAt) : null,
+          last_status: job.lastStatus,
+          last_error: job.lastError,
+          consecutive_failures: job.consecutiveFailures,
+        },
+        create: {
+          job_name: job.name,
+          instance_id: HEARTBEAT_INSTANCE_ID,
+          last_started_at: job.lastStartedAt ? new Date(job.lastStartedAt) : null,
+          last_finished_at: job.lastFinishedAt ? new Date(job.lastFinishedAt) : null,
+          last_status: job.lastStatus,
+          last_error: job.lastError,
+          consecutive_failures: job.consecutiveFailures,
+        },
+      });
+    })
+    .catch(() => {
+      // DB offline: registry in-memory tetap menjadi sumber untuk proses ini.
+    });
+}
 
 function ensureJob(name: string): CronJobHealth {
   let job = registry.get(name);
@@ -75,6 +108,7 @@ export function recordCronStart(name: string): void {
   const job = ensureJob(name);
   job.lastStartedAt = new Date().toISOString();
   job.lastStatus = null;
+  persistHeartbeat(job);
 }
 
 export function recordCronSuccess(name: string, durationMs: number): void {
@@ -85,6 +119,7 @@ export function recordCronSuccess(name: string, durationMs: number): void {
   job.consecutiveFailures = 0;
   job.totalRuns += 1;
   job.lastError = null;
+  persistHeartbeat(job);
 }
 
 /**
@@ -100,6 +135,7 @@ export function recordCronFailure(name: string, durationMs: number, error: unkno
   job.totalRuns += 1;
   job.totalFailures += 1;
   job.lastError = error instanceof Error ? error.message : String(error ?? 'unknown error');
+  persistHeartbeat(job);
   return job.consecutiveFailures;
 }
 
@@ -107,6 +143,7 @@ export function recordCronFailure(name: string, durationMs: number, error: unkno
 export function recordCronSkip(name: string): void {
   const job = ensureJob(name);
   job.skippedRuns += 1;
+  persistHeartbeat(job);
 }
 
 export function getCronJobHealth(name: string): CronJobHealth | null {
@@ -141,6 +178,60 @@ export function getCronHealthSnapshot(): CronHealthSnapshot {
 
 export function isCronHealthDegraded(): boolean {
   return getCronHealthSnapshot().status === 'DEGRADED';
+}
+
+/**
+ * Snapshot lintas proses (G8): baca heartbeat worker dari DB. Jika tabel kosong
+ * atau DB offline, jatuh ke registry in-memory proses ini.
+ */
+export async function getCronHealthSnapshotAsync(): Promise<CronHealthSnapshot> {
+  try {
+    const { prisma } = await import('../db/client');
+    const delegate = (prisma as any).cronJobHeartbeat;
+    if (delegate?.findMany) {
+      const rows = (await delegate.findMany()) as any[];
+      if (rows.length > 0) {
+        const threshold = getCronFailureAlertThreshold();
+        const staleMs = Math.max(60_000, parseInt(process.env.CRON_HEARTBEAT_STUCK_MS || '900000', 10));
+        const now = Date.now();
+        const jobs: CronJobHealth[] = rows
+          .map((row) => ({
+            name: String(row.job_name),
+            lastStartedAt: row.last_started_at ? new Date(row.last_started_at).toISOString() : null,
+            lastFinishedAt: row.last_finished_at ? new Date(row.last_finished_at).toISOString() : null,
+            lastDurationMs: null,
+            lastStatus: (row.last_status as CronRunStatus | null) ?? null,
+            consecutiveFailures: Number(row.consecutive_failures || 0),
+            totalRuns: 0,
+            totalFailures: 0,
+            skippedRuns: 0,
+            lastError: row.last_error ?? null,
+          }))
+          .sort((a, b) => a.name.localeCompare(b.name));
+
+        const failingJobs = jobs
+          .filter((job) => {
+            if (job.consecutiveFailures >= threshold) return true;
+            const started = job.lastStartedAt ? Date.parse(job.lastStartedAt) : null;
+            const finished = job.lastFinishedAt ? Date.parse(job.lastFinishedAt) : null;
+            const stuck = started !== null && (finished === null || started > finished) && now - started > staleMs;
+            return stuck;
+          })
+          .map((job) => job.name);
+
+        return {
+          status: failingJobs.length > 0 ? 'DEGRADED' : 'OK',
+          checkedAt: new Date().toISOString(),
+          alertThreshold: threshold,
+          failingJobs,
+          jobs,
+        };
+      }
+    }
+  } catch {
+    // fallback ke registry lokal
+  }
+  return getCronHealthSnapshot();
 }
 
 /** Helper untuk test/restart — mengosongkan registry. */

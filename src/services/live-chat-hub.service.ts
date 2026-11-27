@@ -50,6 +50,8 @@ export class LiveChatHubService {
   private redisPublisher: Redis | null = null;
   private redisSubscriber: Redis | null = null;
   private subscribedChannels: Set<string> = new Set();
+  /** Semua channel yang pernah dilanggan — dipakai untuk re-subscribe setelah Redis pulih. */
+  private resubscribeChannels: Set<string> = new Set();
   private readonly localBus: EventEmitter = new EventEmitter();
   private readonly readyPromise: Promise<void>;
 
@@ -95,10 +97,30 @@ export class LiveChatHubService {
               `\n🚨 [CRITICAL ALERT] Redis connection lost/error at runtime! Entering In-Memory LiveChat Hub Fallback Mode. Please check Redis server immediately. Error: ${err.message}`
             );
             this.redisEnabled = false;
+            // Langganan lama hilang saat koneksi putus; tandai perlu re-subscribe.
+            this.subscribedChannels.clear();
           }
         };
         this.redisPublisher.on('error', onError);
         this.redisSubscriber.on('error', onError);
+
+        // Pemulihan: ioredis reconnect otomatis; pulihkan flag + langganan channel.
+        const onReady = async () => {
+          if (this.redisEnabled) return;
+          this.redisEnabled = true;
+          console.log('[LIVE CHAT HUB] Redis pulih — broadcast lintas instance aktif kembali.');
+          if (!this.redisSubscriber) return;
+          for (const channel of this.resubscribeChannels) {
+            try {
+              await this.redisSubscriber.subscribe(channel);
+              this.subscribedChannels.add(channel);
+            } catch (err: any) {
+              console.warn('[LIVE CHAT HUB] Re-subscribe gagal:', err?.message);
+            }
+          }
+        };
+        this.redisPublisher.on('ready', () => void onReady());
+        this.redisSubscriber.on('ready', () => void onReady());
 
         this.redisSubscriber.on('message', (channel: string, message: string) => {
           try {
@@ -195,6 +217,7 @@ export class LiveChatHubService {
   }
 
   private async ensureSubscribed(channel: string): Promise<void> {
+    this.resubscribeChannels.add(channel);
     if (this.subscribedChannels.has(channel)) return;
     if (!this.redisSubscriber) return;
     await this.redisSubscriber.subscribe(channel);

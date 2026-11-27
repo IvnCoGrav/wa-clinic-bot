@@ -53,6 +53,8 @@
     "audit:reservation-lock": "tsx scripts/audit/reservation-lock-probe.ts",
     "find:module": "node scripts/reuse/find-module.mjs",
     "docs:modules": "node scripts/reuse/generate-module-index.mjs",
+    "env:worker": "node scripts/generate-worker-env.mjs",
+    "check:env-contract": "node scripts/check-env-contract.mjs",
     "check:reuse": "node scripts/reuse/check-reuse.mjs",
     "check:reuse:warn": "node scripts/reuse/check-reuse.mjs --warn",
     "check:reuse:update": "node scripts/reuse/check-reuse.mjs --update-baseline --allow-update",

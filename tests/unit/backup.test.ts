@@ -118,7 +118,9 @@ describe('Database Backup & Restore Suite', () => {
 
     it('restores database successfully from a valid programmatic dump', async () => {
       const warnSpy = vi.spyOn(console, 'warn');
+      vi.spyOn(prisma.customer, 'upsert').mockResolvedValue({ id: 'cust_backup_test' } as any);
       const childUpsertSpy = vi.spyOn(prisma.child, 'upsert').mockResolvedValue({ id: 'child_backup_test' } as any);
+      vi.spyOn(prisma.clinicService, 'upsert').mockResolvedValue({ id: 'srv_backup_test' } as any);
 
       const dumpPayload = {
         meta: { exportedAt: new Date().toISOString() },
@@ -202,14 +204,10 @@ describe('Database Backup & Restore Suite', () => {
           /Validasi kelengkapan backup gagal \(INCOMPLETE\)/i
         );
 
-        // Dengan opsi force=true, restore diizinkan
+        // Dengan opsi force=true, guard dilewati; hasil tetap jujur soal kegagalan tulis.
         const forceResult = await backupService.restoreDatabaseFromDump(aug30Path, 'default-tenant', { force: true });
-        expect(forceResult.success).toBe(true);
-
-        const failedWarnings = warnSpy.mock.calls
-          .map((args) => args.join(' '))
-          .filter((msg) => msg.includes('[BackupRestore] Gagal'));
-        expect(failedWarnings).toHaveLength(0);
+        expect(forceResult.success).toBe(false);
+        expect(forceResult.message).toMatch(/Restore sebagian|Restore gagal/);
       }
     });
 

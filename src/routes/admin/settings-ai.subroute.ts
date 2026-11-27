@@ -3,6 +3,7 @@ import { prisma } from '../../db/client';
 import { auditService } from '../../services/audit.service';
 import { AI_ELIGIBILITY_ESCALATION_REASON } from '../../services/ai-eligibility.service';
 import { requireTenantId, resolveTenantId } from './settings-helpers';
+import { parseWhatsappNumber } from '../../utils/landing-fields';
 
 /**
  * Status kunci API + katalog resmi per gateway (sumber tunggal untuk GET & PATCH
@@ -521,11 +522,18 @@ export async function settingsAiRoutes(fastify: FastifyInstance) {
       return reply.status(404).send({ error: 'Tenant tidak ditemukan' });
     }
 
+    let normalizedWhatsapp: string | null | undefined;
+    if (body.whatsappNumber !== undefined) {
+      const parsed = parseWhatsappNumber(body.whatsappNumber);
+      if (!parsed.ok) return reply.status(400).send({ error: parsed.error });
+      normalizedWhatsapp = parsed.value;
+    }
+
     const updated = await prisma.tenant.update({
       where: { id: tenant.id },
       data: {
         ...(body.csName !== undefined ? { cs_name: body.csName } : {}),
-        ...(body.whatsappNumber !== undefined ? { whatsapp_number: body.whatsappNumber } : {}),
+        ...(body.whatsappNumber !== undefined ? { whatsapp_number: normalizedWhatsapp } : {}),
         ...(body.formatVisit !== undefined ? { format_visit: body.formatVisit } : {}),
         ...(body.greetingsText !== undefined ? { greetings_text: body.greetingsText } : {}),
         ...(body.formatCheckout !== undefined ? { format_checkout: body.formatCheckout } : {}),

@@ -441,6 +441,13 @@ export function sanitizeStaffHubPayload(payload: any, eventType?: string, opts?:
     }
   }
 
+  // message.status_updated membawa waMessageId berformat JID (nomor pelanggan).
+  if (eventType === 'message.status_updated') {
+    for (const key of ['waMessageId', 'wa_message_id', 'messageId']) {
+      if (typeof clone[key] === 'string' && clone[key]) clone[key] = mask(clone[key]);
+    }
+  }
+
   // message.updated sering membawa conversationId + content parsial — content sudah di-mask di atas
   // conversation.updated tidak mengandung PII chat, tidak perlu maskir tambahan
 

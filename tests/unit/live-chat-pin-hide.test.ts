@@ -85,7 +85,7 @@ describe('Live Chat PIN & HIDE Bubble Chat (Adversarial & Flow Tests)', () => {
         url: `/api/admin/live-chat/conversations/${conversationId}/messages/${msg1Id}/pin`,
         headers: {
           'x-api-key': ADMIN_KEY,
-          'x-admin-name': 'Bidan Sari',
+          'x-admin-identity': 'Bidan Sari',
         },
         payload: { isPinned: true },
       });
@@ -105,7 +105,7 @@ describe('Live Chat PIN & HIDE Bubble Chat (Adversarial & Flow Tests)', () => {
         url: `/api/admin/live-chat/conversations/${conversationId}/messages/${msg2Id}/pin`,
         headers: {
           'x-api-key': ADMIN_KEY,
-          'x-admin-name': 'Admin Rina',
+          'x-admin-identity': 'Admin Rina',
         },
         payload: { isPinned: true },
       });
@@ -198,7 +198,7 @@ describe('Live Chat PIN & HIDE Bubble Chat (Adversarial & Flow Tests)', () => {
         url: `/api/admin/live-chat/conversations/${conversationId}/messages/${msg1Id}/hide`,
         headers: {
           'x-api-key': ADMIN_KEY,
-          'x-admin-name': 'Supervisor Dewi',
+          'x-admin-identity': 'Supervisor Dewi',
         },
         payload: { isHidden: true },
       });

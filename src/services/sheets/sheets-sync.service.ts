@@ -201,6 +201,7 @@ export class SheetsSyncService {
           // Tanggal kosong / tahun belum dipetakan: tunda dengan batas percobaan agar tidak infinite defer.
           if (attempts >= MAX_ATTEMPTS) {
             await this.store.markFailed(item.id, `EXCEEDED_MAX_DEFERRALS: ${message}`);
+            await this.alertTerminalFailure(item, `EXCEEDED_MAX_DEFERRALS: ${message}`);
             result.failed++;
           } else {
             await this.store.incrementAttempt(item.id, new Date(Date.now() + 15 * 60 * 1000), message);
@@ -208,6 +209,7 @@ export class SheetsSyncService {
           }
         } else if (attempts >= MAX_ATTEMPTS) {
           await this.store.markFailed(item.id, message);
+          await this.alertTerminalFailure(item, message);
           result.failed++;
         } else {
           await this.store.incrementAttempt(item.id, new Date(Date.now() + backoffMinutes(attempts) * 60 * 1000), message);
@@ -405,6 +407,40 @@ export class SheetsSyncService {
       templateSheetName: config.template_sheet_name,
     });
     return { year: target.year, tabName: result.tabName, created: result.created };
+  }
+
+  private async alertTerminalFailure(
+    item: { reservation_id: string },
+    message: string
+  ): Promise<void> {
+    try {
+      const { alertService, AlertType, AlertSeverity } = await import('../alert.service');
+      await alertService.notifyAlert({
+        type: AlertType.THIRD_PARTY_OUTAGE,
+        severity: AlertSeverity.CRITICAL,
+        message: `[SHEETS DEAD-LETTER] Sinkronisasi reservasi ${item.reservation_id} gagal permanen: ${message}`,
+        metadata: { reservationId: item.reservation_id, source: 'sheets_outbox' },
+      });
+    } catch {
+      // Alert best-effort; kegagalan alert tidak boleh menggagalkan worker.
+    }
+  }
+
+  /**
+   * Kembalikan baris outbox berstatus `failed` ke antrean (dead-letter requeue).
+   * Tanpa ini, reservasi completed yang gagal permanen hilang dari rekapan.
+   */
+  public async requeueFailed(tenantId: string): Promise<number> {
+    const result = await prisma.sheetsSyncOutbox.updateMany({
+      where: { tenant_id: tenantId, status: 'failed' },
+      data: {
+        status: 'pending',
+        attempts: 0,
+        next_retry_at: new Date(),
+        last_error: null,
+      },
+    });
+    return result.count;
   }
 }
 

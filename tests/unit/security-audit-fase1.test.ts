@@ -119,11 +119,12 @@ describe('Security Audit Fase 1 (fail-open & guard murah)', () => {
   });
 
   describe('1-5 /ready tanpa bocoran error mentah', () => {
-    it('DB down → pesan generik, tanpa detail error mock', async () => {
+    it('DB down → hanya status NOT_READY, tanpa detail error mock', async () => {
       const res = await app.inject({ method: 'GET', url: '/ready' });
       const body = res.json();
-      expect(body.checks.database).toBe('FAILED: Database unavailable');
+      expect(body).toEqual({ status: 'NOT_READY' });
       expect(res.payload).not.toContain('Database offline');
+      expect(res.payload).not.toContain('checks');
     });
   });
 

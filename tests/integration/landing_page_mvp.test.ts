@@ -11,7 +11,19 @@ describe('Fase 1 MVP — Educational Landing Page & Click Catcher Multi-Tenant I
     vi.restoreAllMocks();
   });
 
-  it('1. GET /api/tenant/:slug should return dynamic TenantLandingContent JSON for tenant resolution', async () => {
+  it('1. GET /api/tenant/:slug should return public DTO (tanpa field internal)', async () => {
+    const { prisma } = await import('../../src/db/client');
+    vi.mocked(prisma.tenant.findFirst).mockResolvedValue({
+      id: 'tenant_kenanga_789',
+      slug: 'kenanga',
+      name: 'Klinik Kenanga',
+      whatsapp_number: '628111222333',
+      meta_pixel_id: '111122223333444',
+      landing_type: 'STRUCTURED_JSON',
+      landing_content: { headline: 'Solusi Pijat & Perawatan Bayi' },
+      raw_html_content: null,
+    } as any);
+
     const response = await app.inject({
       method: 'GET',
       url: '/api/tenant/kenanga',
@@ -20,15 +32,17 @@ describe('Fase 1 MVP — Educational Landing Page & Click Catcher Multi-Tenant I
     expect(response.statusCode).toBe(200);
     const body = JSON.parse(response.body);
 
-    expect(body.tenant_id).toBeDefined();
+    // DTO publik: field internal tidak boleh ada.
+    expect(body.tenant_id).toBeUndefined();
+    expect(body.meta_pixel_id).toBeUndefined();
+    expect(body.raw_html_content).toBeUndefined();
     expect(body.slug).toBe('kenanga');
-    expect(body.clinic_name).toBeDefined();
-    expect(body.headline).toContain('Pijat & Perawatan Bayi');
-    expect(body.benefits).toBeInstanceOf(Array);
-    expect(body.benefits.length).toBeGreaterThan(0);
+    expect(body.structured_content.clinic_name).toBeDefined();
+    expect(body.structured_content.headline).toContain('Pijat & Perawatan Bayi');
+    expect(body.structured_content.benefits).toBeInstanceOf(Array);
+    expect(body.structured_content.benefits.length).toBeGreaterThan(0);
     expect(body.faq).toBeInstanceOf(Array);
-    expect(body.whatsapp_number).toBeDefined();
-    expect(body.meta_pixel_id).toBeDefined();
+    expect(body.whatsapp_number).toBe('628111222333');
   });
 
   it('2. POST /api/tracking/click should store AdClick record with correct multi-tenant tenant_id', async () => {
@@ -76,6 +90,18 @@ describe('Fase 1 MVP — Educational Landing Page & Click Catcher Multi-Tenant I
   });
 
   it('4. SECURITY PROOF: GET /api/tenant/:slug MUST NEVER include meta_capi_access_token or secret keys in response JSON', async () => {
+    const { prisma } = await import('../../src/db/client');
+    vi.mocked(prisma.tenant.findFirst).mockResolvedValue({
+      id: 'tenant_kenanga_789',
+      slug: 'kenanga',
+      name: 'Klinik Kenanga',
+      whatsapp_number: '628111222333',
+      meta_pixel_id: '111122223333444',
+      landing_type: 'STRUCTURED_JSON',
+      landing_content: { headline: 'x' },
+      raw_html_content: null,
+    } as any);
+
     const response = await app.inject({
       method: 'GET',
       url: '/api/tenant/kenanga',
@@ -139,12 +165,14 @@ describe('Fase 1 MVP — Educational Landing Page & Click Catcher Multi-Tenant I
     expect(bodyMelati.whatsapp_number).toBe('6289876543210');
     expect(bodyKenanga.whatsapp_number).not.toBe(bodyMelati.whatsapp_number);
 
-    expect(bodyKenanga.meta_pixel_id).toBe('111122223333444');
-    expect(bodyMelati.meta_pixel_id).toBe('999988887777666');
-    expect(bodyKenanga.meta_pixel_id).not.toBe(bodyMelati.meta_pixel_id);
+    // DTO publik: pixel & tenant_id internal tidak boleh ikut keluar.
+    expect(bodyKenanga.meta_pixel_id).toBeUndefined();
+    expect(bodyMelati.meta_pixel_id).toBeUndefined();
+    expect(bodyKenanga.tenant_id).toBeUndefined();
+    expect(bodyKenanga.raw_html_content).toBeUndefined();
 
-    expect(bodyKenanga.headline).toBe('Promo Pijat Bayi Klinik Kenanga');
-    expect(bodyMelati.headline).toBe('Perawatan Ibu & Anak Klinik Melati');
+    expect(bodyKenanga.structured_content.headline).toBe('Promo Pijat Bayi Klinik Kenanga');
+    expect(bodyMelati.structured_content.headline).toBe('Perawatan Ibu & Anak Klinik Melati');
   });
 });
 
