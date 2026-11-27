@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { tryParseIndonesianDate } from '../../src/utils/reservation-text-parser';
+import { wibParts } from '../helpers/wib';
 
 /**
  * Cross-validation kontradiksi HARI vs ANGKA TANGGAL pada parser.
@@ -17,12 +18,13 @@ describe('Parser day-date cross-validation (slip hari manusia)', () => {
   it('"Selasa, 21 September 2026" (21 Sep = Senin) → dikoreksi ke Selasa 22 Sep 2026', () => {
     const d = tryParseIndonesianDate('Selasa, 21 September 2026 jam 09.30');
     expect(d).not.toBeNull();
-    expect(d!.getFullYear()).toBe(2026);
-    expect(d!.getMonth()).toBe(8); // September
-    expect(d!.getDate()).toBe(22);
-    expect(d!.getDay()).toBe(2); // Selasa
-    expect(d!.getHours()).toBe(9);
-    expect(d!.getMinutes()).toBe(30);
+    const p = wibParts(d!);
+    expect(p.year).toBe(2026);
+    expect(p.month).toBe(8); // September
+    expect(p.date).toBe(22);
+    expect(p.day).toBe(2); // Selasa
+    expect(p.hours).toBe(9);
+    expect(p.minutes).toBe(30);
   });
 
   it('"Senin, 22 September 2026" (22 Sep = Selasa) → dikoreksi mundur ke Senin 21 Sep 2026', () => {

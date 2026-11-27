@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { parseReservationText, extractBabyDetails, tryParseIndonesianDate, parseConversationalReservation, isReservationFormMessage, registerTenantFormHeaders, clearTenantFormHeadersCacheForTest } from '../../src/utils/reservation-text-parser';
 import { TreatmentCategory } from '@prisma/client';
+import { wibParts } from '../helpers/wib';
 
 describe('Reservation Text Parser Unit Tests', () => {
   it('1. should successfully parse standard BABY reservation list', () => {
@@ -375,13 +376,14 @@ Terimakasih.  ☺️`;
     expect(res.reservation!.babies[0].name).toBe('gifton');
     expect(res.reservation!.babies[0].age).toBe('13bln');
     
-    // Validasi booking date & time
+    // Validasi booking date & time (dibaca dalam WIB, bukan zona host)
     expect(res.reservation!.bookingDate).toBeInstanceOf(Date);
-    expect(res.reservation!.bookingDate!.getFullYear()).toBe(2026);
-    expect(res.reservation!.bookingDate!.getMonth()).toBe(7); // Agustus (0-indexed -> 7)
-    expect(res.reservation!.bookingDate!.getDate()).toBe(29);
-    expect(res.reservation!.bookingDate!.getHours()).toBe(9);
-    expect(res.reservation!.bookingDate!.getMinutes()).toBe(0);
+    const booking = wibParts(res.reservation!.bookingDate!);
+    expect(booking.year).toBe(2026);
+    expect(booking.month).toBe(7); // Agustus (0-indexed -> 7)
+    expect(booking.date).toBe(29);
+    expect(booking.hours).toBe(9);
+    expect(booking.minutes).toBe(0);
 
     // Validasi payment
     expect(res.reservation!.payment).toBeDefined();
@@ -394,44 +396,46 @@ Terimakasih.  ☺️`;
   it('18. should accurately parse afternoon and morning time modifiers (jam 1 siang -> 13:00, jam 3 sore -> 15:00)', () => {
     const d1 = tryParseIndonesianDate('Sabtu 29 Agt 2026 jam 1 siang');
     expect(d1).toBeDefined();
-    expect(d1!.getHours()).toBe(13);
-    expect(d1!.getMinutes()).toBe(0);
+    expect(wibParts(d1!).hours).toBe(13);
+    expect(wibParts(d1!).minutes).toBe(0);
 
     const d2 = tryParseIndonesianDate('Sabtu 29 Agt 2026 jam 3 sore');
     expect(d2).toBeDefined();
-    expect(d2!.getHours()).toBe(15);
-    expect(d2!.getMinutes()).toBe(0);
+    expect(wibParts(d2!).hours).toBe(15);
+    expect(wibParts(d2!).minutes).toBe(0);
 
     const d3 = tryParseIndonesianDate('Sabtu 29 Agt 2026 pukul 14.30 wib');
     expect(d3).toBeDefined();
-    expect(d3!.getHours()).toBe(14);
-    expect(d3!.getMinutes()).toBe(30);
+    expect(wibParts(d3!).hours).toBe(14);
+    expect(wibParts(d3!).minutes).toBe(30);
 
     const d4 = tryParseIndonesianDate('Sabtu 29 Agt 2026 jam 10.00 - 11.00');
     expect(d4).toBeDefined();
-    expect(d4!.getHours()).toBe(10);
-    expect(d4!.getMinutes()).toBe(0);
+    expect(wibParts(d4!).hours).toBe(10);
+    expect(wibParts(d4!).minutes).toBe(0);
   });
 
   it('19. should not confuse dotted dates (e.g. 10.08.2026) as time 10:08', () => {
     const d = tryParseIndonesianDate('10.08.2026');
     expect(d).toBeDefined();
-    expect(d!.getFullYear()).toBe(2026);
-    expect(d!.getMonth()).toBe(7); // Agustus
-    expect(d!.getDate()).toBe(10);
-    expect(d!.getHours()).toBe(9); // Default 09:00 WIB, bukan 10:08
-    expect(d!.getMinutes()).toBe(0);
+    const p = wibParts(d!);
+    expect(p.year).toBe(2026);
+    expect(p.month).toBe(7); // Agustus
+    expect(p.date).toBe(10);
+    expect(p.hours).toBe(9); // Default 09:00 WIB, bukan 10:08
+    expect(p.minutes).toBe(0);
   });
 
   it('20. should recover digit-transposition typo (41 September -> 14 September, cocok hari Senin)', () => {
     const d = tryParseIndonesianDate('Senin, 41 September 2026 jam 09.30-10.00');
     expect(d).toBeDefined();
-    expect(d!.getFullYear()).toBe(2026);
-    expect(d!.getMonth()).toBe(8); // September
-    expect(d!.getDate()).toBe(14);
-    expect(d!.getDay()).toBe(1); // Senin
-    expect(d!.getHours()).toBe(9);
-    expect(d!.getMinutes()).toBe(30);
+    const p = wibParts(d!);
+    expect(p.year).toBe(2026);
+    expect(p.month).toBe(8); // September
+    expect(p.date).toBe(14);
+    expect(p.day).toBe(1); // Senin
+    expect(p.hours).toBe(9);
+    expect(p.minutes).toBe(30);
   });
 
   it('21. should never silently jump +7 days for impossible dates without transposition (99 September -> null)', () => {
