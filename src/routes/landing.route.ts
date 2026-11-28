@@ -72,6 +72,15 @@ function escapeHtmlAttribute(value: string): string {
     .replace(/>/g, '&gt;');
 }
 
+/**
+ * Suntikkan atribut CSP nonce ke semua tag <script> yang belum memiliki atribut nonce.
+ * Bersifat idempotent: aman dipanggil berkali-kali tanpa menghasilkan atribut duplikat.
+ */
+export function injectScriptNonce(html: string, nonce: string): string {
+  if (!nonce) return html;
+  return html.replace(/<script(?![^>]*\bnonce=)([\s>])/gi, `<script nonce="${nonce}"$1`);
+}
+
 /** Batasi field laporan CSP agar endpoint anonim tidak bisa membanjiri log. */
 export function clampReportField(value: unknown, max = 512): string {
   if (typeof value === 'number' && Number.isFinite(value)) return String(value).slice(0, max);
@@ -231,6 +240,9 @@ async function renderPricelist(reply: FastifyReply, request: FastifyRequest): Pr
   html = html.replace('</head>', injection);
   if (brandName) {
     html = html.replace(/<title>[\s\S]*?<\/title>/, `<title>Pricelist — ${brandName}</title>`);
+    html = html.replace(/__CLINIC_NAME__/g, escapeHtmlAttribute(brandName));
+  } else {
+    html = html.replace(/__CLINIC_NAME__/g, 'Kala Moms and Baby Spa');
   }
   html = applyPublicMetadata(html, {
     baseUrl: resolvePublicBaseUrl(request),
@@ -243,9 +255,7 @@ async function renderPricelist(reply: FastifyReply, request: FastifyRequest): Pr
   });
 
   const nonce = crypto.randomBytes(16).toString('base64');
-  html = html
-    .replace(/<script>/g, `<script nonce="${nonce}">`)
-    .replace(/<script /g, `<script nonce="${nonce}" `);
+  html = injectScriptNonce(html, nonce);
 
   applyLandingSecurityHeaders(reply, nonce);
   applyLandingCacheHeaders(reply);
@@ -403,9 +413,7 @@ async function renderLanding(reply: FastifyReply, request: FastifyRequest, conte
     clinicName: content.clinic_name,
   });
 
-  htmlContent = htmlContent
-    .replace(/<script>/g, `<script nonce="${nonce}">`)
-    .replace(/<script src=/g, `<script nonce="${nonce}" src=`);
+  htmlContent = injectScriptNonce(htmlContent, nonce);
 
   return reply.type('text/html').status(200).send(htmlContent);
 }

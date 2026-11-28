@@ -5,8 +5,13 @@
 > Dilarang menyerap seluruh file sejarah 1,1 MB ke context window LLM.
 > Regenerate ulang index setiap entri baru: `node scripts/make-changelog-index.mjs --write`.
 
-Total entri terindeks: 711
+Total entri terindeks: 716
 
+- 2026-11-28 | Fix: Remediasi CSP Nonce Duplikat & SSR Hydration Pricelist (#381)
+- 2026-11-27 | Feat: Sentralisasi & Penyelarasan Seluruh Dashboard Analytics (#379)
+- 2026-11-26 | Feat: Grafik Akumulasi MTD, Forecasting Runway & Breakdown Repeat (#378)
+- 2026-11-25 | Feat: Unifikasi Gestur Swipe & Optimalisasi Pull-to-Refresh (#343)
+- 2026-11-25 | Feat: Spesialisasi Notifikasi Keterlambatan Khusus Staff Terapis (#376)
 - 2026-11-24 | Fix: Live Chat iOS — Kompensasi Visual Viewport Saat Mengetik (#370)
 - 2026-11-23 | Fix: Alur Logout Portal Staf Macet (Dual-Context Desync & Elevasi Dialog)
 - 2026-11-23 | GPS Staf: Banner Consent In-App Dihapus (S-06 Revisi)

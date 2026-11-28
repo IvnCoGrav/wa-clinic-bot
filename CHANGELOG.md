@@ -4,6 +4,18 @@ Semua perubahan signifikan pada proyek ini didokumentasikan di sini.
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 dan proyek ini menggunakan [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+#### 2026-11-28 - Fix: Remediasi CSP Nonce Duplikat & SSR Hydration Pricelist (#381)
+
+- **Konteks:** Menuntaskan laporan bug kritis di mana halaman pricelist live (`/pricelist`) tidak terbuka dengan sempurna (daftar layanan, chip kategori, dan tarif ongkir kosong total) akibat script terblokir oleh Content Security Policy (CSP).
+- **Akar Masalah:**
+  1. **Duplikasi Atribut Nonce:** Pemanggilan berantai `.replace(/<script>/g, '<script nonce="...">').replace(/<script /g, '<script nonce="..." ')` di `src/routes/landing.route.ts` memicu penambahan atribut ganda `<script nonce="..." nonce="...">`. Browser Chromium mendiskualifikasi nonce duplikat dan menolak eksekusi inline script katalog.
+  2. **Placeholder Mentah SSR:** `__CLINIC_NAME__` di header wordmark dan footer note belum disubstitusi di level server, menyebabkan teks mentah terlihat jika client-side JS gagal/terhambat.
+- **Perbaikan Fondasional:**
+  1. **Helper Kanonis Idempotent (`injectScriptNonce`):** Mengimplementasikan fungsi injeksi nonce dengan regex lookahead `/<script(?![^>]*\bnonce=)([\s>])/gi` di `src/routes/landing.route.ts` yang menjamin 100% idempotensi dan anti-duplikasi atribut nonce.
+  2. **Server-Side Hydration Nama Klinik:** Menyubstitusi `__CLINIC_NAME__` secara langsung dengan nama klinik tenant saat server merender HTML template pricelist.
+  3. **Adversarial & Anti-Regression Testing:** Menambahkan unit test di `tests/unit/landing-script-injection.test.ts` dan integrasi di `tests/integration/pricelist-dynamic.test.ts` untuk menguji ketiadaan atribut nonce ganda serta ketiadaan placeholder mentah.
+- **Verifikasi & Deployment:** 25 tes targeted lulus 100%, typecheck bersih 0 error, build produksi sukses.
+
 #### 2026-11-27 - Feat: Sentralisasi & Penyelarasan Seluruh Dashboard Analytics (#379)
 
 - **Konteks:** Menyelaraskan seluruh surface analitik (Overview, Financial Analytics, Meta Performance, Customer Database, Heatmap Treatment, Staff Scorecard, Copilot, dan Telegram Daily Report) agar memiliki satu definisi kanonis per metrik, basis tanggal & status eksplisit, denominator rasional (AOV & Repeat berbasis reservasi non-cancelled), serta eliminasi kata "Omset" tanpa kualifikasi basis.

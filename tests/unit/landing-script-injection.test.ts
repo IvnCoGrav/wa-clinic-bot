@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { buildApp } from '../../src/app';
 import { TenantHtmlService } from '../../src/services/html-sanitizer';
+import { injectScriptNonce } from '../../src/routes/landing.route';
 
 const CTA_HTML = `<!DOCTYPE html><html><head><title>x</title></head><body>
 <a id="wa-cta" href="https://wa.me/628">Chat</a>
@@ -59,5 +60,35 @@ describe('landing script-context injection', () => {
       expect(res.body).toContain(`fbq('init', "1234567890")`);
     }
     await app.close();
+  });
+
+  describe('injectScriptNonce (anti-duplicate CSP nonce)', () => {
+    it('menyuntikkan nonce secara tepat pada <script>, <script id=...>, dan <script type=...>', () => {
+      const sample = `
+        <script type="application/ld+json">{"@context":"schema"}</script>
+        <script id="pricelist-data" type="application/json">{"data":1}</script>
+        <script>console.log("hello");</script>
+      `;
+      const injected = injectScriptNonce(sample, 'NONCE123');
+      expect(injected).toContain('<script nonce="NONCE123" type="application/ld+json">');
+      expect(injected).toContain('<script nonce="NONCE123" id="pricelist-data" type="application/json">');
+      expect(injected).toContain('<script nonce="NONCE123">');
+      // Anti-regresi: tidak boleh ada tag script dengan atribut nonce ganda
+      expect(injected).not.toMatch(/<script[^>]*nonce="[^"]*"[^>]*nonce=/i);
+    });
+
+    it('idempotent: dipanggil 2x tidak melipatgandakan atribut nonce', () => {
+      const sample = `<script>console.log("test");</script>`;
+      const once = injectScriptNonce(sample, 'NONCE123');
+      const twice = injectScriptNonce(once, 'NONCE123');
+      expect(twice).toBe('<script nonce="NONCE123">console.log("test");</script>');
+      expect(twice).not.toContain('nonce="NONCE123" nonce="NONCE123"');
+    });
+
+    it('mengabaikan tag script yang sudah memiliki nonce bawaan', () => {
+      const sample = `<script nonce="EXISTING_NONCE">console.log("test");</script>`;
+      const res = injectScriptNonce(sample, 'NEW_NONCE');
+      expect(res).toBe(sample);
+    });
   });
 });

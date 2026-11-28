@@ -139,6 +139,18 @@ describe('Pricelist dinamis — route & API (offline DB)', () => {
     expect(body).toContain('ctaDrawer');
     expect(body).toContain('Pijat Pulih Ceria');
 
+    // Anti-regresi CSP & SSR:
+    // 1. Dilarang ada atribut nonce terduplikasi di tag script manapun (penyebab CSP crash).
+    expect(body).not.toMatch(/<script[^>]*nonce="[^"]*"[^>]*nonce=/i);
+    // 2. Semua tag script wajib memiliki CSP nonce.
+    const scriptTags = body.match(/<script\b[^>]*>/g) || [];
+    expect(scriptTags.length).toBeGreaterThan(0);
+    for (const tag of scriptTags) {
+      expect(tag).toContain('nonce=');
+    }
+    // 3. Placeholder SSR clinic name tidak boleh tampil mentah.
+    expect(body).not.toContain('__CLINIC_NAME__');
+
     const payload = extractInjectedPayload(body);
     expect(payload.whatsapp_number).toBe('6281234567890');
     expect(payload.brand.businessName).toBeTruthy();
